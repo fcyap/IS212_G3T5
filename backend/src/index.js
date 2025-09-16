@@ -1,8 +1,13 @@
 const express = require('express');
 require("dotenv").config();
-const { createLoggerMiddleware, logError } = require('./middleware/logger');
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Middleware initializations
+const { createLoggerMiddleware, logError } = require('./middleware/logger');
+
+// Route initializations
+const projectTasksRoutes = require('./routes/projectTasks');
 
 // Initialize logger middleware asynchronously
 async function initializeApp() {
@@ -15,6 +20,9 @@ async function initializeApp() {
   app.get('/', (req, res) => {
     res.send('Backend is running!');
   });
+
+  // Use api / project tasks routes
+  app.use('/api/projects', projectTasksRoutes);
 
   // Error handling middleware
   app.use(async (err, req, res, next) => {
