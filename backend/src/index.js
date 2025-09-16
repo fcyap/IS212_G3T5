@@ -21,7 +21,7 @@ async function initializeApp() {
     res.send('Backend is running!');
   });
 
-  // Use api / project tasks routes
+  // Use /api/ routes
   app.use('/api/projects', projectTasksRoutes);
 
   // Error handling middleware

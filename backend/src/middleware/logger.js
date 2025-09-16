@@ -187,6 +187,37 @@ if (!isDev) {
   }
 }
 
+// Request entry logger (logs immediately when request arrives)
+function logRequestEntry(req, res, next) {
+  // Only log entry if LOG_REQUEST_ENTRY env var is set to 'true'
+  const shouldLogEntry = process.env.LOG_REQUEST_ENTRY === 'true';
+
+  if (shouldLogEntry) {
+    const method = req.method;
+    const url = req.originalUrl || req.url;
+    const ip = req.ip || req.connection.remoteAddress || '-';
+    const timestamp = getDateTimeMe();
+
+    // Color code method
+    const coloredMethod = method === 'GET' ? chalk.hex('#00ff00').bold(method)
+      : method === 'POST' ? chalk.hex('#0099ff').bold(method)
+      : method === 'PUT' ? chalk.hex('#ff9900').bold(method)
+      : method === 'DELETE' ? chalk.hex('#ff0000').bold(method)
+      : method === 'PATCH' ? chalk.hex('#9900ff').bold(method)
+      : chalk.hex('#ffffff').bold(method);
+
+    console.log(
+      chalk.dim(timestamp),
+      chalk.yellow.bold('[ENTRY]'),
+      coloredMethod,
+      chalk.cyan(url),
+      chalk.blue(`[${ip}]`)
+    );
+  }
+
+  next();
+}
+
 // Create and configure the morgan middleware
 async function createLoggerMiddleware() {
   await initChalk();
@@ -199,15 +230,37 @@ async function createLoggerMiddleware() {
     }
   };
 
-  // Add file stream for production
+  // Return array of middlewares: entry logger first, then morgan
+  const loggerMiddlewares = [];
+
+  // Add entry logger if enabled
+  loggerMiddlewares.push(logRequestEntry);
+
+  // Add morgan logger
   if (!isDev && accessLogStream) {
     morganOptions.stream = accessLogStream;
     // Use plain format for file logging (no colors)
     const plainFormat = ':date[iso] :status :method :url :response-time ms :res-size [:remote-addr] :user-agent';
-    return morgan(plainFormat, morganOptions);
+    loggerMiddlewares.push(morgan(plainFormat, morganOptions));
   } else {
-    return morgan(logFormat, morganOptions);
+    loggerMiddlewares.push(morgan(logFormat, morganOptions));
   }
+
+  // Return a combined middleware function
+  return function combinedLogger(req, res, next) {
+    let index = 0;
+
+    function runNext() {
+      if (index >= loggerMiddlewares.length) {
+        return next();
+      }
+
+      const middleware = loggerMiddlewares[index++];
+      middleware(req, res, runNext);
+    }
+
+    runNext();
+  };
 }
 
 // Error logging function

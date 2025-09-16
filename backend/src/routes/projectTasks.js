@@ -2,6 +2,84 @@ const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const router = express.Router();
 
+// Constants for validation
+const VALID_SORT_FIELDS = {
+  tasks: ['id', 'title', 'status', 'priority', 'created_at', 'updated_at', 'deadline'],
+  projects: ['id', 'name', 'status', 'created_at', 'updated_at', 'deadline']
+};
+
+const VALID_SORT_ORDERS = ['asc', 'desc'];
+const VALID_TASK_STATUSES = ['pending', 'in_progress', 'completed', 'cancelled'];
+const VALID_TASK_PRIORITIES = ['low', 'medium', 'high'];
+const MAX_PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = 20;
+
+// Input validation helpers
+const validatePositiveInteger = (value, fieldName) => {
+  const num = parseInt(value);
+  if (isNaN(num) || num <= 0) {
+    throw new Error(`${fieldName} must be a positive integer`);
+  }
+  return num;
+};
+
+const validateSortField = (field, validFields, defaultField) => {
+  if (!field) return defaultField;
+  if (!validFields.includes(field)) {
+    throw new Error(`Invalid sort field. Must be one of: ${validFields.join(', ')}`);
+  }
+  return field;
+};
+
+const validateSortOrder = (order, defaultOrder = 'desc') => {
+  if (!order) return defaultOrder;
+  if (!VALID_SORT_ORDERS.includes(order)) {
+    throw new Error(`Invalid sort order. Must be: ${VALID_SORT_ORDERS.join(' or ')}`);
+  }
+  return order;
+};
+
+const validatePagination = (page, limit) => {
+  const validatedPage = page ? validatePositiveInteger(page, 'page') : 1;
+  const validatedLimit = limit ? Math.min(validatePositiveInteger(limit, 'limit'), MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE;
+  return { page: validatedPage, limit: validatedLimit, offset: (validatedPage - 1) * validatedLimit };
+};
+
+// Reusable project validation helper
+const validateProjectExists = async (projectId) => {
+  // Validate projectId format
+  const validatedProjectId = validatePositiveInteger(projectId, 'projectId');
+
+  if (supabase) {
+    const { data: projectData, error: projectError } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('id', validatedProjectId)
+      .single();
+
+    if (projectError) {
+      if (projectError.code === 'PGRST116') {
+        const error = new Error('Project not found');
+        error.statusCode = 404;
+        throw error;
+      }
+      throw projectError;
+    }
+    return validatedProjectId;
+  } else {
+    // Check if project exists in mock data
+    const mockProjects = getMockProjects();
+    const projectExists = mockProjects.some(p => p.id == validatedProjectId);
+
+    if (!projectExists) {
+      const error = new Error('Project not found');
+      error.statusCode = 404;
+      throw error;
+    }
+    return validatedProjectId;
+  }
+};
+
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL_LT;
 const supabaseKey = process.env.SUPABASE_SECRET_KEY_LT;
@@ -68,71 +146,88 @@ const getMockTasks = (projectId = null) => [
 router.get('/:projectId/tasks', async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { status, assignedTo, priority, sortBy = 'created_at', sortOrder = 'desc' } = req.query;
+    const { status, assignedTo, priority, page, limit } = req.query;
+    let { sortBy = 'created_at', sortOrder = 'desc' } = req.query;
 
-    let tasks, allTasks;
+    // Validate inputs
+    const validatedProjectId = await validateProjectExists(projectId);
+    sortBy = validateSortField(sortBy, VALID_SORT_FIELDS.tasks, 'created_at');
+    sortOrder = validateSortOrder(sortOrder);
+    const { page: validatedPage, limit: validatedLimit, offset } = validatePagination(page, limit);
+
+    // Validate filters
+    if (status && !VALID_TASK_STATUSES.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid status. Must be one of: ${VALID_TASK_STATUSES.join(', ')}`
+      });
+    }
+
+    if (priority && !VALID_TASK_PRIORITIES.includes(priority)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid priority. Must be one of: ${VALID_TASK_PRIORITIES.join(', ')}`
+      });
+    }
+
+    if (assignedTo) {
+      validatePositiveInteger(assignedTo, 'assignedTo');
+    }
+
+    let tasks, totalCount;
 
     if (supabase) {
-      // Use Supabase
+      // Build query for tasks with filtering
       let query = supabase
         .from('tasks')
-        .select('*')
-        .eq('project_id', projectId);
+        .select('*', { count: 'exact' })
+        .eq('project_id', validatedProjectId);
 
       // Apply filters
       if (status) {
-        query = query.eq('status', status.toUpperCase());
+        query = query.eq('status', status);
       }
 
       if (assignedTo) {
-        query = query.eq('assignedTo', assignedTo);
+        query = query.contains('assigned_to', [parseInt(assignedTo)]);
       }
 
       if (priority) {
-        query = query.eq('priority', parseInt(priority));
+        query = query.eq('priority', priority);
       }
 
-      // Apply sorting
-      query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+      // Apply sorting and pagination
+      query = query
+        .order(sortBy, { ascending: sortOrder === 'asc' })
+        .range(offset, offset + validatedLimit - 1);
 
-      const { data: tasksData, error } = await query;
+      const { data: tasksData, error, count } = await query;
 
       if (error) {
         throw error;
       }
 
-      // Get task statistics
-      const { data: allTasksData, error: statsError } = await supabase
-        .from('tasks')
-        .select('status')
-        .eq('project_id', projectId);
-
-      if (statsError) {
-        throw statsError;
-      }
-
       tasks = tasksData || [];
-      allTasks = allTasksData || [];
+      totalCount = count || 0;
     } else {
       // Use mock data
-      allTasks = getMockTasks(projectId);
-      tasks = [...allTasks];
+      let allTasks = getMockTasks(validatedProjectId);
 
       // Apply filters
       if (status) {
-        tasks = tasks.filter(task => task.status === status);
+        allTasks = allTasks.filter(task => task.status === status);
       }
 
       if (assignedTo) {
-        tasks = tasks.filter(task => task.assigned_to && task.assigned_to.includes(parseInt(assignedTo)));
+        allTasks = allTasks.filter(task => task.assigned_to && task.assigned_to.includes(parseInt(assignedTo)));
       }
 
       if (priority) {
-        tasks = tasks.filter(task => task.priority === priority);
+        allTasks = allTasks.filter(task => task.priority === priority);
       }
 
       // Apply sorting
-      tasks.sort((a, b) => {
+      allTasks.sort((a, b) => {
         const valueA = a[sortBy];
         const valueB = b[sortBy];
 
@@ -142,23 +237,24 @@ router.get('/:projectId/tasks', async (req, res) => {
           return valueA < valueB ? 1 : -1;
         }
       });
-    }
 
-    // Calculate statistics
-    const stats = {
-      total: allTasks.length,
-      pending: allTasks.filter(t => t.status === 'pending').length,
-      inProgress: allTasks.filter(t => t.status === 'in_progress').length,
-      completed: allTasks.filter(t => t.status === 'completed').length,
-      cancelled: allTasks.filter(t => t.status === 'cancelled').length
-    };
+      totalCount = allTasks.length;
+      // Apply pagination
+      tasks = allTasks.slice(offset, offset + validatedLimit);
+    }
 
     res.json({
       success: true,
-      projectId: projectId,
+      projectId: validatedProjectId,
       tasks: tasks,
-      stats: stats,
-      totalTasks: tasks.length,
+      totalTasks: totalCount,
+      pagination: {
+        page: validatedPage,
+        limit: validatedLimit,
+        totalPages: Math.ceil(totalCount / validatedLimit),
+        hasNext: validatedPage * validatedLimit < totalCount,
+        hasPrev: validatedPage > 1
+      },
       filters: {
         status: status || null,
         assignedTo: assignedTo || null,
@@ -171,10 +267,11 @@ router.get('/:projectId/tasks', async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching project tasks:', error);
-    res.status(500).json({
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({
       success: false,
-      error: 'Failed to retrieve project tasks',
-      message: error.message
+      error: statusCode === 404 ? error.message : 'Failed to retrieve project tasks',
+      ...(statusCode === 400 && { message: error.message })
     });
   }
 });
@@ -184,13 +281,16 @@ router.get('/:projectId/tasks/stats', async (req, res) => {
   try {
     const { projectId } = req.params;
 
+    // Validate project exists
+    const validatedProjectId = await validateProjectExists(projectId);
+
     let tasks;
 
     if (supabase) {
       const { data: tasksData, error } = await supabase
         .from('tasks')
         .select('status, priority, deadline, created_at')
-        .eq('project_id', projectId);
+        .eq('project_id', validatedProjectId);
 
       if (error) {
         throw error;
@@ -199,7 +299,7 @@ router.get('/:projectId/tasks/stats', async (req, res) => {
       tasks = tasksData || [];
     } else {
       // Use mock data
-      tasks = getMockTasks(projectId);
+      tasks = getMockTasks(validatedProjectId);
     }
 
     // Calculate comprehensive statistics
@@ -229,17 +329,18 @@ router.get('/:projectId/tasks/stats', async (req, res) => {
 
     res.json({
       success: true,
-      projectId: projectId,
+      projectId: validatedProjectId,
       stats: stats,
       dataSource: supabase ? 'supabase' : 'mock'
     });
 
   } catch (error) {
     console.error('Error fetching task statistics:', error);
-    res.status(500).json({
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({
       success: false,
-      error: 'Failed to retrieve task statistics',
-      message: error.message
+      error: statusCode === 404 ? error.message : 'Failed to retrieve task statistics',
+      ...(statusCode === 400 && { message: error.message })
     });
   }
 });
@@ -249,14 +350,18 @@ router.get('/:projectId/tasks/:taskId', async (req, res) => {
   try {
     const { projectId, taskId } = req.params;
 
+    // Validate inputs
+    const validatedProjectId = validatePositiveInteger(projectId, 'projectId');
+    const validatedTaskId = validatePositiveInteger(taskId, 'taskId');
+
     let task;
 
     if (supabase) {
       const { data: taskData, error } = await supabase
         .from('tasks')
         .select('*')
-        .eq('id', taskId)
-        .eq('project_id', projectId)
+        .eq('id', validatedTaskId)
+        .eq('project_id', validatedProjectId)
         .single();
 
       if (error) {
@@ -272,8 +377,8 @@ router.get('/:projectId/tasks/:taskId', async (req, res) => {
       task = taskData;
     } else {
       // Use mock data
-      const mockTasks = getMockTasks(projectId);
-      task = mockTasks.find(t => t.id == taskId);
+      const mockTasks = getMockTasks(validatedProjectId);
+      task = mockTasks.find(t => t.id == validatedTaskId);
 
       if (!task) {
         return res.status(404).json({
@@ -308,10 +413,11 @@ router.get('/:projectId/tasks/:taskId', async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching task:', error);
-    res.status(500).json({
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({
       success: false,
-      error: 'Failed to retrieve task',
-      message: error.message
+      error: statusCode === 404 ? error.message : 'Failed to retrieve task',
+      ...(statusCode === 400 && { message: error.message })
     });
   }
 });
@@ -319,15 +425,44 @@ router.get('/:projectId/tasks/:taskId', async (req, res) => {
 // GET /tasks - Get all tasks
 router.get('/tasks', async (req, res) => {
   try {
-    const { status, project_id, assigned_to, priority, sortBy = 'created_at', sortOrder = 'desc' } = req.query;
+    const { status, project_id, assigned_to, priority, page, limit } = req.query;
+    let { sortBy = 'created_at', sortOrder = 'desc' } = req.query;
 
-    let tasks;
+    // Validate inputs
+    sortBy = validateSortField(sortBy, VALID_SORT_FIELDS.tasks, 'created_at');
+    sortOrder = validateSortOrder(sortOrder);
+    const { page: validatedPage, limit: validatedLimit, offset } = validatePagination(page, limit);
+
+    // Validate filters
+    if (status && !VALID_TASK_STATUSES.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid status. Must be one of: ${VALID_TASK_STATUSES.join(', ')}`
+      });
+    }
+
+    if (priority && !VALID_TASK_PRIORITIES.includes(priority)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid priority. Must be one of: ${VALID_TASK_PRIORITIES.join(', ')}`
+      });
+    }
+
+    if (project_id) {
+      validatePositiveInteger(project_id, 'project_id');
+    }
+
+    if (assigned_to) {
+      validatePositiveInteger(assigned_to, 'assigned_to');
+    }
+
+    let tasks, totalCount;
 
     if (supabase) {
       // Use Supabase
       let query = supabase
         .from('tasks')
-        .select('*');
+        .select('*', { count: 'exact' });
 
       // Apply filters
       if (status) {
@@ -346,39 +481,42 @@ router.get('/tasks', async (req, res) => {
         query = query.eq('priority', priority);
       }
 
-      // Apply sorting
-      query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+      // Apply sorting and pagination
+      query = query
+        .order(sortBy, { ascending: sortOrder === 'asc' })
+        .range(offset, offset + validatedLimit - 1);
 
-      const { data: tasksData, error } = await query;
+      const { data: tasksData, error, count } = await query;
 
       if (error) {
         throw error;
       }
 
       tasks = tasksData || [];
+      totalCount = count || 0;
     } else {
       // Use mock data
-      tasks = getMockTasks();
+      let allTasks = getMockTasks();
 
       // Apply filters
       if (status) {
-        tasks = tasks.filter(task => task.status === status);
+        allTasks = allTasks.filter(task => task.status === status);
       }
 
       if (project_id) {
-        tasks = tasks.filter(task => task.project_id == project_id);
+        allTasks = allTasks.filter(task => task.project_id == project_id);
       }
 
       if (assigned_to) {
-        tasks = tasks.filter(task => task.assigned_to && task.assigned_to.includes(parseInt(assigned_to)));
+        allTasks = allTasks.filter(task => task.assigned_to && task.assigned_to.includes(parseInt(assigned_to)));
       }
 
       if (priority) {
-        tasks = tasks.filter(task => task.priority === priority);
+        allTasks = allTasks.filter(task => task.priority === priority);
       }
 
       // Apply sorting
-      tasks.sort((a, b) => {
+      allTasks.sort((a, b) => {
         const valueA = a[sortBy];
         const valueB = b[sortBy];
 
@@ -388,12 +526,23 @@ router.get('/tasks', async (req, res) => {
           return valueA < valueB ? 1 : -1;
         }
       });
+
+      totalCount = allTasks.length;
+      // Apply pagination
+      tasks = allTasks.slice(offset, offset + validatedLimit);
     }
 
     res.json({
       success: true,
       tasks: tasks,
-      totalTasks: tasks.length,
+      totalTasks: totalCount,
+      pagination: {
+        page: validatedPage,
+        limit: validatedLimit,
+        totalPages: Math.ceil(totalCount / validatedLimit),
+        hasNext: validatedPage * validatedLimit < totalCount,
+        hasPrev: validatedPage > 1
+      },
       filters: {
         status: status || null,
         project_id: project_id || null,
@@ -407,10 +556,11 @@ router.get('/tasks', async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching tasks:', error);
-    res.status(500).json({
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({
       success: false,
-      error: 'Failed to retrieve tasks',
-      message: error.message
+      error: statusCode === 404 ? error.message : 'Failed to retrieve tasks',
+      ...(statusCode === 400 && { message: error.message })
     });
   }
 });
@@ -418,15 +568,25 @@ router.get('/tasks', async (req, res) => {
 // GET /projects - Get all projects
 router.get('/projects', async (req, res) => {
   try {
-    const { status, creator_id, sortBy = 'created_at', sortOrder = 'desc' } = req.query;
+    const { status, creator_id, page, limit } = req.query;
+    let { sortBy = 'created_at', sortOrder = 'desc' } = req.query;
 
-    let projects;
+    // Validate inputs
+    sortBy = validateSortField(sortBy, VALID_SORT_FIELDS.projects, 'created_at');
+    sortOrder = validateSortOrder(sortOrder);
+    const { page: validatedPage, limit: validatedLimit, offset } = validatePagination(page, limit);
+
+    if (creator_id) {
+      validatePositiveInteger(creator_id, 'creator_id');
+    }
+
+    let projects, totalCount;
 
     if (supabase) {
       // Use Supabase
       let query = supabase
         .from('projects')
-        .select('*');
+        .select('*', { count: 'exact' });
 
       // Apply filters
       if (status) {
@@ -437,31 +597,34 @@ router.get('/projects', async (req, res) => {
         query = query.eq('creator_id', parseInt(creator_id));
       }
 
-      // Apply sorting
-      query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+      // Apply sorting and pagination
+      query = query
+        .order(sortBy, { ascending: sortOrder === 'asc' })
+        .range(offset, offset + validatedLimit - 1);
 
-      const { data: projectsData, error } = await query;
+      const { data: projectsData, error, count } = await query;
 
       if (error) {
         throw error;
       }
 
       projects = projectsData || [];
+      totalCount = count || 0;
     } else {
       // Use mock data
-      projects = getMockProjects();
+      let allProjects = getMockProjects();
 
       // Apply filters
       if (status) {
-        projects = projects.filter(project => project.status === status);
+        allProjects = allProjects.filter(project => project.status === status);
       }
 
       if (creator_id) {
-        projects = projects.filter(project => project.creator_id == creator_id);
+        allProjects = allProjects.filter(project => project.creator_id == creator_id);
       }
 
       // Apply sorting
-      projects.sort((a, b) => {
+      allProjects.sort((a, b) => {
         const valueA = a[sortBy];
         const valueB = b[sortBy];
 
@@ -471,12 +634,23 @@ router.get('/projects', async (req, res) => {
           return valueA < valueB ? 1 : -1;
         }
       });
+
+      totalCount = allProjects.length;
+      // Apply pagination
+      projects = allProjects.slice(offset, offset + validatedLimit);
     }
 
     res.json({
       success: true,
       projects: projects,
-      totalProjects: projects.length,
+      totalProjects: totalCount,
+      pagination: {
+        page: validatedPage,
+        limit: validatedLimit,
+        totalPages: Math.ceil(totalCount / validatedLimit),
+        hasNext: validatedPage * validatedLimit < totalCount,
+        hasPrev: validatedPage > 1
+      },
       filters: {
         status: status || null,
         creator_id: creator_id || null,
@@ -488,10 +662,11 @@ router.get('/projects', async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching projects:', error);
-    res.status(500).json({
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({
       success: false,
-      error: 'Failed to retrieve projects',
-      message: error.message
+      error: statusCode === 404 ? error.message : 'Failed to retrieve projects',
+      ...(statusCode === 400 && { message: error.message })
     });
   }
 });
@@ -501,21 +676,18 @@ router.patch('/projects/:projectId/archive', async (req, res) => {
   try {
     const { projectId } = req.params;
 
+    // Validate project exists
+    const validatedProjectId = await validateProjectExists(projectId);
+
     if (supabase) {
       const { data, error } = await supabase
         .from('projects')
         .update({ status: 'archived' })
-        .eq('id', projectId)
+        .eq('id', validatedProjectId)
         .select()
         .single();
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          return res.status(404).json({
-            success: false,
-            error: 'Project not found'
-          });
-        }
         throw error;
       }
 
@@ -528,14 +700,7 @@ router.patch('/projects/:projectId/archive', async (req, res) => {
     } else {
       // Mock response for when Supabase is not configured
       const mockProjects = getMockProjects();
-      const project = mockProjects.find(p => p.id == projectId);
-
-      if (!project) {
-        return res.status(404).json({
-          success: false,
-          error: 'Project not found'
-        });
-      }
+      const project = mockProjects.find(p => p.id == validatedProjectId);
 
       // Simulate archiving
       project.status = 'archived';
@@ -550,10 +715,11 @@ router.patch('/projects/:projectId/archive', async (req, res) => {
 
   } catch (error) {
     console.error('Error archiving project:', error);
-    res.status(500).json({
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({
       success: false,
-      error: 'Failed to archive project',
-      message: error.message
+      error: statusCode === 404 ? error.message : 'Failed to archive project',
+      ...(statusCode === 400 && { message: error.message })
     });
   }
 });
