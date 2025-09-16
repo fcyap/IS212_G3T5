@@ -496,4 +496,66 @@ router.get('/projects', async (req, res) => {
   }
 });
 
+// PATCH /projects/:projectId/archive - Archive a project
+router.patch('/projects/:projectId/archive', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('projects')
+        .update({ status: 'archived' })
+        .eq('id', projectId)
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return res.status(404).json({
+            success: false,
+            error: 'Project not found'
+          });
+        }
+        throw error;
+      }
+
+      res.json({
+        success: true,
+        message: 'Project archived successfully',
+        project: data,
+        dataSource: 'supabase'
+      });
+    } else {
+      // Mock response for when Supabase is not configured
+      const mockProjects = getMockProjects();
+      const project = mockProjects.find(p => p.id == projectId);
+
+      if (!project) {
+        return res.status(404).json({
+          success: false,
+          error: 'Project not found'
+        });
+      }
+
+      // Simulate archiving
+      project.status = 'archived';
+
+      res.json({
+        success: true,
+        message: 'Project archived successfully',
+        project: project,
+        dataSource: 'mock'
+      });
+    }
+
+  } catch (error) {
+    console.error('Error archiving project:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to archive project',
+      message: error.message
+    });
+  }
+});
+
 module.exports = router;
