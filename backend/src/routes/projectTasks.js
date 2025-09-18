@@ -14,6 +14,8 @@ const VALID_TASK_PRIORITIES = ['low', 'medium', 'high'];
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 20;
 
+const VALID_PROJECT_STATUSES = ['active', 'hold', 'completed', 'archived'];
+
 // Input validation helpers
 const validatePositiveInteger = (value, fieldName) => {
   const num = parseInt(value);
