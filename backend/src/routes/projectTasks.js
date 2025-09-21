@@ -673,6 +673,109 @@ router.get('/projects', async (req, res) => {
   }
 });
 
+// POST /projects/:projectId/tasks - Create a new task for a specific project
+router.post('/:projectId/tasks', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { title, description, assigned_to, priority = 'medium', deadline, status = 'pending' } = req.body;
+
+    // Validate project exists
+    const validatedProjectId = await validateProjectExists(projectId);
+
+    // Validate required fields
+    if (!title || title.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: 'Title is required'
+      });
+    }
+
+    // Validate optional fields
+    if (status && !VALID_TASK_STATUSES.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid status. Must be one of: ${VALID_TASK_STATUSES.join(', ')}`
+      });
+    }
+
+    if (priority && !VALID_TASK_PRIORITIES.includes(priority)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid priority. Must be one of: ${VALID_TASK_PRIORITIES.join(', ')}`
+      });
+    }
+
+    // Validate assigned_to array if provided
+    if (assigned_to && (!Array.isArray(assigned_to) || assigned_to.some(id => isNaN(parseInt(id)) || parseInt(id) <= 0))) {
+      return res.status(400).json({
+        success: false,
+        error: 'assigned_to must be an array of positive integers'
+      });
+    }
+
+    // Validate deadline format if provided
+    if (deadline && isNaN(Date.parse(deadline))) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid deadline format. Use ISO 8601 format'
+      });
+    }
+
+    const taskData = {
+      title: title.trim(),
+      description: description?.trim() || '',
+      status,
+      priority,
+      project_id: validatedProjectId,
+      assigned_to: assigned_to || [],
+      deadline: deadline || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    let newTask;
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert([taskData])
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      newTask = data;
+    } else {
+      // Mock data response
+      const mockTasks = getMockTasks();
+      const newId = Math.max(...mockTasks.map(t => t.id), 0) + 1;
+
+      newTask = {
+        id: newId,
+        ...taskData
+      };
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Task created successfully',
+      task: newTask,
+      dataSource: supabase ? 'supabase' : 'mock'
+    });
+
+  } catch (error) {
+    console.error('Error creating task:', error);
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({
+      success: false,
+      error: statusCode === 404 ? error.message : 'Failed to create task',
+      ...(statusCode === 400 && { message: error.message })
+    });
+  }
+});
+
 // PATCH /projects/:projectId/archive - Archive a project
 router.patch('/projects/:projectId/archive', async (req, res) => {
   try {
