@@ -2,6 +2,8 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { CreateProjectDialog } from "@/components/create-project"
+import { useProjects } from "@/contexts/project-context"
 import {
     Home,
     CheckSquare,
@@ -22,6 +24,7 @@ import {
 export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
     const [isProjectsExpanded, setIsProjectsExpanded] = useState(true)
     const [isTeamsExpanded, setIsTeamsExpanded] = useState(true)
+    const { projects, loading, error, selectedProject, selectProject } = useProjects()
 
     return (
         <div
@@ -44,14 +47,18 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
                 </div>
 
                 {isCollapsed ? (
-                    <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg p-2">
-                        <Plus className="w-4 h-4" />
-                    </Button>
+                    <CreateProjectDialog>
+                        <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg p-2">
+                            <Plus className="w-4 h-4" />
+                        </Button>
+                    </CreateProjectDialog>
                 ) : (
-                    <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Create
-                    </Button>
+                    <CreateProjectDialog>
+                        <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg">
+                            <Plus className="w-4 h-4 mr-2" />
+                            Create
+                        </Button>
+                    </CreateProjectDialog>
                 )}
             </div>
 
@@ -91,13 +98,37 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
                                             {isProjectsExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                                         </button>
                                         <span>Projects</span>
+                                        {loading && <span className="text-xs text-gray-400">Loading...</span>}
                                     </div>
-                                    <Plus className="w-4 h-4" />
+                                    <CreateProjectDialog>
+                                        <button className="p-1 hover:bg-gray-700 rounded">
+                                            <Plus className="w-4 h-4" />
+                                        </button>
+                                    </CreateProjectDialog>
                                 </div>
                                 {isProjectsExpanded && (
                                     <nav className="space-y-1">
-                                        <NavItem icon={FolderOpen} label="Software Project Management" isActive isCollapsed={isCollapsed} />
-                                        <NavItem icon={FolderOpen} label="Project timeline" isCollapsed={isCollapsed} />
+                                        {error && (
+                                            <div className="px-3 py-2 text-xs text-red-400">
+                                                Error loading projects: {error}
+                                            </div>
+                                        )}
+                                        {projects.length > 0 ? (
+                                            projects.map((project) => (
+                                                <NavItem 
+                                                    key={project.id}
+                                                    icon={FolderOpen} 
+                                                    label={project.name} 
+                                                    isActive={selectedProject?.id === project.id} 
+                                                    isCollapsed={isCollapsed}
+                                                    onClick={() => selectProject(project.id)}
+                                                />
+                                            ))
+                                        ) : !loading && (
+                                            <div className="px-3 py-2 text-xs text-gray-400">
+                                                No projects yet. Create your first project!
+                                            </div>
+                                        )}
                                     </nav>
                                 )}
                             </div>
@@ -155,12 +186,13 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
     )
 }
 
-function NavItem({ icon: Icon, label, isActive, hasChevron, isCollapsed }) {
+function NavItem({ icon: Icon, label, isActive, hasChevron, isCollapsed, onClick }) {
     return (
         <div
             className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors ${isActive ? "bg-gray-700 text-white" : "bg-[#1f1f23] text-white hover:text-white hover:bg-gray-700"
                 }`}
             title={isCollapsed ? label : undefined}
+            onClick={onClick}
         >
             {isCollapsed ? (
                 <Icon className="w-4 h-4 mx-auto" />
