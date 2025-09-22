@@ -2,57 +2,84 @@
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Circle, Settings } from "lucide-react"
+import { Settings, CalendarDays } from "lucide-react"
 
-export function TaskCard({ title, priority, status, assignee, dateRange }) {
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case "Low":
-        return "bg-green-600 text-white"
-      case "Medium":
-        return "bg-yellow-600 text-white"
-      case "High":
-        return "bg-purple-600 text-white"
-      default:
-        return "bg-gray-600 text-white"
-    }
+export function TaskCard({ title, priority, status, assignees = [], dateRange, description, deadline, onClick }) {
+
+  const cap = (s) => (s ? s.toString().charAt(0).toUpperCase() + s.toString().slice(1).toLowerCase() : "")
+  const p = (priority || "").toLowerCase()
+  const s = (status || "").toLowerCase()
+
+
+  const a = assignees ?? {
+    name: "",
+    avatar: "",
+    fallback: (title?.[0] ?? "?").toUpperCase(),
+    color: "bg-gray-600",
   }
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "On track":
-        return "bg-green-600 text-white"
-      case "At risk":
-        return "bg-yellow-600 text-white"
-      case "Off track":
-        return "bg-red-600 text-white"
-      default:
-        return "bg-gray-600 text-white"
+  const dueText = deadline || (dateRange ? dateRange.replace(/^Due\s*/i, "") : null)
+
+  const getPriorityColor = () => {
+    switch (p) {
+      case "low": return "bg-teal-200 text-teal-900"
+      case "medium": return "bg-amber-300 text-amber-950"
+      case "high": return "bg-fuchsia-300 text-fuchsia-950"
+      default: return "bg-gray-600 text-white"
     }
   }
+  // const getStatusColor = () => {
+  //   switch (s) {
+  //     case "on track": return "bg-green-600 text-white"
+  //     case "at risk": return "bg-yellow-600 text-white"
+  //     case "off track": return "bg-red-600 text-white"
+  //     default: return "bg-gray-600 text-white"
+  //   }
+  // }
 
   return (
-    <div className="bg-[#2a2a2e] border border-gray-600 rounded-lg p-4 hover:border-gray-500 transition-colors cursor-pointer">
-      <div className="flex items-start gap-3 mb-3">
-        <Circle className="w-5 h-5 text-gray-400 mt-0.5" />
-        <h3 className="text-white font-medium flex-1">{title}</h3>
-      </div>
-
-      <div className="flex items-center gap-2 mb-3">
-        <Badge className={`text-xs px-2 py-1 ${getPriorityColor(priority)}`}>{priority}</Badge>
-        <Badge className={`text-xs px-2 py-1 ${getStatusColor(status)}`}>{status}</Badge>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Avatar className="w-6 h-6">
-            <AvatarFallback className={`${assignee.color} text-white text-xs font-medium`}>
-              {assignee.fallback}
-            </AvatarFallback>
-          </Avatar>
-          <span className="text-sm text-gray-400">{dateRange}</span>
+    <div onClick={onClick} role="button" tabIndex={0}className="bg-[#2a2a2e] border border-gray-600 rounded-lg p-4 hover:border-gray-500 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/40" >
+      {/* Title + Description */}
+      <div className="flex items-start gap-3">
+        <div className="flex-1">
+          <h3 className="text-white font-medium">{title}</h3>
         </div>
         <Settings className="w-4 h-4 text-gray-400" />
+      </div>
+
+      {/* Badges */}
+      <div className="mt-3 flex items-center gap-2">
+        {priority ? <Badge className={`text-xs px-2 py-1 ${getPriorityColor()}`}>{cap(priority)}</Badge> : null}
+        {status ? <Badge className={`text-xs px-2 py-1 ${getStatusColor()}`}>{cap(status)}</Badge> : null}
+      </div>
+
+      {/* Avatar + Deadline */}
+      <div className="mt-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {assignees.length > 0 && (           
+            <div className="flex -space-x-2">
+             {assignees.slice(0, 3).map((a, i) => (
+               <Avatar key={i} className="w-6 h-6 border-2 border-[#2a2a2e]">
+                 <AvatarFallback className="bg-gray-600 text-white text-xs font-medium">
+                  {(a.name?.charAt(0) || "U").toUpperCase()}
+                </AvatarFallback>
+               </Avatar>
+             ))}
+             {assignees.length > 3 && (
+               <div className="w-6 h-6 rounded-full bg-gray-700 border-2 border-[#2a2a2e] text-[10px] text-gray-200 flex items-center justify-center">
+                 +{assignees.length - 3}
+               </div>
+             )}
+          </div>
+         )}
+
+          {dueText && (
+            <span className="flex items-center gap-1 text-sm text-gray-400">
+              <CalendarDays className="w-4 h-4" />
+              <span>Due {dueText}</span>
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )

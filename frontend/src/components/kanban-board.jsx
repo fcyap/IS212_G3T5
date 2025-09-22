@@ -2,115 +2,580 @@
 
 import { Button } from "@/components/ui/button"
 import { TaskCard } from "./task-card"
-import { Plus } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from "@/components/ui/select"
+import { Trash, Check, X, Plus } from "lucide-react" 
+import { useKanban } from "@/components/kanban-context"
+
+const priorityChipClasses = {
+  Low: "bg-teal-200 text-teal-900",
+  Medium: "bg-amber-300 text-amber-950",
+  High: "bg-fuchsia-300 text-fuchsia-950",
+} 
+
+
+const API = process.env.NEXT_PUBLIC_API_URL
+const cap = (s) => (s ? s.toString().charAt(0).toUpperCase() + s.toString().slice(1).toLowerCase() : "")
+
+function rowToCard(r) {
+const workflow = String(r.status || "pending").toLowerCase()   
+ const assignees = Array.isArray(r.assigned_to)
+   ? r.assigned_to.map((v) => String(v))
+   : r.assigned_to
+     ? [String(r.assigned_to)]
+     : []  
+    return {
+    id: r.id,
+    title: r.title ?? "",
+    description: r.description || "",
+    priority: cap(r.priority) || "Low",
+    workflow,                        
+    deadline: r.deadline || null,    
+    assignees: Array.isArray(r.assignees) ? r.assignees : [], 
+  }
+}
+
 
 export function KanbanBoard() {
-  const todoTasks = [
-    {
-      title: "Break down epics",
-      priority: "Low",
-      status: "On track",
-      assignee: {
-        name: "Y",
-        avatar: "",
-        fallback: "Y",
-        color: "bg-purple-500",
-      },
-      dateRange: "10 - 12 Sep",
-    },
-    {
-      title: "Common idea of app",
-      priority: "Medium",
-      status: "At risk",
-      assignee: {
-        name: "Y",
-        avatar: "",
-        fallback: "Y",
-        color: "bg-purple-500",
-      },
-      dateRange: "11 Sep - Today",
-    },
-    {
-      title: "Daily Call",
-      priority: "High",
-      status: "Off track",
-      assignee: {
-        name: "Y",
-        avatar: "",
-        fallback: "Y",
-        color: "bg-purple-500",
-      },
-      dateRange: "12 - 16 Sep",
-    },
-  ]
+async function handleSaveNewTask({ title, description, dueDate, priority }) {
+  try {
+    const res = await fetch(`${API}/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title,
+        description: description || null,
+        priority: (priority || "Low").toLowerCase(),  
+        status: editorLane,                            
+        deadline: dueDate || null,
+        team_id : 1,
+        assigned_to: [],
+      }),
+    })
+    if (!res.ok) {
+      const { error } = await res.json().catch(() => ({}))
+      throw new Error(error || `POST /tasks ${res.status}`)
+    }
+    const row = await res.json()
+    const card = rowToCard(row)
+
+    setTasks(prev => editorPosition === "top" ? [card, ...prev] : [...prev, card])
+    setBanner("Task Successfully Created") 
+    cancelAddTask()
+  } catch (err) {
+    console.error("[save task]", err)
+  }
+}
+      const [panelTask, setPanelTask] = useState(null)
+      const openPanel = (task) => setPanelTask(task)
+      const closePanel = () => setPanelTask(null)
+      const [tasks, setTasks] = useState([])
+      const [banner, setBanner] = useState("")
+
+      useEffect(() => {
+        if (!banner) return
+        const t = setTimeout(() => setBanner(""), 2500) 
+        return () => clearTimeout(t)
+      }, [banner])
+
+      useEffect(() => {
+        async function load() {
+          try {
+            const res = await fetch(`${API}/tasks`)
+            if (!res.ok) throw new Error(`GET /tasks ${res.status}`)
+            const rows = await res.json()
+            setTasks(rows.map(rowToCard))
+          } catch (err) {
+            console.error("[load tasks]", err)
+          }
+        }
+        load()
+      }, [])
+
+
+  const { isAdding, editorPosition, startAddTask, cancelAddTask, editorLane } = useKanban()
+  const todo = tasks.filter(t => t.workflow === "pending")
+  const doing = tasks.filter(t => t.workflow === "in_progress")
+  const done  = tasks.filter(t => t.workflow === "completed")
+  const blocked = tasks.filter(t => t.workflow === "blocked")
 
   return (
-    <div className="flex-1 bg-[#1a1a1d] p-6">
-      <div className="grid grid-cols-3 gap-6 h-full">
+      <div className="flex-1 bg-[#1a1a1d] p-6">
+        {banner && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
+          <div className="rounded-md bg-emerald-600 px-4 py-2 text-white shadow-lg ring-1 ring-black/10">
+            {banner}
+          </div>
+        </div>
+  )}
+        <div className="overflow-x-auto">
+          <div className="flex gap-6 w-max flex-nowrap">
+
         {/* To do Column */}
-        <div className="space-y-4">
+        <div className="w-[360px] flex-none space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h2 className="text-white font-medium">To do</h2>
-              <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">3</span>
+              <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
+                {todo.length + (isAdding && editorLane === "pending" ? 1 : 0)}
+              </span>
+
             </div>
           </div>
 
           <div className="space-y-3">
-            {todoTasks.map((task, index) => (
-              <TaskCard key={index} {...task} />
+            {isAdding && editorLane === "pending" && editorPosition === "top" && (
+                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+            )}
+
+            {todo.map((t) => (
+              <TaskCard
+                key={t.id ?? `${t.title}-${t.deadline}`}
+                title={t.title}
+                description={t.description}
+                priority={t.priority}
+                assignees={t.assignees}
+                deadline={t.deadline}
+                onClick={() => openPanel(t)}
+              />
             ))}
 
-            <Button
-              variant="ghost"
-              className="w-full text-gray-400 hover:text-white hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 py-8"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add task
-            </Button>
+            {isAdding && editorLane === "pending" && editorPosition === "bottom" && (
+                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+            )}
+
+            {!isAdding && (
+              <Button
+                onClick={() => startAddTask("bottom", "pending")}
+                variant="ghost"
+                className="w-full text-gray-400 hover:text-white hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 py-8"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add task
+              </Button>
+            )}
           </div>
         </div>
 
         {/* Doing Column */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h2 className="text-white font-medium">Doing</h2>
-              <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">0</span>
+        <div className="w-[360px] flex-none space-y-4">
+          <div className="flex items-center gap-2">
+                <h2 className="text-white font-medium">Doing</h2>
+                  <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
+                    {doing.length + (isAdding && editorLane === "in_progress" ? 1 : 0)}
+                  </span>              
+                  
             </div>
-          </div>
+              <div className="space-y-3">
+                  {isAdding && editorLane === "in_progress" && editorPosition === "top" && (
+                       <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                    )}
 
-          <Button
-            variant="ghost"
-            className="w-full text-gray-400 hover:text-white hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 py-8"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add task
-          </Button>
+                {doing.map((t) => (
+                  <TaskCard
+                    key={t.id ?? `${t.title}-${t.deadline}`}
+                    title={t.title}
+                    description={t.description}
+                    priority={t.priority}
+                    assignees={t.assignees}
+                    deadline={t.deadline}
+                    onClick={() => openPanel(t)}
+                  />
+                ))}
+
+                    {isAdding && editorLane === "in_progress" && editorPosition === "bottom" && (
+                        <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                    )}
+
+                    {!isAdding && (
+                      <Button
+                        onClick={() => startAddTask("bottom", "in_progress")}
+                        variant="ghost"
+                        className="w-full text-gray-400 hover:text-white hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 py-8"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add task
+                      </Button>
+                    )}
+
+              </div>
         </div>
 
         {/* Done Column */}
+        <div className="w-[360px] flex-none space-y-4">
+          <div className="flex items-center gap-2">
+            <h2 className="text-white font-medium">Done</h2>
+            <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
+              {done.length + (isAdding && editorLane === "completed" ? 1 : 0)}
+            </span>          
+          </div>
+          <div className="space-y-3">
+  {isAdding && editorLane === "completed" && editorPosition === "top" && (
+     <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+  )}
+            {done.map((t) => (
+              <TaskCard
+                key={t.id ?? `${t.title}-${t.deadline}`}
+                title={t.title}
+                description={t.description}
+                priority={t.priority}
+                assignees={t.assignees}
+                deadline={t.deadline}
+                onClick={() => openPanel(t)}
+              />
+            ))}
+              {isAdding && editorLane === "completed" && editorPosition === "bottom" && (
+      <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+  )}
+
+  {!isAdding && (
+    <Button
+      onClick={() => startAddTask("bottom", "completed")}
+      variant="ghost"
+      className="w-full text-gray-400 hover:text-white hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 py-8"
+    >
+      <Plus className="w-4 h-4 mr-2" />
+      Add task
+    </Button>
+  )}
+
+          </div>
+        </div>
+        {/* Blocked Column */}
+<div className="w-[360px] flex-none space-y-4">
+    <div className="flex items-center gap-2">
+    <h2 className="text-white font-medium">Blocked</h2>
+    <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
+      {blocked.length + (isAdding && editorLane === "blocked" ? 1 : 0)}
+    </span>
+  </div>
+
+  <div className="space-y-3">
+    {isAdding && editorLane === "blocked" && editorPosition === "top" && (
+      <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+    )}
+
+    {blocked.map((t) => (
+      <TaskCard
+        key={t.id ?? `${t.title}-${t.deadline}`}
+        title={t.title}
+        description={t.description}
+        priority={t.priority}
+        assignees={t.assignees}
+        deadline={t.deadline}
+        onClick={() => openPanel(t)}
+      />
+    ))}
+
+    {isAdding && editorLane === "blocked" && editorPosition === "bottom" && (
+      <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+    )}
+
+    {/* {!isAdding && (
+      <Button
+        onClick={() => startAddTask("bottom", "blocked")}
+        variant="ghost"
+        className="w-full text-gray-400 hover:text-white hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 py-8"
+      >
+        <Plus className="w-4 h-4 mr-2" />
+        Add task
+      </Button>
+    )} */}
+  </div>
+</div>
+
+      </div></div>
+{panelTask && (
+  <TaskSidePanel
+    task={panelTask}
+    onClose={closePanel}
+    onSave={async (patch) => {
+      try {
+        const res = await fetch(`${API}/tasks/${panelTask.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: patch.title,
+            description: patch.description || null,
+            priority: patch.priority,
+            status: patch.status,
+            deadline: patch.deadline || null,
+          }),
+        })
+        if (!res.ok) {
+          const { error } = await res.json().catch(() => ({}))
+          throw new Error(error || `PUT /tasks/${panelTask.id} ${res.status}`)
+        }
+        const row = await res.json()
+        const updated = rowToCard(row)
+        setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+        closePanel()
+      } catch (e) {
+        console.error("[update task]", e)
+        alert(e.message)
+      }
+    }}
+    onDeleted={(id) => {
+      setTasks((prev) => prev.filter((t) => t.id !== id)) 
+      closePanel()
+    }}
+  />
+)}
+ </div>
+  )
+}
+
+function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
+  const [title, setTitle] = useState(task.title || "")
+  const [description, setDescription] = useState(task.description || "")
+  const [priority, setPriority] = useState(task.priority || "Low") 
+  const [status, setStatus] = useState(task.workflow || "pending")
+  const [deadline, setDeadline] = useState(task.deadline || "")
+
+  const canSave = title.trim().length > 0 && priority
+
+  async function handleDelete() {
+    try {
+      const res = await fetch(`${API}/tasks/${task.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived: true }),
+      })
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({}))
+        throw new Error(error || `PUT /tasks/${task.id} ${res.status}`)
+      }
+      onDeleted?.(task.id)
+    } catch (e) {
+      console.error("[archive task]", e)
+      alert(e.message)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-40">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      {/* Panel */}
+      <div className="absolute right-0 top-0 h-full w-[420px] bg-[#1f2023] border-l border-gray-700 p-6 overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-white text-lg font-semibold">Edit task</h3>
+          <button onClick={onClose} className="text-gray-300 hover:text-white text-xl leading-none">×</button>
+        </div>
+
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h2 className="text-white font-medium">Done</h2>
-              <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">0</span>
-            </div>
-            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-              <Plus className="w-4 h-4 mr-2" />
-              Add section
-            </Button>
+          {/* Title */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Title</label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="bg-transparent text-gray-100 border-gray-700"
+            />
           </div>
 
+          {/* Description */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Description</label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={4}
+              className="bg-transparent text-gray-100 border-gray-700"
+            />
+          </div>
+
+          {/* Priority */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Priority</label>
+            <Select value={priority} onValueChange={setPriority}>
+              <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+                <SelectValue placeholder="Select priority" />
+              </SelectTrigger>
+              <SelectContent className="bg-white">
+                {["Low", "Medium", "High"].map((p) => (
+                  <SelectItem key={p} value={p}>
+                    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>{p}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Status */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Status</label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent className="bg-white">
+                <SelectItem value="pending">To do</SelectItem>
+                <SelectItem value="in_progress">Doing</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="blocked">Blocked</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Deadline */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Deadline</label>
+            <Input
+              type="date"
+              value={deadline || ""}
+              onChange={(e) => setDeadline(e.target.value)}
+              className="bg-transparent text-gray-100 border-gray-700"
+            />
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="mt-6 flex gap-2">
           <Button
-            variant="ghost"
-            className="w-full text-gray-400 hover:text-white hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 py-8"
+            onClick={() => onSave({ title: title.trim(), description: description.trim(), priority, status, deadline })}
+            disabled={!canSave}
+            className="bg-white/90 text-black hover:bg-white"
           >
-            <Plus className="w-4 h-4 mr-2" />
-            Add task
+            Save
+          </Button>
+          <Button variant="ghost" className="text-gray-300 hover:text-white" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDelete}
+            className="bg-red-400 hover:bg-red-700 text-white ml-auto"
+            type="button">
+            <Trash className="w-4 h-4 mr-1" /> Delete
           </Button>
         </div>
       </div>
     </div>
   )
 }
+function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
+  const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
+  const [dueDate, setDueDate] = useState("")    
+  const [priority, setPriority] = useState("")   
+
+  const PRIORITIES = ["Low", "Medium", "High"]
+  const canSave = title.trim().length > 0 && priority !== ""
+
+  async function handleDelete() {
+    if (!taskId) {
+      onCancel?.()
+      return
+    }
+    try {
+      const res = await fetch(`${API}/tasks/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived: true }),
+      })
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({}))
+        throw new Error(error || `PUT /tasks/${taskId} ${res.status}`)
+      }
+      onDeleted?.(taskId)   
+      onCancel?.()
+    } catch (e) {
+      console.error("[archive task]", e)
+      alert(e.message)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-700 bg-[#1f2023] p-4 shadow-sm">
+      {/* Title */}
+      <label className="block text-xs text-gray-400 mb-1">Title</label>
+      <Input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Task title"
+        className="mb-3 bg-transparent text-gray-100 border-gray-700 placeholder:text-gray-500"
+      />
+
+      {/* Description */}
+      <label className="block text-xs text-gray-400 mb-1">Description</label>
+      <Textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Add a short description…"
+        className="mb-3 bg-transparent text-gray-100 border-gray-700 placeholder:text-gray-500"
+        rows={3}
+      />
+
+      <div className="grid grid-cols-2 gap-3">
+        {/* Due date */}
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Deadline</label>
+          <Input
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            className="bg-transparent text-gray-100 border-gray-700"
+          />
+        </div>
+
+        {/* Priority dropdown */}
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Priority</label>
+          <Select value={priority} onValueChange={(v) => setPriority(v)}>
+            <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+              <SelectValue placeholder="Select priority" />
+            </SelectTrigger>
+            <SelectContent className="bg-white">
+              {PRIORITIES.map((p) => (
+                <SelectItem key={p} value={p}>
+                  <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>
+                    {p}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="mt-4 flex items-center gap-2">
+        {taskId && (
+          <Button
+            type="button"
+            onClick={handleDelete}
+            className="bg-red-600 hover:bg-red-700 text-white"
+          >
+            <Trash className="w-4 h-4 mr-1" /> Delete
+          </Button>
+        )}
+
+        <Button
+          onClick={() =>
+            onSave({
+              title: title.trim(),
+              description: description.trim() || undefined,
+              dueDate: dueDate || undefined,
+              priority, // "Low" | "Medium" | "High"
+            })
+          }
+          disabled={!canSave}
+          className="bg-white/90 text-black hover:bg-white"
+        >
+          <Check className="w-4 h-4 mr-1" /> Save
+        </Button>
+
+        <Button variant="ghost" onClick={onCancel} className="text-gray-300 hover:text-white">
+          <X className="w-4 h-4 mr-1" /> Cancel
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+
+
