@@ -5,48 +5,35 @@ import { TaskCard } from "./task-card"
 import { CreateProjectDialog } from "./create-project"
 import { useProjects } from "@/contexts/project-context"
 import { Plus } from "lucide-react"
+import { useEffect } from "react"
 
 export function KanbanBoard() {
-  const { projects, loading, error, selectedProject, selectProject } = useProjects()
+  const {
+    projects,
+    loading,
+    error,
+    selectedProject,
+    selectProject,
+    projectTasks,
+    tasksLoading,
+    loadProjectTasks
+  } = useProjects()
 
-  const todoTasks = [
-    {
-      title: "Break down epics",
-      priority: "Low",
-      status: "On track",
-      assignee: {
-        name: "Y",
-        avatar: "",
-        fallback: "Y",
-        color: "bg-purple-500",
-      },
-      dateRange: "10 - 12 Sep",
-    },
-    {
-      title: "Common idea of app",
-      priority: "Medium",
-      status: "At risk",
-      assignee: {
-        name: "Y",
-        avatar: "",
-        fallback: "Y",
-        color: "bg-purple-500",
-      },
-      dateRange: "11 Sep - Today",
-    },
-    {
-      title: "Daily Call",
-      priority: "High",
-      status: "Off track",
-      assignee: {
-        name: "Y",
-        avatar: "",
-        fallback: "Y",
-        color: "bg-purple-500",
-      },
-      dateRange: "12 - 16 Sep",
-    },
-  ]
+  // Load tasks when a project is selected
+  useEffect(() => {
+    if (selectedProject?.id) {
+      loadProjectTasks(selectedProject.id)
+    }
+  }, [selectedProject?.id, loadProjectTasks])
+
+  // Filter tasks by status
+  const getTasksByStatus = (status) => {
+    return (projectTasks || []).filter(task => task.status === status)
+  }
+
+  const pendingTasks = getTasksByStatus('pending')
+  const inProgressTasks = getTasksByStatus('in_progress')
+  const completedTasks = getTasksByStatus('completed')
 
   return (
     <div className="flex-1 bg-[#1a1a1d] p-6">
@@ -58,15 +45,35 @@ export function KanbanBoard() {
             <p className="text-gray-400 text-sm">{selectedProject.description || "No description provided"}</p>
           </div>
           
+          {tasksLoading && (
+            <div className="text-gray-400 text-center py-4 mb-6">Loading tasks...</div>
+          )}
+
           <div className="grid grid-cols-3 gap-6 h-full">
             {/* To do Column */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <h2 className="text-white font-medium">To do</h2>
-                  <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">0</span>
+                  <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">{pendingTasks.length}</span>
                 </div>
               </div>
+
+              {pendingTasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  title={task.title}
+                  priority={task.priority || 'medium'}
+                  status="On track"
+                  assignee={{
+                    name: task.assigned_to && task.assigned_to.length > 0 ? `User ${task.assigned_to[0]}` : "Unassigned",
+                    avatar: "",
+                    fallback: task.assigned_to && task.assigned_to.length > 0 ? task.assigned_to[0].toString().charAt(0) : "U",
+                    color: "bg-blue-500",
+                  }}
+                  dateRange={task.deadline ? new Date(task.deadline).toLocaleDateString() : "No deadline"}
+                />
+              ))}
 
               <Button
                 variant="ghost"
@@ -82,9 +89,25 @@ export function KanbanBoard() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <h2 className="text-white font-medium">Doing</h2>
-                  <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">0</span>
+                  <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">{inProgressTasks.length}</span>
                 </div>
               </div>
+
+              {inProgressTasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  title={task.title}
+                  priority={task.priority || 'medium'}
+                  status="In progress"
+                  assignee={{
+                    name: task.assigned_to && task.assigned_to.length > 0 ? `User ${task.assigned_to[0]}` : "Unassigned",
+                    avatar: "",
+                    fallback: task.assigned_to && task.assigned_to.length > 0 ? task.assigned_to[0].toString().charAt(0) : "U",
+                    color: "bg-orange-500",
+                  }}
+                  dateRange={task.deadline ? new Date(task.deadline).toLocaleDateString() : "No deadline"}
+                />
+              ))}
 
               <Button
                 variant="ghost"
@@ -100,13 +123,25 @@ export function KanbanBoard() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <h2 className="text-white font-medium">Done</h2>
-                  <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">0</span>
+                  <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">{completedTasks.length}</span>
                 </div>
-                <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add section
-                </Button>
               </div>
+
+              {completedTasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  title={task.title}
+                  priority={task.priority || 'medium'}
+                  status="Completed"
+                  assignee={{
+                    name: task.assigned_to && task.assigned_to.length > 0 ? `User ${task.assigned_to[0]}` : "Unassigned",
+                    avatar: "",
+                    fallback: task.assigned_to && task.assigned_to.length > 0 ? task.assigned_to[0].toString().charAt(0) : "U",
+                    color: "bg-green-500",
+                  }}
+                  dateRange={task.deadline ? new Date(task.deadline).toLocaleDateString() : "No deadline"}
+                />
+              ))}
 
               <Button
                 variant="ghost"

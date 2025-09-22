@@ -57,13 +57,20 @@ async function initializeApp() {
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log('Available endpoints:');
-    console.log('- GET  /api/projects       - Get all projects');
-    console.log('- POST /api/projects       - Create new project');
-    console.log('- GET  /api/projects/:id   - Get project by ID');
-    console.log('- PUT  /api/projects/:id   - Update project');
-    console.log('- DELETE /api/projects/:id - Delete project');
-    console.log('- POST /api/projects/:id/users   - Add user to project');
-    console.log('- DELETE /api/projects/:id/users - Remove user from project');
+    console.log('- GET  /api/projects                    - Get all projects');
+    console.log('- POST /api/projects                    - Create new project');
+    console.log('- GET  /api/projects/:id                - Get project by ID');
+    console.log('- PUT  /api/projects/:id                - Update project');
+    console.log('- DELETE /api/projects/:id              - Delete project');
+    console.log('- POST /api/projects/:id/users          - Add user to project');
+    console.log('- DELETE /api/projects/:id/users        - Remove user from project');
+    console.log('- GET  /api/projects/:id/tasks          - Get all tasks for a project');
+    console.log('- POST /api/projects/:id/tasks          - Create new task for a project');
+    console.log('- GET  /api/projects/:id/tasks/:taskId  - Get specific task');
+    console.log('- GET  /api/projects/:id/tasks/stats    - Get task statistics for a project');
+    console.log('- GET  /api/tasks                       - Get all tasks');
+    console.log('- PUT  /api/tasks/:id                   - Update task');
+    console.log('- DELETE /api/tasks/:id                 - Delete task');
   });
 }
 

@@ -1,7 +1,7 @@
 "use client"
 
-import { createContext, useContext, useReducer, useEffect } from 'react';
-import { projectService } from '@/lib/api';
+import { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
+import { projectService, projectTasksService } from '@/lib/api';
 
 // Project context for state management
 const ProjectContext = createContext();
@@ -16,6 +16,13 @@ const PROJECT_ACTIONS = {
   SET_ERROR: 'SET_ERROR',
   CLEAR_ERROR: 'CLEAR_ERROR',
   SET_SELECTED_PROJECT: 'SET_SELECTED_PROJECT',
+  SET_TASKS_LOADING: 'SET_TASKS_LOADING',
+  SET_PROJECT_TASKS: 'SET_PROJECT_TASKS',
+  CLEAR_PROJECT_TASKS: 'CLEAR_PROJECT_TASKS',
+  ADD_TASK: 'ADD_TASK',
+  UPDATE_TASK: 'UPDATE_TASK',
+  DELETE_TASK: 'DELETE_TASK',
+  SET_TASK_STATS: 'SET_TASK_STATS',
 };
 
 // Project reducer
@@ -49,6 +56,28 @@ function projectReducer(state, action) {
       return { ...state, error: action.payload, loading: false };
     case PROJECT_ACTIONS.CLEAR_ERROR:
       return { ...state, error: null };
+    case PROJECT_ACTIONS.SET_TASKS_LOADING:
+      return { ...state, tasksLoading: action.payload };
+    case PROJECT_ACTIONS.SET_PROJECT_TASKS:
+      return { ...state, projectTasks: action.payload, tasksLoading: false };
+    case PROJECT_ACTIONS.CLEAR_PROJECT_TASKS:
+      return { ...state, projectTasks: [], tasksLoading: false, taskStats: null };
+    case PROJECT_ACTIONS.ADD_TASK:
+      return { ...state, projectTasks: [...(state.projectTasks || []), action.payload] };
+    case PROJECT_ACTIONS.UPDATE_TASK:
+      return {
+        ...state,
+        projectTasks: (state.projectTasks || []).map(task =>
+          task.id === action.payload.id ? action.payload : task
+        )
+      };
+    case PROJECT_ACTIONS.DELETE_TASK:
+      return {
+        ...state,
+        projectTasks: (state.projectTasks || []).filter(task => task.id !== action.payload)
+      };
+    case PROJECT_ACTIONS.SET_TASK_STATS:
+      return { ...state, taskStats: action.payload };
     default:
       return state;
   }
@@ -60,6 +89,9 @@ const initialState = {
   loading: false,
   error: null,
   selectedProject: null,
+  projectTasks: [],
+  tasksLoading: false,
+  taskStats: null,
 };
 
 // Project provider component
@@ -142,7 +174,68 @@ export function ProjectProvider({ children }) {
 
   const selectProject = (projectId) => {
     const project = state.projects.find(p => p.id === projectId) || null;
+    // Clear tasks when switching projects to prevent stale data
+    dispatch({ type: PROJECT_ACTIONS.CLEAR_PROJECT_TASKS });
     dispatch({ type: PROJECT_ACTIONS.SET_SELECTED_PROJECT, payload: project });
+  };
+
+  // Task-related functions
+  const loadProjectTasks = useCallback(async (projectId, options = {}) => {
+    try {
+      dispatch({ type: PROJECT_ACTIONS.SET_TASKS_LOADING, payload: true });
+      const tasks = await projectTasksService.getProjectTasks(projectId, options);
+      dispatch({ type: PROJECT_ACTIONS.SET_PROJECT_TASKS, payload: tasks });
+      return tasks;
+    } catch (error) {
+      dispatch({ type: PROJECT_ACTIONS.SET_ERROR, payload: error.message });
+      throw error;
+    }
+  }, []);
+
+  const createTask = async (projectId, taskData) => {
+    try {
+      dispatch({ type: PROJECT_ACTIONS.CLEAR_ERROR });
+      const newTask = await projectTasksService.createTask(projectId, taskData);
+      dispatch({ type: PROJECT_ACTIONS.ADD_TASK, payload: newTask });
+      return newTask;
+    } catch (error) {
+      dispatch({ type: PROJECT_ACTIONS.SET_ERROR, payload: error.message });
+      throw error;
+    }
+  };
+
+  const updateTask = async (taskId, taskData) => {
+    try {
+      dispatch({ type: PROJECT_ACTIONS.CLEAR_ERROR });
+      const updatedTask = await projectTasksService.updateTask(taskId, taskData);
+      dispatch({ type: PROJECT_ACTIONS.UPDATE_TASK, payload: updatedTask });
+      return updatedTask;
+    } catch (error) {
+      dispatch({ type: PROJECT_ACTIONS.SET_ERROR, payload: error.message });
+      throw error;
+    }
+  };
+
+  const deleteTask = async (taskId) => {
+    try {
+      dispatch({ type: PROJECT_ACTIONS.CLEAR_ERROR });
+      await projectTasksService.deleteTask(taskId);
+      dispatch({ type: PROJECT_ACTIONS.DELETE_TASK, payload: taskId });
+    } catch (error) {
+      dispatch({ type: PROJECT_ACTIONS.SET_ERROR, payload: error.message });
+      throw error;
+    }
+  };
+
+  const loadTaskStats = async (projectId) => {
+    try {
+      const stats = await projectTasksService.getTaskStats(projectId);
+      dispatch({ type: PROJECT_ACTIONS.SET_TASK_STATS, payload: stats });
+      return stats;
+    } catch (error) {
+      dispatch({ type: PROJECT_ACTIONS.SET_ERROR, payload: error.message });
+      throw error;
+    }
   };
 
   const value = {
@@ -154,6 +247,11 @@ export function ProjectProvider({ children }) {
     addUserToProject,
     removeUserFromProject,
     selectProject,
+    loadProjectTasks,
+    createTask,
+    updateTask,
+    deleteTask,
+    loadTaskStats,
   };
 
   return (
