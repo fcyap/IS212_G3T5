@@ -27,7 +27,8 @@ class ProjectService {
     const backendData = {
       name: projectData.project_name,
       description: projectData.description,
-      user_ids: projectData.user_ids
+      user_ids: projectData.user_ids,
+      creator_id: projectData.creator_id
     };
     
     const response = await fetch(`${API_BASE_URL}/api/projects`, {

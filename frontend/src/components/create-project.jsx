@@ -12,13 +12,16 @@ import {
 } from "@/components/ui/dialog"
 import { useProjects } from "@/contexts/project-context"
 import { Plus } from "lucide-react"
+import toast from "react-hot-toast"
 
 export function CreateProjectDialog({ children, variant = "default" }) {
+  const currentUserId = parseInt(process.env.NEXT_PUBLIC_USER_ID || '1')
   const [isOpen, setIsOpen] = useState(false)
   const [formData, setFormData] = useState({
     project_name: "",
     description: "",
-    user_ids: [1] // Default current user
+    user_ids: [currentUserId], // Include current user
+    creator_id: currentUserId // Add creator ID
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   
@@ -31,10 +34,17 @@ export function CreateProjectDialog({ children, variant = "default" }) {
     setIsSubmitting(true)
     try {
       await createProject(formData)
-      setFormData({ project_name: "", description: "", user_ids: [1] })
+      setFormData({
+        project_name: "",
+        description: "",
+        user_ids: [currentUserId],
+        creator_id: currentUserId
+      })
       setIsOpen(false)
+      toast.success("Project created successfully!")
     } catch (error) {
       console.error("Failed to create project:", error)
+      toast.error("Failed to create project. Please try again.")
     } finally {
       setIsSubmitting(false)
     }

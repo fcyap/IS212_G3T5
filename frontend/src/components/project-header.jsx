@@ -95,7 +95,7 @@ export function ProjectHeader() {
                   <ChevronDown className="w-4 h-4" />
                 </Button>
                 {showDropdown && (
-                  <div className="absolute top-full left-0 mt-1 bg-[#1f1f23] border border-gray-600 rounded-md shadow-lg z-10 min-w-[160px]">
+                  <div className="absolute top-full left-0 mt-1 bg-[#1f1f23] border border-gray-600 rounded-md shadow-lg z-10 min-w-[200px]">
                     <button
                       className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 flex items-center gap-2"
                       onClick={() => {
@@ -140,36 +140,38 @@ export function ProjectHeader() {
           </div>
         </div>
 
-        <div className="flex items-center gap-6">
-          <Button variant="ghost" className="text-gray-400 hover:text-white">
-            <List className="w-4 h-4 mr-2" />
-            List
-          </Button>
-          <Button variant="ghost" className="text-gray-400 hover:text-white">
-            <LayoutGrid className="w-4 h-4 mr-2" />
-            Board
-          </Button>
-          <Button variant="ghost" className="text-gray-400 hover:text-white">
-            <Calendar className="w-4 h-4 mr-2" />
-            Calendar
-          </Button>
-          <Button variant="ghost" className="text-gray-400 hover:text-white">
-            <BarChart3 className="w-4 h-4 mr-2" />
-            Timeline
-          </Button>
-          <Button variant="ghost" className="text-gray-400 hover:text-white">
-            <Workflow className="w-4 h-4 mr-2" />
-            Workflow
-          </Button>
-          <Button variant="ghost" className="text-gray-400 hover:text-white">
-            <MessageSquare className="w-4 h-4 mr-2" />
-            Dashboard
-          </Button>
-          <Button variant="ghost" className="text-gray-400 hover:text-white">
-            <Files className="w-4 h-4 mr-2" />
-            Docs
-          </Button>
-        </div>
+        {selectedProject && (
+          <div className="flex items-center gap-6">
+            <Button variant="ghost" className="text-gray-400 hover:text-white">
+              <List className="w-4 h-4 mr-2" />
+              List
+            </Button>
+            <Button variant="ghost" className="text-gray-400 hover:text-white">
+              <LayoutGrid className="w-4 h-4 mr-2" />
+              Board
+            </Button>
+            <Button variant="ghost" className="text-gray-400 hover:text-white">
+              <Calendar className="w-4 h-4 mr-2 text-white" />
+              Calendar
+            </Button>
+            <Button variant="ghost" className="text-gray-400 hover:text-white">
+              <BarChart3 className="w-4 h-4 mr-2" />
+              Timeline
+            </Button>
+            <Button variant="ghost" className="text-gray-400 hover:text-white">
+              <Workflow className="w-4 h-4 mr-2" />
+              Workflow
+            </Button>
+            <Button variant="ghost" className="text-gray-400 hover:text-white">
+              <MessageSquare className="w-4 h-4 mr-2" />
+              Dashboard
+            </Button>
+            <Button variant="ghost" className="text-gray-400 hover:text-white">
+              <Files className="w-4 h-4 mr-2" />
+              Docs
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Edit Project Dialog */}

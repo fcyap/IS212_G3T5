@@ -6,7 +6,7 @@ class ProjectController {
    */
   async createProject(req, res) {
     try {
-      const { name, description, user_ids } = req.body;
+      const { name, description, user_ids, creator_id } = req.body;
 
       // Validate request body
       if (!name || !description) {
@@ -29,7 +29,8 @@ class ProjectController {
       const projectData = {
         name,
         description,
-        user_ids: user_ids || []
+        user_ids: user_ids || [],
+        creator_id
       };
 
       const result = await projectService.createProject(projectData);

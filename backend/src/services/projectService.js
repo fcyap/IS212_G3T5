@@ -1,4 +1,5 @@
 const projectRepository = require('../repository/projectRepository');
+const supabase = require('../utils/supabase');
 
 class ProjectService {
   /**
@@ -11,7 +12,7 @@ class ProjectService {
    */
   async createProject(projectData) {
     try {
-      const { name, description, user_ids = [] } = projectData;
+      const { name, description, user_ids = [], creator_id } = projectData;
 
       // Validate required fields
       if (!name || !description) {
@@ -23,16 +24,27 @@ class ProjectService {
         throw new Error('user_ids must be an array');
       }
 
-      // Create project object
+      // Validate creator_id
+      if (!creator_id) {
+        throw new Error('creator_id is required');
+      }
+
+      // Create project object with proper timestamp formatting
       const project = {
         name: name.trim(),
         description: description.trim(),
-        user_ids: user_ids,
-        created_at: new Date().toISOString()
+        creator_id: creator_id,
+        status: 'active',
+        updated_at: new Date().toISOString()
       };
 
       // Use repository to create project
       const data = await projectRepository.create(project);
+
+      // Add project members to project_members table
+      if (user_ids.length > 0) {
+        await this.addProjectMembers(data.id, user_ids, creator_id);
+      }
 
       return {
         success: true,
@@ -47,6 +59,39 @@ class ProjectService {
         error: error.message,
         message: 'Failed to create project'
       };
+    }
+  }
+
+  /**
+   * Add project members to project_members table
+   * @param {number} projectId - The project ID
+   * @param {Array} userIds - Array of user IDs to add
+   * @param {number} creatorId - The creator ID (gets 'creator' role)
+   */
+  async addProjectMembers(projectId, userIds, creatorId) {
+    try {
+      // Ensure creator is included in the member list with creator role
+      const uniqueUserIds = [...new Set(userIds)];
+      if (!uniqueUserIds.includes(creatorId)) {
+        uniqueUserIds.push(creatorId);
+      }
+
+      const membersToAdd = uniqueUserIds.map(userId => ({
+        project_id: projectId,
+        user_id: userId,
+        member_role: userId === creatorId ? 'creator' : 'collaborator'
+      }));
+
+      const { error } = await supabase
+        .from('project_members')
+        .insert(membersToAdd);
+
+      if (error) {
+        throw new Error(`Failed to add project members: ${error.message}`);
+      }
+    } catch (error) {
+      console.error('Error adding project members:', error);
+      throw error;
     }
   }
 
@@ -109,7 +154,7 @@ class ProjectService {
   }
 
   /**
-   * Update a project
+   * Update a project by ID
    * @param {number} projectId - The project ID
    * @param {Object} updateData - The data to update
    * @returns {Object} Updated project data or error
@@ -120,20 +165,53 @@ class ProjectService {
         throw new Error('Project ID is required');
       }
 
-      // Filter out undefined values
+      // Extract user_ids from updateData as it needs special handling
+      const { user_ids, ...projectUpdateData } = updateData;
+
+      // Filter out undefined values from project data
       const filteredUpdateData = Object.fromEntries(
-        Object.entries(updateData).filter(([_, value]) => value !== undefined)
+        Object.entries(projectUpdateData).filter(([_, value]) => value !== undefined)
       );
 
-      // Validate user_ids if provided
-      if (filteredUpdateData.user_ids && !Array.isArray(filteredUpdateData.user_ids)) {
-        throw new Error('user_ids must be an array');
-      }
-
+      // Update project basic info
       const data = await projectRepository.update(projectId, filteredUpdateData);
 
       if (!data) {
         throw new Error('Project not found');
+      }
+
+      // Handle user_ids update if provided (update project_members table)
+      if (user_ids !== undefined && Array.isArray(user_ids)) {
+        // Remove all current members
+        await supabase
+          .from('project_members')
+          .delete()
+          .eq('project_id', projectId);
+
+        // Add new members
+        if (user_ids.length > 0) {
+          const membersToAdd = user_ids.map(userId => ({
+            project_id: projectId,
+            user_id: userId,
+            member_role: 'collaborator' // Default role for updated members
+          }));
+
+          const { error } = await supabase
+            .from('project_members')
+            .insert(membersToAdd);
+
+          if (error) {
+            throw new Error(`Failed to update project members: ${error.message}`);
+          }
+        }
+
+        // Fetch updated project with new members
+        const updatedData = await projectRepository.findById(projectId);
+        return {
+          success: true,
+          project: updatedData,
+          message: 'Project updated successfully'
+        };
       }
 
       return {
@@ -192,16 +270,19 @@ class ProjectService {
         throw new Error('Project ID and User ID are required');
       }
 
-      // First get the current project
-      const currentProject = await this.getProjectById(projectId);
-      if (!currentProject.success) {
-        return currentProject;
+      // Check if user is already in the project
+      const { data: existingMember, error: checkError } = await supabase
+        .from('project_members')
+        .select('user_id')
+        .eq('project_id', projectId)
+        .eq('user_id', userId)
+        .single();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw new Error(`Database error: ${checkError.message}`);
       }
 
-      const currentUserIds = currentProject.project.user_ids || [];
-
-      // Check if user is already in the project
-      if (currentUserIds.includes(userId)) {
+      if (existingMember) {
         return {
           success: false,
           error: 'User is already in the project',
@@ -209,10 +290,11 @@ class ProjectService {
         };
       }
 
-      // Add user to the project
-      const updatedUserIds = [...currentUserIds, userId];
+      // Add user to project_members table
+      await projectRepository.addUserToProject(projectId, userId);
 
-      return await this.updateProject(projectId, { user_ids: updatedUserIds });
+      // Return updated project data
+      return await this.getProjectById(projectId);
 
     } catch (error) {
       console.error('Error adding user to project:', error);
@@ -236,16 +318,19 @@ class ProjectService {
         throw new Error('Project ID and User ID are required');
       }
 
-      // First get the current project
-      const currentProject = await this.getProjectById(projectId);
-      if (!currentProject.success) {
-        return currentProject;
+      // Check if user is in the project
+      const { data: existingMember, error: checkError } = await supabase
+        .from('project_members')
+        .select('user_id')
+        .eq('project_id', projectId)
+        .eq('user_id', userId)
+        .single();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw new Error(`Database error: ${checkError.message}`);
       }
 
-      const currentUserIds = currentProject.project.user_ids || [];
-
-      // Check if user is in the project
-      if (!currentUserIds.includes(userId)) {
+      if (!existingMember) {
         return {
           success: false,
           error: 'User is not in the project',
@@ -253,10 +338,11 @@ class ProjectService {
         };
       }
 
-      // Remove user from the project
-      const updatedUserIds = currentUserIds.filter(id => id !== userId);
+      // Remove user from project_members table
+      await projectRepository.removeUserFromProject(projectId, userId);
 
-      return await this.updateProject(projectId, { user_ids: updatedUserIds });
+      // Return updated project data
+      return await this.getProjectById(projectId);
 
     } catch (error) {
       console.error('Error removing user from project:', error);

@@ -97,8 +97,12 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
                                         >
                                             {isProjectsExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                                         </button>
-                                        <span>Projects</span>
-                                        {loading && <span className="text-xs text-gray-400">Loading...</span>}
+                                        <button
+                                            onClick={() => selectProject(null)}
+                                            className="hover:bg-gray-700 px-2 py-1 rounded transition-colors"
+                                        >
+                                            <span>Projects</span>
+                                        </button>
                                     </div>
                                     <CreateProjectDialog>
                                         <button className="p-1 hover:bg-gray-700 rounded">
@@ -132,8 +136,6 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
                                     </nav>
                                 )}
                             </div>
-
-                            {/* Teams Section */}
                             <div className="mb-6">
                                 <div className="flex items-center justify-between px-3 py-2 text-sm font-medium text-white">
                                     <div className="flex items-center gap-2">
