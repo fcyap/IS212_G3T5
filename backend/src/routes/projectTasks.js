@@ -102,7 +102,6 @@ const getMockProjects = () => [
     user_ids: [1, 2],
     created_at: "2025-09-16T11:49:09.914069",
     deadline: null,
-    creator_id: 1,
     status: "active"
   },
   {
@@ -112,7 +111,6 @@ const getMockProjects = () => [
     user_ids: [2, 3, 4],
     created_at: "2025-09-16T11:49:09.914069",
     deadline: null,
-    creator_id: 1,
     status: "active"
   }
 ];
@@ -570,17 +568,13 @@ router.get('/tasks', async (req, res) => {
 // GET /projects - Get all projects
 router.get('/projects', async (req, res) => {
   try {
-    const { status, creator_id, page, limit } = req.query;
+    const { status, page, limit } = req.query;
     let { sortBy = 'created_at', sortOrder = 'desc' } = req.query;
 
     // Validate inputs
     sortBy = validateSortField(sortBy, VALID_SORT_FIELDS.projects, 'created_at');
     sortOrder = validateSortOrder(sortOrder);
     const { page: validatedPage, limit: validatedLimit, offset } = validatePagination(page, limit);
-
-    if (creator_id) {
-      validatePositiveInteger(creator_id, 'creator_id');
-    }
 
     let projects, totalCount;
 
@@ -593,10 +587,6 @@ router.get('/projects', async (req, res) => {
       // Apply filters
       if (status) {
         query = query.eq('status', status);
-      }
-
-      if (creator_id) {
-        query = query.eq('creator_id', parseInt(creator_id));
       }
 
       // Apply sorting and pagination
@@ -619,10 +609,6 @@ router.get('/projects', async (req, res) => {
       // Apply filters
       if (status) {
         allProjects = allProjects.filter(project => project.status === status);
-      }
-
-      if (creator_id) {
-        allProjects = allProjects.filter(project => project.creator_id == creator_id);
       }
 
       // Apply sorting
@@ -655,7 +641,6 @@ router.get('/projects', async (req, res) => {
       },
       filters: {
         status: status || null,
-        creator_id: creator_id || null,
         sortBy,
         sortOrder
       },

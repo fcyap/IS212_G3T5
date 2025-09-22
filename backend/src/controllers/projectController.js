@@ -1,0 +1,179 @@
+const projectService = require('../services/projectService');
+const projectRepository = require('../repositories/projectRepository');
+
+/**
+ * Project Controller - Handles HTTP requests and responses for projects
+ * This layer only deals with request validation and response formatting
+ * NOTE: Only read operations and adding collaborators - no other project editing functionality
+ */
+
+const getAllProjects = async (req, res) => {
+  try {
+    // Input validation
+    const userId = req.user?.id || 1;
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'User ID is required' });
+    }
+
+    // Call service layer
+    const projects = await projectService.getAllProjectsForUser(userId);
+
+    // Format response
+    res.json({ success: true, projects });
+  } catch (err) {
+    console.error('Error in getAllProjects:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const getProjectById = async (req, res) => {
+  try {
+    // Input validation
+    const { projectId } = req.params;
+
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ success: false, message: 'Valid project ID is required' });
+    }
+
+    // Call service layer
+    const project = await projectService.getProjectById(parseInt(projectId));
+
+    // Format response
+    res.json({ success: true, project });
+  } catch (err) {
+    console.error('Error in getProjectById:', err);
+    const statusCode = err.message.includes('not found') ? 404 : 500;
+    res.status(statusCode).json({ success: false, message: err.message });
+  }
+};
+
+const getProjectMembers = async (req, res) => {
+  try {
+    // Input validation
+    const { projectId } = req.params;
+
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ success: false, message: 'Valid project ID is required' });
+    }
+
+    // Call service layer
+    const members = await projectService.getProjectMembers(parseInt(projectId));
+
+    // Format response
+    res.json({ success: true, projectId: parseInt(projectId), members });
+  } catch (err) {
+    console.error('Error in getProjectMembers:', err);
+    const statusCode = err.message.includes('not found') ? 404 : 500;
+    res.status(statusCode).json({ success: false, message: err.message });
+  }
+};
+
+const addProjectMembers = async (req, res) => {
+  try {
+    // Input validation
+    const { projectId } = req.params;
+    const { userIds, message, role } = req.body;
+    const requestingUserId = req.user?.id || 1;
+
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ success: false, message: 'Valid project ID is required' });
+    }
+
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'userIds array is required and cannot be empty' });
+    }
+
+    // Validate role if provided
+    const memberRole = role || 'collaborator';
+    const validRoles = ['creator', 'manager', 'collaborator'];
+    if (!validRoles.includes(memberRole)) {
+      return res.status(400).json({ success: false, message: 'Invalid role. Must be creator, manager, or collaborator' });
+    }
+
+    // Validate all user IDs are numbers
+    const validUserIds = userIds.map(id => {
+      const numId = parseInt(id);
+      if (isNaN(numId)) {
+        throw new Error('All user IDs must be valid numbers');
+      }
+      return numId;
+    });
+
+    if (!requestingUserId) {
+      return res.status(400).json({ success: false, message: 'Requesting user ID is required' });
+    }
+
+    // Call service layer
+    const updatedProject = await projectService.addUsersToProject(
+      parseInt(projectId),
+      validUserIds,
+      requestingUserId,
+      message,
+      memberRole
+    );
+
+    // Format response
+    res.json({
+      success: true,
+      project: updatedProject,
+      message: `Successfully added ${validUserIds.length} member(s) to project`
+    });
+  } catch (err) {
+    console.error('Error in addProjectMembers:', err);
+    if (err.message.includes('Only managers') || err.message.includes('Cannot remove')) {
+      res.status(403).json({ success: false, message: err.message });
+    } else {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+};
+
+const removeProjectMember = async (req, res) => {
+  try {
+    // Input validation
+    const { projectId, userId } = req.params;
+    const requestingUserId = req.user?.id || 1;
+
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ success: false, message: 'Valid project ID is required' });
+    }
+
+    if (!userId || isNaN(userId)) {
+      return res.status(400).json({ success: false, message: 'Valid user ID is required' });
+    }
+
+    if (!requestingUserId) {
+      return res.status(400).json({ success: false, message: 'Requesting user ID is required' });
+    }
+
+    // Call service layer
+    const updatedProject = await projectService.removeUserFromProject(
+      parseInt(projectId),
+      parseInt(userId),
+      requestingUserId
+    );
+
+    // Format response
+    res.json({
+      success: true,
+      project: updatedProject,
+      message: 'Member successfully removed from project'
+    });
+  } catch (err) {
+    console.error('Error in removeProjectMember:', err);
+    if (err.message.includes('Only managers') || err.message.includes('Cannot remove')) {
+      res.status(403).json({ success: false, message: err.message });
+    } else {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+};
+
+module.exports = {
+  getAllProjects,
+  getProjectById,
+  getProjectMembers,
+  addProjectMembers,
+  removeProjectMember
+};
