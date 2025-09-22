@@ -1,4 +1,5 @@
 "use client"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -22,9 +23,17 @@ import {
   Palette,
   Menu,
   HelpCircle,
+  ChevronDown,
+  Edit,
 } from "lucide-react"
+import { useProjects } from "@/contexts/project-context"
+import { EditProjectDialog } from "./edit-project-dialog"
 
 export function ProjectHeader() {
+  const { selectedProject } = useProjects()
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [showEditDialog, setShowEditDialog] = useState(false)
+
   return (
     <div className="bg-[#1f1f23] text-white">
       {/* Top Bar */}
@@ -72,7 +81,35 @@ export function ProjectHeader() {
             <div className="w-8 h-8 bg-teal-500 rounded flex items-center justify-center">
               <LayoutGrid className="w-4 h-4 text-white" />
             </div>
-            <h1 className="text-xl font-semibold">Software Project Management (SPM)</h1>
+            <h1 className="text-xl font-semibold">
+              {selectedProject ? selectedProject.name : "Select a Project"}
+            </h1>
+            {selectedProject && (
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-gray-400 hover:text-white p-1"
+                  onClick={() => setShowDropdown(!showDropdown)}
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </Button>
+                {showDropdown && (
+                  <div className="absolute top-full left-0 mt-1 bg-[#1f1f23] border border-gray-600 rounded-md shadow-lg z-10 min-w-[160px]">
+                    <button
+                      className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 flex items-center gap-2"
+                      onClick={() => {
+                        setShowEditDialog(true)
+                        setShowDropdown(false)
+                      }}
+                    >
+                      <Edit className="w-4 h-4" />
+                      Edit Project Details
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
               <Star className="w-4 h-4" />
             </Button>
@@ -100,79 +137,49 @@ export function ProjectHeader() {
                 +2
               </div>
             </div>
-
-            <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-              <Share className="w-4 h-4 mr-2" />
-              Share
-            </Button>
-
-            <Button className="bg-gray-700 hover:bg-gray-600 text-white">
-              <Palette className="w-4 h-4 mr-2" />
-              Customize
-            </Button>
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-6 border-b border-gray-700">
-          <NavTab icon={List} label="Overview" />
-          <NavTab icon={List} label="List" />
-          <NavTab icon={LayoutGrid} label="Board" isActive />
-          <NavTab icon={Calendar} label="Timeline" />
-          <NavTab icon={BarChart3} label="Dashboard" />
-          <NavTab icon={Calendar} label="Calendar" />
-          <NavTab icon={Workflow} label="Workflow" />
-          <NavTab icon={MessageSquare} label="Messages" />
-          <NavTab icon={Files} label="Files" />
-          <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-            <Plus className="w-4 h-4" />
+        <div className="flex items-center gap-6">
+          <Button variant="ghost" className="text-gray-400 hover:text-white">
+            <List className="w-4 h-4 mr-2" />
+            List
+          </Button>
+          <Button variant="ghost" className="text-gray-400 hover:text-white">
+            <LayoutGrid className="w-4 h-4 mr-2" />
+            Board
+          </Button>
+          <Button variant="ghost" className="text-gray-400 hover:text-white">
+            <Calendar className="w-4 h-4 mr-2" />
+            Calendar
+          </Button>
+          <Button variant="ghost" className="text-gray-400 hover:text-white">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Timeline
+          </Button>
+          <Button variant="ghost" className="text-gray-400 hover:text-white">
+            <Workflow className="w-4 h-4 mr-2" />
+            Workflow
+          </Button>
+          <Button variant="ghost" className="text-gray-400 hover:text-white">
+            <MessageSquare className="w-4 h-4 mr-2" />
+            Dashboard
+          </Button>
+          <Button variant="ghost" className="text-gray-400 hover:text-white">
+            <Files className="w-4 h-4 mr-2" />
+            Docs
           </Button>
         </div>
       </div>
 
-      {/* Action Bar */}
-      <div className="px-6 py-3 border-b border-gray-700">
-        <div className="flex items-center justify-between">
-          <Button className="bg-gray-700 hover:bg-gray-600 text-white">
-            <Plus className="w-4 h-4 mr-2" />
-            Add task
-          </Button>
-
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-              <Filter className="w-4 h-4 mr-2" />
-              Filter
-            </Button>
-            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-              <ArrowUpDown className="w-4 h-4 mr-2" />
-              Sort
-            </Button>
-            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-              <Group className="w-4 h-4 mr-2" />
-              Group
-            </Button>
-            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-              <Settings className="w-4 h-4 mr-2" />
-              Options
-            </Button>
-            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-              <Search className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function NavTab({ icon: Icon, label, isActive }) {
-  return (
-    <div
-      className={`flex items-center gap-2 px-3 py-3 text-sm cursor-pointer border-b-2 transition-colors ${isActive ? "border-blue-500 text-white" : "border-transparent text-gray-400 hover:text-white"
-        }`}
-    >
-      <Icon className="w-4 h-4" />
-      <span>{label}</span>
+      {/* Edit Project Dialog */}
+      {showEditDialog && selectedProject && (
+        <EditProjectDialog
+          project={selectedProject}
+          isOpen={showEditDialog}
+          onClose={() => setShowEditDialog(false)}
+        />
+      )}
     </div>
   )
 }
