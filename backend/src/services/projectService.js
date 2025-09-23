@@ -1,271 +1,125 @@
-const projectRepository = require('../repository/projectRepository');
+const projectRepository = require('../repositories/projectRepository');
+const userRepository = require('../repositories/userRepository');
 
+/**
+ * Project Service - Contains business logic for project operations
+ * This layer orchestrates data from repositories and applies business rules
+ */
 class ProjectService {
-  /**
-   * Create a new project
-   * @param {Object} projectData - The project data
-   * @param {string} projectData.name - Project name
-   * @param {string} projectData.description - Project description
-   * @param {Array} projectData.user_ids - Array of user IDs in the project
-   * @returns {Object} Created project data or error
-   */
-  async createProject(projectData) {
-    try {
-      const { name, description, user_ids = [] } = projectData;
-
-      // Validate required fields
-      if (!name || !description) {
-        throw new Error('Missing required fields: name and description are required');
-      }
-
-      // Validate user_ids is an array
-      if (!Array.isArray(user_ids)) {
-        throw new Error('user_ids must be an array');
-      }
-
-      // Create project object
-      const project = {
-        name: name.trim(),
-        description: description.trim(),
-        user_ids: user_ids,
-        created_at: new Date().toISOString()
-      };
-
-      // Use repository to create project
-      const data = await projectRepository.create(project);
-
-      return {
-        success: true,
-        project: data,
-        message: 'Project created successfully'
-      };
-
-    } catch (error) {
-      console.error('Error creating project:', error);
-      return {
-        success: false,
-        error: error.message,
-        message: 'Failed to create project'
-      };
-    }
-  }
 
   /**
-   * Get all projects
-   * @returns {Object} Array of projects or error
+   * Get all projects for a user (creator or member)
    */
-  async getAllProjects() {
-    try {
-      const data = await projectRepository.findAll();
+  async getAllProjectsForUser(userId) {
+    // Get user to validate they exist
+    const user = await userRepository.getUserById(userId);
 
-      return {
-        success: true,
-        projects: data,
-        count: data.length,
-        message: 'Projects retrieved successfully'
-      };
+    // Get project IDs where user is a member
+    const memberProjectIds = await projectRepository.getProjectIdsForUser(userId);
 
-    } catch (error) {
-      console.error('Error getting projects:', error);
-      return {
-        success: false,
-        error: error.message,
-        message: 'Failed to retrieve projects'
-      };
-    }
-  }
+    // Get project IDs where user is creator
+    const creatorProjectIds = await projectRepository.getProjectIdsByCreator(userId);
 
-  /**
-   * Get a project by ID
-   * @param {number} projectId - The project ID
-   * @returns {Object} Project data or error
-   */
-  async getProjectById(projectId) {
-    try {
-      if (!projectId) {
-        throw new Error('Project ID is required');
-      }
+    // Combine and deduplicate project IDs
+    const allProjectIds = [...new Set([...memberProjectIds, ...creatorProjectIds])];
 
-      const data = await projectRepository.findById(projectId);
+    // Get project details for these IDs
+    const userProjects = await projectRepository.getProjectsByIds(allProjectIds);
 
-      if (!data) {
-        throw new Error('Project not found');
-      }
+    // Enhance projects with additional data
+    const enhancedProjects = await Promise.all(userProjects.map(async (project) => {
+      try {
+        // Get task count
+        const taskCount = await projectRepository.getTaskCountByProject(project.id);
 
-      return {
-        success: true,
-        project: data,
-        message: 'Project retrieved successfully'
-      };
+        // Get collaborator details including creator
+        const members = await projectRepository.getProjectMembersWithDetails(project.id);
+        const collaborators = members.map(member => member.users.name).join(', ');
 
-    } catch (error) {
-      console.error('Error getting project:', error);
-      return {
-        success: false,
-        error: error.message,
-        message: 'Failed to retrieve project'
-      };
-    }
-  }
-
-  /**
-   * Update a project
-   * @param {number} projectId - The project ID
-   * @param {Object} updateData - The data to update
-   * @returns {Object} Updated project data or error
-   */
-  async updateProject(projectId, updateData) {
-    try {
-      if (!projectId) {
-        throw new Error('Project ID is required');
-      }
-
-      // Filter out undefined values
-      const filteredUpdateData = Object.fromEntries(
-        Object.entries(updateData).filter(([_, value]) => value !== undefined)
-      );
-
-      // Validate user_ids if provided
-      if (filteredUpdateData.user_ids && !Array.isArray(filteredUpdateData.user_ids)) {
-        throw new Error('user_ids must be an array');
-      }
-
-      const data = await projectRepository.update(projectId, filteredUpdateData);
-
-      if (!data) {
-        throw new Error('Project not found');
-      }
-
-      return {
-        success: true,
-        project: data,
-        message: 'Project updated successfully'
-      };
-
-    } catch (error) {
-      console.error('Error updating project:', error);
-      return {
-        success: false,
-        error: error.message,
-        message: 'Failed to update project'
-      };
-    }
-  }
-
-  /**
-   * Delete a project
-   * @param {number} projectId - The project ID
-   * @returns {Object} Success message or error
-   */
-  async deleteProject(projectId) {
-    try {
-      if (!projectId) {
-        throw new Error('Project ID is required');
-      }
-
-      await projectRepository.delete(projectId);
-
-      return {
-        success: true,
-        message: 'Project deleted successfully'
-      };
-
-    } catch (error) {
-      console.error('Error deleting project:', error);
-      return {
-        success: false,
-        error: error.message,
-        message: 'Failed to delete project'
-      };
-    }
-  }
-
-  /**
-   * Add user to project
-   * @param {number} projectId - The project ID
-   * @param {number} userId - The user ID to add
-   * @returns {Object} Updated project data or error
-   */
-  async addUserToProject(projectId, userId) {
-    try {
-      if (!projectId || !userId) {
-        throw new Error('Project ID and User ID are required');
-      }
-
-      // First get the current project
-      const currentProject = await this.getProjectById(projectId);
-      if (!currentProject.success) {
-        return currentProject;
-      }
-
-      const currentUserIds = currentProject.project.user_ids || [];
-
-      // Check if user is already in the project
-      if (currentUserIds.includes(userId)) {
         return {
-          success: false,
-          error: 'User is already in the project',
-          message: 'User already exists in project'
+          ...project,
+          task_count: taskCount,
+          collaborators: collaborators || ''
+        };
+      } catch (error) {
+        console.error(`Error enhancing project ${project.id}:`, error);
+        return {
+          ...project,
+          task_count: 0,
+          collaborators: ''
         };
       }
+    }));
 
-      // Add user to the project
-      const updatedUserIds = [...currentUserIds, userId];
+    return enhancedProjects;
+  }
 
-      return await this.updateProject(projectId, { user_ids: updatedUserIds });
+  /**
+   * Get project by ID
+   */
+  async getProjectById(projectId) {
+    return await projectRepository.getProjectById(projectId);
+  }
 
-    } catch (error) {
-      console.error('Error adding user to project:', error);
-      return {
-        success: false,
-        error: error.message,
-        message: 'Failed to add user to project'
-      };
+  /**
+   * Get project members with roles
+   */
+  async getProjectMembers(projectId) {
+    // Clean up any orphaned member records first
+    await projectRepository.cleanupOrphanedMembers(projectId);
+
+    const members = await projectRepository.getProjectMembersWithDetails(projectId);
+
+    // Format the response
+    return members.map(member => ({
+      user_id: member.user_id,
+      email: member.users?.email || '',
+      name: member.users?.name || 'Unknown User',
+      role: member.member_role,
+      joined_at: member.added_at
+    }));
+  }
+
+  /**
+   * Add users to project
+   */
+  async addUsersToProject(projectId, newUserIds, requestingUserId, message, role = 'collaborator') {
+    // Check permissions
+    const hasPermission = await projectRepository.canUserManageMembers(projectId, requestingUserId);
+    if (!hasPermission) {
+      throw new Error('Only managers and creators can add members to the project');
     }
+
+    // Add each user with specified role
+    const addedMembers = [];
+    for (const userId of newUserIds) {
+      try {
+        // Check if user is already a member
+        const existingMembers = await projectRepository.getProjectMembersWithDetails(projectId);
+        const isAlreadyMember = existingMembers.some(member => member.user_id === userId);
+
+        if (isAlreadyMember) {
+          console.log(`User ${userId} is already a member of project ${projectId}`);
+          continue;
+        }
+
+        const addedMember = await projectRepository.addUserToProject(projectId, userId, role);
+        addedMembers.push(addedMember);
+      } catch (error) {
+        console.error(`Error adding user ${userId} to project ${projectId}:`, error);
+        throw error;
+      }
+    }
+
+    // Return updated project
+    return await projectRepository.getProjectById(projectId);
   }
 
   /**
    * Remove user from project
-   * @param {number} projectId - The project ID
-   * @param {number} userId - The user ID to remove
-   * @returns {Object} Updated project data or error
    */
-  async removeUserFromProject(projectId, userId) {
-    try {
-      if (!projectId || !userId) {
-        throw new Error('Project ID and User ID are required');
-      }
-
-      // First get the current project
-      const currentProject = await this.getProjectById(projectId);
-      if (!currentProject.success) {
-        return currentProject;
-      }
-
-      const currentUserIds = currentProject.project.user_ids || [];
-
-      // Check if user is in the project
-      if (!currentUserIds.includes(userId)) {
-        return {
-          success: false,
-          error: 'User is not in the project',
-          message: 'User not found in project'
-        };
-      }
-
-      // Remove user from the project
-      const updatedUserIds = currentUserIds.filter(id => id !== userId);
-
-      return await this.updateProject(projectId, { user_ids: updatedUserIds });
-
-    } catch (error) {
-      console.error('Error removing user from project:', error);
-      return {
-        success: false,
-        error: error.message,
-        message: 'Failed to remove user from project'
-      };
-    }
+  async removeUserFromProject(projectId, userIdToRemove, requestingUserId) {
+    return await projectRepository.removeUserFromProject(projectId, userIdToRemove, requestingUserId);
   }
 }
 
