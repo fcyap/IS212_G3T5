@@ -4,6 +4,9 @@ import { useState } from "react"
 import { SidebarNavigation } from "@/components/sidebar-navigation"
 import { ProjectHeader } from "@/components/project-header"
 import { KanbanBoard } from "@/components/kanban-board"
+import { CommentBox } from "@/components/task-comment/task-comment"
+import { CommentItem } from "@/components/task-comment/task-comment-item"
+import { CommentSection } from "@/components/task-comment/task-comment-section"
 import { KanbanProvider } from "@/components/kanban-context"
 
 export default function ProjectTimelinePage() {
@@ -21,6 +24,7 @@ export default function ProjectTimelinePage() {
         <ProjectHeader />
         <KanbanBoard />
         </KanbanProvider>
+        <CommentSection />
       </div>
     </div>
   )
