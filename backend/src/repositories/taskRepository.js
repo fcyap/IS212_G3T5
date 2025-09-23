@@ -1,11 +1,11 @@
-import { supabase } from "../utils/supabase.js";
+const { supabase } = require("../utils/supabase.js");
 
-export class TaskRepository {
-  async listUnarchived() {
+class TaskRepository {
+  async list({ archived = false } = {}) {
     return supabase
       .from("tasks")
       .select("*")
-      .eq("archived", false)
+      .eq("archived", archived)
       .order("created_at", { ascending: true });
   }
 
@@ -23,4 +23,4 @@ export class TaskRepository {
   }
 }
 
-export default new TaskRepository();
+module.exports = new TaskRepository();

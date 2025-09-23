@@ -1,16 +1,20 @@
-import taskService from "../services/taskService.js";
+const taskServiceModule = require("../services/taskService");
+const taskService = taskServiceModule.default || taskServiceModule; 
 
-export class TaskController {
+class TaskController {
   // GET /tasks
   async list(req, res) {
     try {
-      const tasks = await taskService.listUnarchivedWithAssignees();
+      const archived =
+        String(req.query.archived ?? "false").toLowerCase() === "true";
+      const tasks = await taskService.listWithAssignees({ archived });
       res.json(tasks);
     } catch (e) {
       console.error("[GET /tasks]", e);
       res.status(e.status || 500).json({ error: e.message || "Server error" });
     }
   }
+
 
   // POST /tasks
   async create(req, res) {
@@ -39,4 +43,5 @@ export class TaskController {
   }
 }
 
-export default new TaskController();
+module.exports = new TaskController();
+// module.exports.TaskController = TaskController;

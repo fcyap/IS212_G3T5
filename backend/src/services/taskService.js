@@ -1,50 +1,38 @@
-import taskRepository from "../repositories/taskRepository.js";
+const taskRepository = require("../repositories/taskRepository.js");
 
-export class TaskService {
-  // GET /tasks
-  async listUnarchivedWithAssignees() {
-    const { data: tasks, error } = await taskRepository.listUnarchived();
+class TaskService {
+   async listWithAssignees({ archived = false } = {}) {
+    const { data: tasks, error } = await taskRepository.list({ archived });
     if (error) throw error;
 
-    // collect unique user IDs from assigned_to arrays
     const idSet = new Set();
     for (const t of tasks) {
       const ids = Array.isArray(t.assigned_to)
         ? t.assigned_to
-        : t.assigned_to != null
-        ? [t.assigned_to]
-        : [];
-      ids
-        .map((v) => Number(v))
-        .filter((n) => Number.isFinite(n))
-        .forEach((n) => idSet.add(n));
+        : t.assigned_to != null ? [t.assigned_to] : [];
+      ids.map(Number).filter(Number.isFinite).forEach(n => idSet.add(n));
     }
 
     let usersById = {};
     if (idSet.size) {
-      const { data: users, error: uerr } = await taskRepository.getUsersByIds(
-        Array.from(idSet)
-      );
+      const { data: users, error: uerr } =
+        await taskRepository.getUsersByIds(Array.from(idSet));
       if (uerr) throw uerr;
-      usersById = Object.fromEntries(users.map((u) => [u.id, u]));
+      usersById = Object.fromEntries(users.map(u => [u.id, u]));
     }
 
-    // attach assignees: [{id, name}]
-    return tasks.map((t) => {
+    return tasks.map(t => {
       const raw = Array.isArray(t.assigned_to)
         ? t.assigned_to
-        : t.assigned_to != null
-        ? [t.assigned_to]
-        : [];
+        : t.assigned_to != null ? [t.assigned_to] : [];
       const assignees = raw
-        .map((v) => Number(v))
+        .map(Number)
         .filter((n) => usersById[n])
         .map((id) => ({ id, name: usersById[id].name }));
       return { ...t, assignees };
     });
   }
 
-  // POST /tasks
   async createTask(input) {
     const {
       title,
@@ -54,6 +42,7 @@ export class TaskService {
       deadline = null,
       team_id = null,
       assigned_to,
+      tags, // <— NEW
     } = input;
 
     if (!title) {
@@ -68,6 +57,20 @@ export class TaskService {
     const normStatus = allowed.has(requested) ? requested : "pending";
     const assignees = Array.isArray(assigned_to) ? assigned_to : [];
 
+    // NEW: normalize tags to a text[]
+    const tagsArr = Array.isArray(tags)
+      ? tags
+      : typeof tags === "string"
+      ? tags.split(",")
+      : [];
+    const normTags = Array.from(
+      new Set(
+        tagsArr
+          .map((t) => String(t).trim())
+          .filter(Boolean)
+      )
+    );
+
     const payload = {
       title,
       description,
@@ -76,6 +79,7 @@ export class TaskService {
       deadline,
       team_id,
       assigned_to: assignees,
+      tags: normTags, // <— NEW
       updated_at: new Date().toISOString(),
     };
 
@@ -84,7 +88,6 @@ export class TaskService {
     return data;
   }
 
-  // PUT /tasks/:id
   async updateTask(id, input) {
     const patch = {};
     if (input.title !== undefined) patch.title = input.title;
@@ -95,6 +98,22 @@ export class TaskService {
     if (input.deadline !== undefined) patch.deadline = input.deadline || null;
     if (input.archived !== undefined) patch.archived = !!input.archived;
 
+    // OPTIONAL: allow editing tags later
+    if (input.tags !== undefined) {
+      const tagsArr = Array.isArray(input.tags)
+        ? input.tags
+        : typeof input.tags === "string"
+        ? input.tags.split(",")
+        : [];
+      patch.tags = Array.from(
+        new Set(
+          tagsArr
+            .map((t) => String(t).trim())
+            .filter(Boolean)
+        )
+      );
+    }
+
     patch.updated_at = new Date().toISOString();
 
     const { data, error } = await taskRepository.updateById(id, patch);
@@ -103,4 +122,4 @@ export class TaskService {
   }
 }
 
-export default new TaskService();
+module.exports = new TaskService();

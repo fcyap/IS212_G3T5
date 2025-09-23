@@ -1,11 +1,10 @@
-import { Router } from "express";
-import taskController from "../controllers/taskController.js";
+const express = require("express");
+const taskController = require("../controllers/taskController.js");
 
-const router = Router();
+const router = express.Router();
 
-router.get("/", (req, res) => taskController.list(req, res));
-router.post("/", (req, res) => taskController.create(req, res));
-router.put("/:id", (req, res) => taskController.update(req, res));
+router.get("/", taskController.list);
+router.post("/", taskController.create);
+router.put("/:id", taskController.update);
 
-export default router;
-
+module.exports = router;

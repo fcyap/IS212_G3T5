@@ -1,29 +1,25 @@
-// const express = require('express');
+require("dotenv").config();
+
+const express = require("express");
+const cors = require("cors");
+const morgan = require("morgan");
+
+// Routers
+const tasksRouter = require("./routes/tasks.js"); 
+
 const app = express();
-// const PORT = process.env.PORT || 3001;
-const PORT = process.env.PORT || 4000;
-import "dotenv/config"
-import express from "express"
-import cors from "cors"
-import morgan from "morgan"
-import { createClient } from "@supabase/supabase-js"
-import tasksRouter from "./routes/tasks.js"  
+const PORT = process.env.PORT || 3001;
 
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false } }
-)
-
-app.use(cors({ origin: "http://localhost:3000" })) 
+// Middleware
+app.use(cors({ origin: process.env.CLIENT_ORIGIN || "http://localhost:3000" }));
 app.use(express.json());
-app.use(morgan("dev"))
-app.use("/tasks", tasksRouter)
+app.use(morgan("dev"));
 
+// Routes
+app.use("/tasks", tasksRouter);
 
-app.get('/', (req, res) => {
-  res.send('Backend is running!');
+app.get("/", (_req, res) => {
+  res.send("Backend is running!");
 });
 
 app.listen(PORT, () => {

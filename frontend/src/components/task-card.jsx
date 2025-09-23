@@ -2,9 +2,9 @@
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Settings, CalendarDays } from "lucide-react"
+import { Settings, CalendarDays, ArchiveRestore } from "lucide-react"
 
-export function TaskCard({ title, priority, status, assignees = [], dateRange, description, deadline, onClick }) {
+export function TaskCard({ title, priority, status, assignees = [], dateRange, description, deadline, onClick, tags = [], onUnarchive, }) {
 
   const cap = (s) => (s ? s.toString().charAt(0).toUpperCase() + s.toString().slice(1).toLowerCase() : "")
   const p = (priority || "").toLowerCase()
@@ -28,50 +28,61 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
       default: return "bg-gray-600 text-white"
     }
   }
-  // const getStatusColor = () => {
-  //   switch (s) {
-  //     case "on track": return "bg-green-600 text-white"
-  //     case "at risk": return "bg-yellow-600 text-white"
-  //     case "off track": return "bg-red-600 text-white"
-  //     default: return "bg-gray-600 text-white"
-  //   }
-  // }
+
 
   return (
-    <div onClick={onClick} role="button" tabIndex={0}className="bg-[#2a2a2e] border border-gray-600 rounded-lg p-4 hover:border-gray-500 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/40" >
-      {/* Title + Description */}
+    <div
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      className="bg-[#2a2a2e] border border-gray-600 rounded-lg p-4 hover:border-gray-500 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/40">      {/* Title + Description */}
       <div className="flex items-start gap-3">
         <div className="flex-1">
           <h3 className="text-white font-medium">{title}</h3>
         </div>
-        <Settings className="w-4 h-4 text-gray-400" />
+        {onUnarchive ? (
+          <button
+            type="button"
+            title="Unarchive"
+            onClick={(e) => {
+              e.stopPropagation();     
+              onUnarchive?.();
+            }}
+            className="p-1 rounded text-gray-200 hover:bg-gray-700"
+          >
+            <ArchiveRestore className="w-4 h-4" />
+          </button>
+        ) : (
+          <Settings className="w-4 h-4 text-gray-400" />
+        )}
+
       </div>
 
       {/* Badges */}
       <div className="mt-3 flex items-center gap-2">
         {priority ? <Badge className={`text-xs px-2 py-1 ${getPriorityColor()}`}>{cap(priority)}</Badge> : null}
-        {status ? <Badge className={`text-xs px-2 py-1 ${getStatusColor()}`}>{cap(status)}</Badge> : null}
       </div>
 
-      {/* Avatar + Deadline */}
-      <div className="mt-3 flex items-center justify-between">
+
+      {/* Avatar + Deadline + Tags */}
+      <div className="mt-3 flex items-center">
         <div className="flex items-center gap-2">
-          {assignees.length > 0 && (           
+          {assignees.length > 0 && (
             <div className="flex -space-x-2">
-             {assignees.slice(0, 3).map((a, i) => (
-               <Avatar key={i} className="w-6 h-6 border-2 border-[#2a2a2e]">
-                 <AvatarFallback className="bg-gray-600 text-white text-xs font-medium">
-                  {(a.name?.charAt(0) || "U").toUpperCase()}
-                </AvatarFallback>
-               </Avatar>
-             ))}
-             {assignees.length > 3 && (
-               <div className="w-6 h-6 rounded-full bg-gray-700 border-2 border-[#2a2a2e] text-[10px] text-gray-200 flex items-center justify-center">
-                 +{assignees.length - 3}
-               </div>
-             )}
-          </div>
-         )}
+              {assignees.slice(0, 3).map((a, i) => (
+                <Avatar key={i} className="w-6 h-6 border-2 border-[#2a2a2e]">
+                  <AvatarFallback className="bg-gray-600 text-white text-xs font-medium">
+                    {(a.name?.charAt(0) || "U").toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+              ))}
+              {assignees.length > 3 && (
+                <div className="w-6 h-6 rounded-full bg-gray-700 border-2 border-[#2a2a2e] text-[10px] text-gray-200 flex items-center justify-center">
+                  +{assignees.length - 3}
+                </div>
+              )}
+            </div>
+          )}
 
           {dueText && (
             <span className="flex items-center gap-1 text-sm text-gray-400">
@@ -80,7 +91,25 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
             </span>
           )}
         </div>
+
+        {/* Tags — compact, right aligned */}
+        {Array.isArray(tags) && tags.length > 0 && (
+          <div className="ml-auto flex flex-wrap items-center gap-1">
+            {tags.map((tag, i) => (
+              <span
+                key={`${tag}-${i}`}
+                className="rounded-md px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200"
+                title={tag}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
+
+
     </div>
+
   )
 }
