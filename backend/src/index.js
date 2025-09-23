@@ -1,13 +1,21 @@
-const express = require('express');
 require("dotenv").config();
+const express = require('express');
+const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3001;
-
-// Middleware initializations
 const { createLoggerMiddleware, logError } = require('./middleware/logger');
-
+// Middleware
+app.use(
+  cors({
+    origin: true, // Allow all origins in development
+    credentials: true,
+  })
+);
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 // Route initializations
 const projectTasksRoutes = require('./routes/projectTasks');
+const taskCommentRoutes = require('./routes/tasks/taskCommentRoute');
 
 // Initialize logger middleware asynchronously
 async function initializeApp() {
@@ -23,6 +31,7 @@ async function initializeApp() {
 
   // Use /api/ routes
   app.use('/api/projects', projectTasksRoutes);
+  app.use('/api/tasks', taskCommentRoutes);
 
   // Error handling middleware
   app.use(async (err, req, res, next) => {
