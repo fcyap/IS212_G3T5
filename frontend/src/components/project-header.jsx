@@ -1,4 +1,5 @@
 "use client"
+import Link from "next/link"  
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -22,9 +23,13 @@ import {
   Palette,
   Menu,
   HelpCircle,
+  ArchiveRestore,
 } from "lucide-react"
 
+import { useKanban } from "@/components/kanban-context"
+
 export function ProjectHeader({ currentView }) {
+  const { startAddTask } = useKanban()
   return (
     <div className="bg-[#1f1f23] text-white">
       {/* Top Bar */}
@@ -124,6 +129,7 @@ export function ProjectHeader({ currentView }) {
           <NavTab icon={Workflow} label="Workflow" />
           <NavTab icon={MessageSquare} label="Messages" />
           <NavTab icon={Files} label="Files" />
+          <NavTab icon={ArchiveRestore} label="Archive" href="archive"/>
           <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
             <Plus className="w-4 h-4" />
           </Button>
@@ -134,7 +140,7 @@ export function ProjectHeader({ currentView }) {
       <div className="px-6 py-3 border-b border-gray-700">
         <div className="flex items-center justify-between">
           {currentView !== 'projects' && (
-            <Button className="bg-gray-700 hover:bg-gray-600 text-white">
+            <Button onClick={() => startAddTask("top", "pending")} className="bg-gray-700 hover:bg-gray-600 text-white">
               <Plus className="w-4 h-4 mr-2" />
               Add task
             </Button>
@@ -167,12 +173,26 @@ export function ProjectHeader({ currentView }) {
   )
 }
 
-function NavTab({ icon: Icon, label, isActive }) {
+function NavTab({ icon: Icon, label, isActive, href }) {
+  const base =
+    "flex items-center gap-2 px-3 py-3 text-sm cursor-pointer border-b-2 transition-colors"
+  const active = isActive
+    ? "border-blue-500 text-white"
+    : "border-transparent text-gray-400 hover:text-white"
+
+  const className = `${base} ${active}`
+
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        <Icon className="w-4 h-4" />
+        <span>{label}</span>
+      </Link>
+    )
+  }
+
   return (
-    <div
-      className={`flex items-center gap-2 px-3 py-3 text-sm cursor-pointer border-b-2 transition-colors ${isActive ? "border-blue-500 text-white" : "border-transparent text-gray-400 hover:text-white"
-        }`}
-    >
+    <div className={className}>
       <Icon className="w-4 h-4" />
       <span>{label}</span>
     </div>
