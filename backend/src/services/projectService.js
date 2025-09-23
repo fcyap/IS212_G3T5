@@ -1,10 +1,9 @@
-﻿const projectRepository = require('../repositories/projectRepository');
+const projectRepository = require('../repositories/projectRepository');
 const userRepository = require('../repositories/userRepository');
 
 /**
  * Project Service - Contains business logic for project operations
  * This layer orchestrates data from repositories and applies business rules
- * NOTE: Only read operations and adding collaborators - no other project editing functionality
  */
 class ProjectService {
 
@@ -68,7 +67,6 @@ class ProjectService {
   async getProjectMembers(projectId) {
     // Clean up any orphaned member records first
     await projectRepository.cleanupOrphanedMembers(projectId);
-    
     const members = await projectRepository.getProjectMembersWithDetails(projectId);
 
     // Format the response

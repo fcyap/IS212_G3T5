@@ -1,10 +1,8 @@
 const projectService = require('../services/projectService');
-const projectRepository = require('../repositories/projectRepository');
 
 /**
  * Project Controller - Handles HTTP requests and responses for projects
  * This layer only deals with request validation and response formatting
- * NOTE: Only read operations and adding collaborators - no other project editing functionality
  */
 
 const getAllProjects = async (req, res) => {
