@@ -163,3 +163,5 @@ Dockerfile.prod
 .out
 .storybook-out
 storybook-static
+
+.claude

@@ -24,7 +24,7 @@ import {
   HelpCircle,
 } from "lucide-react"
 
-export function ProjectHeader() {
+export function ProjectHeader({ currentView }) {
   return (
     <div className="bg-[#1f1f23] text-white">
       {/* Top Bar */}
@@ -35,7 +35,7 @@ export function ProjectHeader() {
           </Button>
 
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
+            <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
               <div className="w-3 h-3 bg-white rounded-full"></div>
             </div>
             <span className="text-lg font-semibold">G3T5</span>
@@ -91,7 +91,7 @@ export function ProjectHeader() {
                 <AvatarFallback className="bg-yellow-500 text-black text-xs">WK</AvatarFallback>
               </Avatar>
               <Avatar className="w-8 h-8 border-2 border-gray-700">
-                <AvatarFallback className="bg-orange-500 text-white text-xs">A</AvatarFallback>
+                <AvatarFallback className="bg-blue-500 text-white text-xs">A</AvatarFallback>
               </Avatar>
               <Avatar className="w-8 h-8 border-2 border-gray-700">
                 <AvatarFallback className="bg-pink-500 text-white text-xs">T</AvatarFallback>
@@ -133,10 +133,12 @@ export function ProjectHeader() {
       {/* Action Bar */}
       <div className="px-6 py-3 border-b border-gray-700">
         <div className="flex items-center justify-between">
-          <Button className="bg-gray-700 hover:bg-gray-600 text-white">
-            <Plus className="w-4 h-4 mr-2" />
-            Add task
-          </Button>
+          {currentView !== 'projects' && (
+            <Button className="bg-gray-700 hover:bg-gray-600 text-white">
+              <Plus className="w-4 h-4 mr-2" />
+              Add task
+            </Button>
+          )}
 
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
