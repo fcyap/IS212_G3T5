@@ -1,11 +1,34 @@
-﻿const supabase = require('../utils/supabase');
+const supabase = require('../utils/supabase');
 
 /**
  * Task Repository - Handles all database operations for tasks
  * This layer only deals with CRUD operations and database queries
+ *
+ * Supports both comprehensive project management and simple kanban board operations
  */
 class TaskRepository {
-  
+
+  async list({ archived = false } = {}) {
+    return supabase
+      .from("tasks")
+      .select("*")
+      .eq("archived", archived)
+      .order("created_at", { ascending: true });
+  }
+
+  async insert(payload) {
+    return supabase.from("tasks").insert(payload).select().single();
+  }
+
+  async updateById(id, patch) {
+    return supabase.from("tasks").update(patch).eq("id", id).select().single();
+  }
+
+  async getUsersByIds(ids) {
+    if (!ids?.length) return { data: [], error: null };
+    return supabase.from("users").select("id, name").in("id", ids);
+  }
+
   /**
    * Get all tasks
    */
@@ -113,17 +136,21 @@ class TaskRepository {
     if (filters.projectId) {
       query = query.eq('project_id', filters.projectId);
     }
-    
+
     if (filters.status) {
       query = query.eq('status', filters.status);
     }
-    
+
     if (filters.assignedTo) {
       query = query.contains('assigned_to', [filters.assignedTo]);
     }
-    
+
     if (filters.priority) {
       query = query.eq('priority', filters.priority);
+    }
+
+    if (filters.archived !== undefined) {
+      query = query.eq('archived', filters.archived);
     }
 
     // Apply sorting
@@ -154,17 +181,21 @@ class TaskRepository {
     if (filters.projectId) {
       query = query.eq('project_id', filters.projectId);
     }
-    
+
     if (filters.status) {
       query = query.eq('status', filters.status);
     }
-    
+
     if (filters.assignedTo) {
       query = query.contains('assigned_to', [filters.assignedTo]);
     }
-    
+
     if (filters.priority) {
       query = query.eq('priority', filters.priority);
+    }
+
+    if (filters.archived !== undefined) {
+      query = query.eq('archived', filters.archived);
     }
 
     const { count, error } = await query;
