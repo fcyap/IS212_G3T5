@@ -3,8 +3,12 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from "@/components/ui/select"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ArrowLeft, Plus, Search, X } from "lucide-react"
+import { ArrowLeft, Plus, Search, X, Check } from "lucide-react"
 
 export function ProjectDetails({ projectId, onBack }) {
   const [project, setProject] = useState(null)
@@ -17,6 +21,7 @@ export function ProjectDetails({ projectId, onBack }) {
   const [selectedUsers, setSelectedUsers] = useState([]) // For bulk selection
   const [loading, setLoading] = useState(true)
   const [userPermissions, setUserPermissions] = useState({ canManageMembers: false, isCreator: false })
+  const [isAddingTask, setIsAddingTask] = useState(false)
 
   const currentUserId = parseInt(process.env.NEXT_PUBLIC_DEFAULT_USER_ID || 1) // Allow override via env
 
@@ -200,6 +205,42 @@ export function ProjectDetails({ projectId, onBack }) {
     }
   }
 
+  const handleCreateTask = async ({ title, description, dueDate, priority, tags }) => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          description: description || null,
+          priority: (priority || "Low").toLowerCase(),
+          status: 'pending',
+          deadline: dueDate || null,
+          project_id: projectId,
+          team_id: 1, // Default team_id - you may want to get this from project data
+          assigned_to: [],
+          tags: tags || [],
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Failed to create task: ${response.status}`)
+      }
+
+      const newTask = await response.json()
+      setTasks(prev => [...prev, newTask])
+      setIsAddingTask(false)
+    } catch (error) {
+      console.error('Error creating task:', error)
+      alert(`Error creating task: ${error.message}`)
+    }
+  }
+
+  const cancelAddTask = () => {
+    setIsAddingTask(false)
+  }
+
   if (loading) {
     return <div className="flex-1 bg-[#1a1a1d] p-6 flex items-center justify-center text-white">Loading project...</div>
   }
@@ -374,12 +415,29 @@ export function ProjectDetails({ projectId, onBack }) {
 
         {/* Tasks Section */}
         <div className="bg-[#2a2a2e] rounded-lg p-6 mt-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Project Tasks</h2>
-          {(tasks || []).length === 0 ? (
-            <p className="text-gray-400">No tasks found for this project.</p>
-          ) : (
-            <div className="space-y-3">
-              {(tasks || []).map((task) => {
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-white">Project Tasks</h2>
+            <Button
+              onClick={() => setIsAddingTask(true)}
+              className="bg-green-500 hover:bg-green-600 text-white"
+              disabled={isAddingTask}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Task
+            </Button>
+          </div>
+
+          <div className="space-y-3">
+            {/* Add Task Form */}
+            {isAddingTask && (
+              <ProjectTaskForm onSave={handleCreateTask} onCancel={cancelAddTask} />
+            )}
+
+            {/* Tasks List */}
+            {(tasks || []).length === 0 && !isAddingTask ? (
+              <p className="text-gray-400">No tasks found for this project.</p>
+            ) : (
+              (tasks || []).map((task) => {
                 const assigneeNames = task.assigned_to?.map(userId => {
                   const user = (allUsers || []).find(u => u.id === userId)
                   return user ? (user.name || user.email) : 'Unknown User'
@@ -394,15 +452,172 @@ export function ProjectDetails({ projectId, onBack }) {
                         <div className="flex items-center gap-4 text-xs text-gray-400">
                           <span>Status: <span className="text-blue-400">{task.status}</span></span>
                           <span>Assigned to: <span className="text-blue-400">{assigneeNames}</span></span>
+                          {task.priority && (
+                            <span>Priority: <span className={`${
+                              task.priority === 'high' ? 'text-red-400' :
+                              task.priority === 'medium' ? 'text-yellow-400' :
+                              'text-green-400'
+                            }`}>{task.priority}</span></span>
+                          )}
+                          {task.deadline && (
+                            <span>Due: <span className="text-purple-400">{new Date(task.deadline).toLocaleDateString()}</span></span>
+                          )}
                         </div>
                       </div>
                     </div>
                   </div>
                 )
-              })}
-            </div>
-          )}
+              })
+            )}
+          </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+const priorityChipClasses = {
+  Low: "bg-teal-200 text-teal-900",
+  Medium: "bg-amber-300 text-amber-950",
+  High: "bg-fuchsia-300 text-fuchsia-950",
+}
+
+function ProjectTaskForm({ onSave, onCancel }) {
+  const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
+  const [dueDate, setDueDate] = useState("")
+  const [priority, setPriority] = useState("")
+  const [tags, setTags] = useState([])
+  const [tagInput, setTagInput] = useState("")
+
+  const PRIORITIES = ["Low", "Medium", "High"]
+  const canSave = title.trim().length > 0 && priority !== ""
+
+  const addTagFromInput = () => {
+    const v = tagInput.trim()
+    if (!v) return
+    if (!tags.includes(v)) setTags((prev) => [...prev, v])
+    setTagInput("")
+  }
+
+  const removeTag = (index) => {
+    setTags((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-700 bg-[#1f1f23] p-4 shadow-sm">
+      {/* Title */}
+      <label className="block text-xs text-gray-400 mb-1">Title</label>
+      <Input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Task title"
+        className="mb-3 bg-transparent text-gray-100 border-gray-700 placeholder:text-gray-500"
+      />
+
+      {/* Description */}
+      <label className="block text-xs text-gray-400 mb-1">Description</label>
+      <Textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Add a short description…"
+        className="mb-3 bg-transparent text-gray-100 border-gray-700 placeholder:text-gray-500"
+        rows={3}
+      />
+
+      {/* Tags */}
+      <label className="block text-xs text-gray-400 mb-1">Tags</label>
+      <div className="flex flex-wrap gap-2 mb-2">
+        {tags.map((t, i) => (
+          <span
+            key={`${t}-${i}`}
+            className="inline-flex items-center rounded-md bg-gray-700 text-gray-100 px-2 py-1 text-xs"
+          >
+            {t}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setTags(prev => prev.filter((_, idx) => idx !== i))
+              }}
+              className="ml-1 text-gray-300 hover:text-white"
+              aria-label={`Remove tag ${t}`}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      <Input
+        value={tagInput}
+        onChange={(e) => setTagInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault()
+            addTagFromInput()
+          } else if (e.key === "Backspace" && tagInput === "" && tags.length) {
+            e.preventDefault()
+            setTags(prev => prev.slice(0, -1))
+          }
+        }}
+        placeholder="Type a tag and press Enter (or comma)"
+        className="mb-3 bg-transparent text-gray-100 border-gray-700"
+      />
+
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        {/* Due date */}
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Deadline</label>
+          <Input
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            className="bg-transparent text-gray-100 border-gray-700"
+          />
+        </div>
+
+        {/* Priority dropdown */}
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Priority</label>
+          <Select value={priority} onValueChange={(v) => setPriority(v)}>
+            <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+              <SelectValue placeholder="Select priority" />
+            </SelectTrigger>
+            <SelectContent className="bg-white">
+              {PRIORITIES.map((p) => (
+                <SelectItem key={p} value={p}>
+                  <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>
+                    {p}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2">
+        <Button
+          onClick={() =>
+            onSave({
+              title: title.trim(),
+              description: description.trim() || undefined,
+              dueDate: dueDate || undefined,
+              priority,
+              tags,
+            })
+          }
+          disabled={!canSave}
+          className="bg-white/90 text-black hover:bg-white"
+        >
+          <Check className="w-4 h-4 mr-1" /> Save
+        </Button>
+
+        <Button variant="ghost" onClick={onCancel} className="text-gray-300 hover:text-white">
+          <X className="w-4 h-4 mr-1" /> Cancel
+        </Button>
       </div>
     </div>
   )
