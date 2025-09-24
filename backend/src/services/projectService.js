@@ -67,6 +67,7 @@ class ProjectService {
   async getProjectMembers(projectId) {
     // Clean up any orphaned member records first
     await projectRepository.cleanupOrphanedMembers(projectId);
+
     const members = await projectRepository.getProjectMembersWithDetails(projectId);
 
     // Format the response
