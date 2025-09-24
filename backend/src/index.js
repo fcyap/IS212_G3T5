@@ -36,27 +36,11 @@ async function initializeApp() {
   app.use('/tasks', tasksRouter);
 
   app.get('/', (req, res) => {
-    res.json({
-      success: true,
-      message: 'Task Management Backend API',
-      version: '1.0.0',
-      endpoints: {
-        health: '/api/health',
-        users: '/api/users',
-        projects: '/api/projects',
-        tasks: '/api/tasks',
-      },
-    });
+    res.send('Backend is running!');
   });
 
-  // Handle 404 routes
-  app.use((req, res) => {
-    res.status(404).json({
-      success: false,
-      message: 'Route not found',
-      path: req.originalUrl,
-    });
-  });
+  // Use /api/ routes
+  app.use('/api/projects', projectTasksRoutes);
 
   // Global error handler
   app.use(async (err, req, res, next) => {
@@ -73,9 +57,7 @@ async function initializeApp() {
   });
 
   app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📊 API available at http://localhost:${PORT}/api`);
-    console.log(`🏥 Health check at http://localhost:${PORT}/api/health`);
+    console.log(`Server running on http://localhost:${PORT}`);
   });
 }
 
