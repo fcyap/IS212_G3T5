@@ -1,0 +1,24 @@
+{
+  "name": "is212-g3t5",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full-stack project management application",
+  "scripts": {
+    "dev": "concurrently -n \"API,WEB\" -c \"yellow,cyan\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "build": "cd frontend && npm run build",
+    "start": "concurrently \"cd backend && npm start\" \"cd frontend && npm start\"",
+    "test": "cd backend && npm test",
+    "test:frontend": "cd frontend && npm run lint",
+    "clean": "cd backend && rm -rf node_modules && cd ../frontend && rm -rf node_modules && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+}

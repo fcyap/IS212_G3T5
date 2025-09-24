@@ -1,5 +1,5 @@
-const projectRepository = require('../repositories/projectRepository');
-const userRepository = require('../repositories/userRepository');
+const projectRepository = require('../repository/projectRepository');
+const userRepository = require('../repository/userRepository');
 
 /**
  * Project Service - Contains business logic for project operations
