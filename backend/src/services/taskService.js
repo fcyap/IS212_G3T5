@@ -1,6 +1,6 @@
-const taskRepository = require('../repositories/taskRepository');
-const projectRepository = require('../repositories/projectRepository');
-const userRepository = require('../repositories/userRepository');
+const taskRepository = require('../repository/taskRepository');
+const projectRepository = require('../repository/projectRepository');
+const userRepository = require('../repository/userRepository');
 
 /**
  * Task Service - Contains business logic for task operations

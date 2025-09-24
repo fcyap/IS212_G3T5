@@ -1,5 +1,5 @@
 // src/services/tasks/taskCommentService.js (CommonJS)
-const { taskCommentRepository } = require('../../repositories/tasks/taskCommentRepository');
+const { taskCommentRepository } = require('../../repository/tasks/taskCommentRepository');
 
 // tiny helper to attach HTTP status codes to plain Errors
 const httpError = (code, message) => Object.assign(new Error(message), { httpCode: code });

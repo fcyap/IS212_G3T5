@@ -1,4 +1,4 @@
-﻿const userRepository = require('../repositories/userRepository');
+﻿const userRepository = require('../repository/userRepository');
 
 /**
  * User Service - Contains business logic for user operations

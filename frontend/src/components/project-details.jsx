@@ -8,7 +8,7 @@ import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ArrowLeft, Plus, Search, X, Check } from "lucide-react"
+import { ArrowLeft, Plus, Search, X, Check, Filter, ChevronDown, ChevronRight } from "lucide-react"
 
 export function ProjectDetails({ projectId, onBack }) {
   const [project, setProject] = useState(null)
@@ -22,6 +22,14 @@ export function ProjectDetails({ projectId, onBack }) {
   const [loading, setLoading] = useState(true)
   const [userPermissions, setUserPermissions] = useState({ canManageMembers: false, isCreator: false })
   const [isAddingTask, setIsAddingTask] = useState(false)
+  const [taskFilters, setTaskFilters] = useState({
+    assignee: '',
+    dueDate: '',
+    priority: 'all',
+    status: 'all'
+  })
+  const [showFilters, setShowFilters] = useState(false)
+  const [expandedTasks, setExpandedTasks] = useState(new Set())
 
   const currentUserId = parseInt(process.env.NEXT_PUBLIC_DEFAULT_USER_ID || 1) // Allow override via env
 
@@ -241,6 +249,65 @@ export function ProjectDetails({ projectId, onBack }) {
     setIsAddingTask(false)
   }
 
+  const toggleTaskExpansion = (taskId) => {
+    setExpandedTasks(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId)
+      } else {
+        newSet.add(taskId)
+      }
+      return newSet
+    })
+  }
+
+  const resetFilters = () => {
+    setTaskFilters({
+      assignee: '',
+      dueDate: '',
+      priority: 'all',
+      status: 'all'
+    })
+  }
+
+  // Filter tasks based on current filters
+  const filteredTasks = (tasks || []).filter(task => {
+    if (taskFilters.assignee && !task.assigned_to?.some(userId => {
+      const user = (allUsers || []).find(u => u.id === userId)
+      return user && (user.name || user.email).toLowerCase().includes(taskFilters.assignee.toLowerCase())
+    })) {
+      return false
+    }
+
+    if (taskFilters.dueDate && task.deadline) {
+      const taskDate = new Date(task.deadline).toDateString()
+      const filterDate = new Date(taskFilters.dueDate).toDateString()
+      if (taskDate !== filterDate) return false
+    }
+
+    if (taskFilters.priority !== 'all' && task.priority !== taskFilters.priority.toLowerCase()) {
+      return false
+    }
+
+    if (taskFilters.status !== 'all' && task.status !== taskFilters.status) {
+      return false
+    }
+
+    return true
+  })
+
+  // Group tasks by status
+  const groupedTasks = {
+    pending: filteredTasks.filter(task => task.status === 'pending'),
+    in_progress: filteredTasks.filter(task => task.status === 'in_progress'),
+    completed: filteredTasks.filter(task => task.status === 'completed')
+  }
+
+  // Calculate progress
+  const totalTasks = (tasks || []).length
+  const completedTasks = (tasks || []).filter(task => task.status === 'completed').length
+  const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+
   if (loading) {
     return <div className="flex-1 bg-[#1a1a1d] p-6 flex items-center justify-center text-white">Loading project...</div>
   }
@@ -416,60 +483,269 @@ export function ProjectDetails({ projectId, onBack }) {
         {/* Tasks Section */}
         <div className="bg-[#2a2a2e] rounded-lg p-6 mt-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">Project Tasks</h2>
-            <Button
-              onClick={() => setIsAddingTask(true)}
-              className="bg-green-500 hover:bg-green-600 text-white"
-              disabled={isAddingTask}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Task
-            </Button>
+            <div className="flex items-center gap-4">
+              <h2 className="text-lg font-semibold text-white">Project Tasks</h2>
+              {/* Progress Indicator */}
+              <div className="flex items-center gap-2">
+                <div className="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-green-500 transition-all duration-300"
+                    style={{ width: `${progressPercent}%` }}
+                  ></div>
+                </div>
+                <span className="text-sm text-gray-300">
+                  {completedTasks}/{totalTasks} ({progressPercent}%)
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setShowFilters(!showFilters)}
+                variant="outline"
+                className="border-gray-600 text-gray-300 hover:text-white"
+              >
+                <Filter className="w-4 h-4 mr-2" />
+                Filter
+              </Button>
+              <Button
+                onClick={() => setIsAddingTask(true)}
+                className="bg-green-500 hover:bg-green-600 text-white"
+                disabled={isAddingTask}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Task
+              </Button>
+            </div>
           </div>
 
-          <div className="space-y-3">
-            {/* Add Task Form */}
-            {isAddingTask && (
+          {/* Filters */}
+          {showFilters && (
+            <div className="bg-[#1f1f23] rounded-lg p-4 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Assignee</label>
+                  <Input
+                    placeholder="Search assignee..."
+                    value={taskFilters.assignee}
+                    onChange={(e) => setTaskFilters(prev => ({ ...prev, assignee: e.target.value }))}
+                    className="bg-gray-700 border-gray-600 text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Due Date</label>
+                  <Input
+                    type="date"
+                    value={taskFilters.dueDate}
+                    onChange={(e) => setTaskFilters(prev => ({ ...prev, dueDate: e.target.value }))}
+                    className="bg-gray-700 border-gray-600 text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Priority</label>
+                  <Select
+                    value={taskFilters.priority}
+                    onValueChange={(value) => setTaskFilters(prev => ({ ...prev, priority: value }))}
+                  >
+                    <SelectTrigger className="bg-gray-700 border-gray-600 text-white text-sm">
+                      <SelectValue placeholder="Any priority" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#2a2a2e] border-gray-600" style={{ color: 'white' }}>
+                      <SelectItem value="all" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-cyan-200">Any priority</SelectItem>
+                      <SelectItem value="low" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-green-200">Low</SelectItem>
+                      <SelectItem value="medium" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-amber-200">Medium</SelectItem>
+                      <SelectItem value="high" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-red-200">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Status</label>
+                  <Select
+                    value={taskFilters.status}
+                    onValueChange={(value) => setTaskFilters(prev => ({ ...prev, status: value }))}
+                  >
+                    <SelectTrigger className="bg-gray-700 border-gray-600 text-white text-sm">
+                      <SelectValue placeholder="Any status" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#2a2a2e] border-gray-600" style={{ color: 'white' }}>
+                      <SelectItem value="all" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-cyan-200">Any status</SelectItem>
+                      <SelectItem value="pending" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-red-200">Pending</SelectItem>
+                      <SelectItem value="in_progress" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-amber-200">In Progress</SelectItem>
+                      <SelectItem value="completed" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-green-200">Completed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  onClick={resetFilters}
+                  variant="outline"
+                  size="sm"
+                  className="border-gray-600 text-gray-300 hover:text-white"
+                >
+                  Clear Filters
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Add Task Form */}
+          {isAddingTask && (
+            <div className="mb-6">
               <ProjectTaskForm onSave={handleCreateTask} onCancel={cancelAddTask} />
-            )}
+            </div>
+          )}
 
-            {/* Tasks List */}
-            {(tasks || []).length === 0 && !isAddingTask ? (
-              <p className="text-gray-400">No tasks found for this project.</p>
-            ) : (
-              (tasks || []).map((task) => {
-                const assigneeNames = task.assigned_to?.map(userId => {
-                  const user = (allUsers || []).find(u => u.id === userId)
-                  return user ? (user.name || user.email) : 'Unknown User'
-                }).join(', ') || 'Unassigned'
+          {/* Tasks organized by status */}
+          {Object.keys(groupedTasks).map(status => {
+            const statusTasks = groupedTasks[status]
+            const statusLabels = {
+              pending: 'Pending',
+              in_progress: 'In Progress',
+              completed: 'Completed'
+            }
+            const statusColors = {
+              pending: 'bg-yellow-600',
+              in_progress: 'bg-blue-600',
+              completed: 'bg-green-600'
+            }
 
-                return (
-                  <div key={task.id} className="p-4 bg-[#1f1f23] rounded-lg">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="text-white font-medium mb-1">{task.title}</h3>
-                        <p className="text-gray-300 text-sm mb-2">{task.description || 'No description'}</p>
-                        <div className="flex items-center gap-4 text-xs text-gray-400">
-                          <span>Status: <span className="text-blue-400">{task.status}</span></span>
-                          <span>Assigned to: <span className="text-blue-400">{assigneeNames}</span></span>
-                          {task.priority && (
-                            <span>Priority: <span className={`${
-                              task.priority === 'high' ? 'text-red-400' :
-                              task.priority === 'medium' ? 'text-yellow-400' :
-                              'text-green-400'
-                            }`}>{task.priority}</span></span>
-                          )}
-                          {task.deadline && (
-                            <span>Due: <span className="text-purple-400">{new Date(task.deadline).toLocaleDateString()}</span></span>
+            return (
+              <div key={status} className="mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className={`w-3 h-3 rounded-full ${statusColors[status]}`}></div>
+                  <h3 className="text-white font-medium">{statusLabels[status]}</h3>
+                  <span className="text-sm text-gray-400">({statusTasks.length})</span>
+                </div>
+
+                <div className="space-y-2">
+                  {statusTasks.length === 0 ? (
+                    <div className="p-4 bg-[#1f1f23] rounded-lg">
+                      <p className="text-gray-400 text-sm">No {statusLabels[status].toLowerCase()} tasks</p>
+                    </div>
+                  ) : (
+                    statusTasks.map((task) => {
+                      const isExpanded = expandedTasks.has(task.id)
+                      const assigneeNames = task.assigned_to?.map(userId => {
+                        const user = (allUsers || []).find(u => u.id === userId)
+                        return user ? (user.name || user.email) : 'Unknown User'
+                      }).join(', ') || 'Unassigned'
+
+                      return (
+                        <div key={task.id} className="bg-[#1f1f23] rounded-lg overflow-hidden">
+                          <div
+                            className="p-4 cursor-pointer hover:bg-[#252529] transition-colors"
+                            onClick={() => toggleTaskExpansion(task.id)}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-start gap-3 flex-1">
+                                <button className="mt-1 text-gray-400 hover:text-white">
+                                  {isExpanded ? (
+                                    <ChevronDown className="w-4 h-4" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4" />
+                                  )}
+                                </button>
+                                <div className="flex-1">
+                                  <h4 className="text-white font-medium mb-1">{task.title}</h4>
+                                  <div className="flex items-center gap-4 text-xs">
+                                    <span className="text-gray-400">Assigned to:
+                                      <span className="text-blue-400 ml-1">{assigneeNames}</span>
+                                    </span>
+                                    {task.priority && (
+                                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                        task.priority === 'high' ? 'bg-red-600 text-white' :
+                                        task.priority === 'medium' ? 'bg-yellow-600 text-white' :
+                                        'bg-green-600 text-white'
+                                      }`}>
+                                        {task.priority.toUpperCase()}
+                                      </span>
+                                    )}
+                                    {task.deadline && (
+                                      <span className="text-gray-400">Due:
+                                        <span className="text-purple-400 ml-1">
+                                          {new Date(task.deadline).toLocaleDateString()}
+                                        </span>
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Expanded task details */}
+                          {isExpanded && (
+                            <div className="border-t border-gray-700 p-4 bg-[#1a1a1d]">
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="text-xs text-gray-400 block mb-1">Description</label>
+                                  <p className="text-gray-300 text-sm">
+                                    {task.description || 'No description provided'}
+                                  </p>
+                                </div>
+
+                                {task.tags && task.tags.length > 0 && (
+                                  <div>
+                                    <label className="text-xs text-gray-400 block mb-1">Tags</label>
+                                    <div className="flex flex-wrap gap-1">
+                                      {task.tags.map((tag, index) => (
+                                        <span
+                                          key={index}
+                                          className="bg-gray-700 text-gray-200 px-2 py-1 rounded-md text-xs"
+                                        >
+                                          {tag}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="text-xs text-gray-400 block mb-1">Created</label>
+                                    <p className="text-gray-300 text-sm">
+                                      {task.created_at ? new Date(task.created_at).toLocaleString() : 'Unknown'}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <label className="text-xs text-gray-400 block mb-1">Last Updated</label>
+                                    <p className="text-gray-300 text-sm">
+                                      {task.updated_at ? new Date(task.updated_at).toLocaleString() : 'Unknown'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
                           )}
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })
-            )}
-          </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Show message if no tasks match filters */}
+          {totalTasks > 0 && filteredTasks.length === 0 && !isAddingTask && (
+            <div className="text-center py-8">
+              <p className="text-gray-400 mb-2">No tasks match the current filters</p>
+              <Button
+                onClick={resetFilters}
+                variant="outline"
+                className="border-gray-600 text-gray-300 hover:text-white"
+              >
+                Clear Filters
+              </Button>
+            </div>
+          )}
+
+          {/* Show message if no tasks at all */}
+          {totalTasks === 0 && !isAddingTask && (
+            <div className="text-center py-8">
+              <p className="text-gray-400">No tasks found for this project.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

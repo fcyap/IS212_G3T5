@@ -1,48 +1,84 @@
-const supabase = require('../utils/supabase');
+﻿const supabase = require('../utils/supabase');
 
+/**
+ * Project Repository - Handles all database operations for projects
+ * This layer only deals with CRUD operations and database queries
+ * NOTE: Only read operations and member management - no project creation/deletion
+ */
 class ProjectRepository {
-  /**
-   * Create a new project in the database
-   * @param {Object} projectData - The project data to insert
-   * @returns {Object} Database result
-   */
-  async create(projectData) {
-    const { data, error } = await supabase
-      .from('projects')
-      .insert([projectData])
-      .select('*')
-      .single();
 
-    if (error) {
-      throw new Error(`Database error: ${error.message}`);
+  /**
+   * Get all projects from database
+   */
+  async getAllProjects() {
+    const { data: projects, error: projectsError } = await supabase
+      .from('projects')
+      .select('*');
+
+    if (projectsError) {
+      throw new Error(projectsError.message);
     }
 
-    return data;
+    return projects || [];
   }
 
   /**
-   * Get all projects from the database
-   * @returns {Array} Array of projects
+   * Get project IDs for a user (projects they are a member of)
    */
-  async findAll() {
+  async getProjectIdsForUser(userId) {
     const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .from('project_members')
+      .select('project_id')
+      .eq('user_id', userId);
 
     if (error) {
-      throw new Error(`Database error: ${error.message}`);
+      throw new Error(error.message);
     }
 
-    return data;
+    return data ? data.map(item => item.project_id) : [];
   }
 
   /**
-   * Find a project by ID
-   * @param {number} projectId - The project ID
-   * @returns {Object|null} Project data or null if not found
+   * Get project IDs where user is creator (has 'creator' role in project_members)
    */
-  async findById(projectId) {
+  async getProjectIdsByCreator(userId) {
+    const { data, error } = await supabase
+      .from('project_members')
+      .select('project_id')
+      .eq('user_id', userId)
+      .eq('member_role', 'creator');
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data ? data.map(item => item.project_id) : [];
+  }
+
+  /**
+   * Get projects by IDs
+   */
+  async getProjectsByIds(projectIds) {
+    if (!projectIds || projectIds.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .in('id', projectIds);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Get project by ID
+   */
+  async getProjectById(projectId) {
     const { data, error } = await supabase
       .from('projects')
       .select('*')
@@ -50,96 +86,242 @@ class ProjectRepository {
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return null; // Project not found
-      }
-      throw new Error(`Database error: ${error.message}`);
+      throw new Error(error.message);
     }
 
     return data;
   }
 
   /**
-   * Update a project by ID
-   * @param {number} projectId - The project ID
-   * @param {Object} updateData - The data to update
-   * @returns {Object|null} Updated project data or null if not found
+   * Update project
    */
-  async update(projectId, updateData) {
+  async updateProject(projectId, updates) {
     const { data, error } = await supabase
       .from('projects')
-      .update(updateData)
+      .update(updates)
       .eq('id', projectId)
-      .select('*')
+      .select();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data[0];
+  }
+
+  /**
+   * Get project members data
+   */
+  async getProjectMembers(projectId) {
+    const { data: projectData, error: projectError } = await supabase
+      .from('projects')
+      .select('id, created_at')
+      .eq('id', projectId)
+      .neq('status', 'completed')
+      .single();
+
+    if (projectError) {
+      throw new Error(projectError.message);
+    }
+
+    return projectData;
+  }
+
+  /**
+   * Get multiple users by IDs
+   */
+  async getUsersByIds(userIds) {
+    if (!userIds || userIds.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, email, name, role')
+      .in('id', userIds);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Get task count for a project
+   */
+  async getTaskCountByProject(projectId) {
+    const { count, error } = await supabase
+      .from('tasks')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId);
+
+    if (error) {
+      console.error('Error fetching task count:', error);
+      return 0;
+    }
+
+    return count || 0;
+  }
+
+  /**
+   * Check if user can manage members (has 'creator' or 'manager' role in project)
+   */
+  async canUserManageMembers(projectId, userId) {
+    // Check if user has 'creator' or 'manager' role in project_members
+    const { data: memberData, error } = await supabase
+      .from('project_members')
+      .select('member_role')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return null; // Project not found
-      }
-      throw new Error(`Database error: ${error.message}`);
+      return false; // User is not a member or error occurred
     }
 
-    return data;
+    return memberData.member_role === 'creator' || memberData.member_role === 'manager';
   }
 
   /**
-   * Delete a project by ID
-   * @param {number} projectId - The project ID
-   * @returns {boolean} True if deleted, false if not found
+   * Remove user from project
    */
-  async delete(projectId) {
-    const { error } = await supabase
-      .from('projects')
+  async removeUserFromProject(projectId, userIdToRemove, requestingUserId) {
+    // Check permissions
+    const hasPermission = await this.canUserManageMembers(projectId, requestingUserId);
+    if (!hasPermission) {
+      throw new Error('Only managers and creators can remove members from the project');
+    }
+
+    // Get current project
+    const project = await this.getProjectById(projectId);
+
+    // Check if user to remove has 'creator' role
+    const { data: memberData, error: memberError } = await supabase
+      .from('project_members')
+      .select('member_role')
+      .eq('project_id', projectId)
+      .eq('user_id', userIdToRemove)
+      .single();
+
+    if (memberError || !memberData) {
+      throw new Error('User is not a member of this project');
+    }
+
+    // Cannot remove creator
+    if (memberData.member_role === 'creator') {
+      throw new Error('Cannot remove the project creator');
+    }
+
+    // Cannot remove yourself if you're not a manager or creator
+    if (requestingUserId === userIdToRemove && memberData.member_role !== 'creator' && memberData.member_role !== 'manager') {
+      throw new Error('You cannot remove yourself from the project');
+    }
+
+    // Remove user from project_members table
+    const { error: deleteError } = await supabase
+      .from('project_members')
       .delete()
-      .eq('id', projectId);
+      .eq('project_id', projectId)
+      .eq('user_id', userIdToRemove);
 
-    if (error) {
-      throw new Error(`Database error: ${error.message}`);
+    if (deleteError) {
+      throw new Error(deleteError.message);
     }
 
-    return true;
+    return project;
   }
 
   /**
-   * Find projects by user ID (projects where user is a member)
-   * @param {number} userId - The user ID
-   * @returns {Array} Array of projects
+   * Add user to project
    */
-  async findByUserId(userId) {
+  async addUserToProject(projectId, userId, memberRole = 'collaborator') {
     const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .contains('user_ids', [userId])
-      .order('created_at', { ascending: false });
+      .from('project_members')
+      .insert([{
+        project_id: projectId,
+        user_id: userId,
+        member_role: memberRole,
+        added_at: new Date()
+      }])
+      .select();
 
     if (error) {
-      throw new Error(`Database error: ${error.message}`);
+      throw new Error(error.message);
     }
 
-    return data;
+    return data[0];
   }
 
   /**
-   * Check if a project exists by ID
-   * @param {number} projectId - The project ID
-   * @returns {boolean} True if exists, false otherwise
+   * Get project members with details
    */
-  async exists(projectId) {
+  async getProjectMembersWithDetails(projectId) {
     const { data, error } = await supabase
-      .from('projects')
-      .select('id')
-      .eq('id', projectId)
-      .single();
+      .from('project_members')
+      .select(`
+        user_id,
+        member_role,
+        added_at,
+        users!inner(id, email, name)
+      `)
+      .eq('project_id', projectId)
+      .not('users', 'is', null); // Ensure user record exists
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return false;
+      throw new Error(error.message);
+    }
+
+    // Filter out any records where users is null (additional safety)
+    const validMembers = (data || []).filter(member => member.users && member.users.id);
+
+    return validMembers;
+  }
+
+  /**
+   * Clean up orphaned member records (members whose users no longer exist)
+   */
+  async cleanupOrphanedMembers(projectId) {
+    // First get all member records for this project
+    const { data: allMembers, error: membersError } = await supabase
+      .from('project_members')
+      .select('user_id')
+      .eq('project_id', projectId);
+
+    if (membersError) {
+      throw new Error(membersError.message);
+    }
+
+    // Get all valid user IDs
+    const { data: validUsers, error: usersError } = await supabase
+      .from('users')
+      .select('id');
+
+    if (usersError) {
+      throw new Error(usersError.message);
+    }
+
+    const validUserIds = validUsers.map(user => user.id);
+    const orphanedUserIds = allMembers
+      .map(member => member.user_id)
+      .filter(userId => !validUserIds.includes(userId));
+
+    // Remove orphaned records
+    if (orphanedUserIds.length > 0) {
+      const { error: deleteError } = await supabase
+        .from('project_members')
+        .delete()
+        .eq('project_id', projectId)
+        .in('user_id', orphanedUserIds);
+
+      if (deleteError) {
+        throw new Error(deleteError.message);
       }
-      throw new Error(`Database error: ${error.message}`);
+
+      console.log(`Cleaned up ${orphanedUserIds.length} orphaned member records for project ${projectId}`);
     }
 
-    return !!data;
+    return orphanedUserIds.length;
   }
 }
 
