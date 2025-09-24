@@ -76,7 +76,7 @@ export const CommentItem = ({ comment, currentUser, onUpdate, onReply, depth = 0
   };
 
   return (
-    <div className={`bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow ${depth > 0 ? 'ml-8 mt-3' : ''}`}>
+    <div className={`bg-[#23232a] rounded-lg border border-gray-700 p-4 hover:shadow-md transition-shadow ${depth > 0 ? 'ml-8 mt-3' : ''}`}> 
       <div className="flex gap-3">
         <div
           className={`${depth > 0 ? 'w-7 h-7' : 'w-8 h-8'} bg-blue-500 rounded-full flex items-center justify-center text-white font-medium text-xs flex-shrink-0 mr-2`}
@@ -87,14 +87,14 @@ export const CommentItem = ({ comment, currentUser, onUpdate, onReply, depth = 0
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2">
-            <h4 className="font-medium text-gray-900 text-sm">
+            <h4 className="text-gray-400 text-sm leading-relaxed whitespace-pre-wrap">
               {comment.user.name}
             </h4>
             <span className="text-xs text-gray-500">
               {formatTimestamp(comment.timestamp)}
             </span>
             {depth > 0 && (
-              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+              <span className="text-xs text-gray-100 bg-gray-500 px-2 py-0.5 rounded-full">
                 Reply
               </span>
             )}
@@ -105,7 +105,7 @@ export const CommentItem = ({ comment, currentUser, onUpdate, onReply, depth = 0
               <textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
-                className="w-full min-h-[80px] p-3 text-sm text-gray-700 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                className="w-full min-h-[80px] p-3 text-sm text-gray-100 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                 maxLength={1000}
                 autoFocus
               />
@@ -136,11 +136,11 @@ export const CommentItem = ({ comment, currentUser, onUpdate, onReply, depth = 0
             </div>
           ) : (
             <>
-              <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">
+              <p className="text-gray-100 text-sm leading-relaxed whitespace-pre-wrap">
                 {comment.content}
               </p>
               
-              <div className="flex items-center gap-2 mt-3 pt-2 border-t border-gray-100">
+              <div className="flex items-center gap-2 mt-3 pt-2 border-t border-gray-500">
                 { (
                   <button
                     onClick={() => setShowReplyBox(!showReplyBox)}

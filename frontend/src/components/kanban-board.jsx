@@ -11,6 +11,7 @@ import {
 import { Trash, Check, X, Plus } from "lucide-react"
 import { useKanban } from "@/components/kanban-context"
 import { Badge } from "@/components/ui/badge"
+import { CommentSection } from "./task-comment/task-comment-section"
 
 const priorityChipClasses = {
   Low: "bg-teal-200 text-teal-900",
@@ -187,7 +188,7 @@ export function KanbanBoard() {
                   priority={t.priority}
                   assignees={t.assignees}
                   deadline={t.deadline}
-                  tags={t.tags}   
+                  tags={t.tags}
                   onClick={() => openPanel(t)}
                 />
               ))}
@@ -230,7 +231,7 @@ export function KanbanBoard() {
                   priority={t.priority}
                   assignees={t.assignees}
                   deadline={t.deadline}
-                  tags={t.tags}   
+                  tags={t.tags}
                   onClick={() => openPanel(t)}
                 />
               ))}
@@ -273,7 +274,7 @@ export function KanbanBoard() {
                   priority={t.priority}
                   assignees={t.assignees}
                   deadline={t.deadline}
-                  tags={t.tags}  
+                  tags={t.tags}
                   onClick={() => openPanel(t)}
                 />
               ))}
@@ -450,6 +451,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
                   </span>
                 ))}
               </div>
+
             )}
 
             <input
@@ -485,24 +487,24 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
             </Select>
           </div>
           {/* Assignees */}
-<div>
-  <label className="block text-xs text-gray-400 mb-1">Assignees</label>
-  {assignees.length > 0 ? (
-    <div className="flex flex-wrap gap-2">
-      {assignees.map((a) => (
-        <Badge
-          key={a.id}
-          className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200"
-          title={a.name}
-        >
-          {a.name}
-        </Badge>
-      ))}
-    </div>
-  ) : (
-    <span className="text-xs text-gray-500">No assignees</span>
-  )}
-</div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Assignees</label>
+            {assignees.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {assignees.map((a) => (
+                  <Badge
+                    key={a.id}
+                    className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200"
+                    title={a.name}
+                  >
+                    {a.name}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <span className="text-xs text-gray-500">No assignees</span>
+            )}
+          </div>
 
           {/* Deadline */}
           <div>
@@ -534,6 +536,11 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
             type="button">
             <Trash className="w-4 h-4 mr-1" /> Delete
           </Button>
+        </div>
+
+        {/* Comment Section */}
+        <div className="mt-8">
+          <CommentSection taskId={task.id} />
         </div>
       </div>
     </div>

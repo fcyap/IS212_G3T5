@@ -8,7 +8,6 @@ import { ProjectsList } from "@/components/projects-list"
 import { ProjectDetails } from "@/components/project-details"
 import { CommentBox } from "@/components/task-comment/task-comment"
 import { CommentItem } from "@/components/task-comment/task-comment-item"
-import { CommentSection } from "@/components/task-comment/task-comment-section"
 import { KanbanProvider } from "@/components/kanban-context"
 
 export default function ProjectTimelinePage() {
@@ -56,7 +55,6 @@ export default function ProjectTimelinePage() {
           ) : currentView === 'board' ? (
             <>
               <KanbanBoard />
-              <CommentSection />
             </>
           ) : currentView === 'home' ? (
             <div className="flex-1 bg-[#1a1a1d] p-6">
@@ -94,7 +92,6 @@ export default function ProjectTimelinePage() {
           ) : (
             <>
               <KanbanBoard />
-              <CommentSection />
             </>
           )}
         </KanbanProvider>

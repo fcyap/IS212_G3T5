@@ -6,8 +6,7 @@ import { CurrentUser } from './test-task-comments';
 const API = 'http://localhost:3001/api/tasks';
 
 export const CommentSection = ({ taskId: propTaskId, currentUser = CurrentUser }) => {
-  const taskId = propTaskId ?? 1;
-  console.log('[CommentSection] currentUser prop:', currentUser);
+  const taskId = propTaskId;
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -33,7 +32,7 @@ const toViewModel = (row) => ({
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(`${API}/1/comments`, { cache: 'no-store' });
+  const res = await fetch(`${API}/${taskId}/comments`, { cache: 'no-store' });
         if (!res.ok) throw new Error((await res.json()).error || res.statusText);
         const data = await res.json();
         if (alive) setComments(data.map(toViewModel));
@@ -64,7 +63,7 @@ const toViewModel = (row) => ({
     if (!res.ok) throw new Error(body.error || res.statusText);
     // After creating, reload all comments so replies are nested
     try {
-      const reload = await fetch(`${API}/1/comments`, { cache: 'no-store' });
+  const reload = await fetch(`${API}/${taskId}/comments`, { cache: 'no-store' });
       if (!reload.ok) throw new Error((await reload.json()).error || reload.statusText);
       const data = await reload.json();
       setComments(data.map(toViewModel));
@@ -90,7 +89,7 @@ const toViewModel = (row) => ({
     if (!res.ok) throw new Error(body.error || res.statusText);
     // After editing, reload all comments so replies are nested
     try {
-      const reload = await fetch(`${API}/1/comments`, { cache: 'no-store' });
+  const reload = await fetch(`${API}/${taskId}/comments`, { cache: 'no-store' });
       if (!reload.ok) throw new Error((await reload.json()).error || reload.statusText);
       const data = await reload.json();
       setComments(data.map(toViewModel));
@@ -98,19 +97,17 @@ const toViewModel = (row) => ({
       console.error('Failed to reload comments after update:', e);
     }
   };
-
-  console.log('[CommentSection] rendering with currentUser:', currentUser);
+  
   return (
-    <div className="max-w-3xl mx-auto p-6">
+    <div className="max-w-3xl mx-auto p-6 rounded-lg">
       <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Comments</h2>
-        <p className="text-gray-600">Share your thoughts and collaborate with the team.</p>
+        <h2 className="text-2xl font-bold text-white mb-2">Comments</h2>
       </div>
 
       <CommentBox onSubmit={(content) => handleCreateComment(content, null)} currentUser={currentUser} />
 
       {loading ? (
-        <div className="text-gray-500">Loading comments…</div>
+        <div className="text-gray-400">Loading comments…</div>
       ) : comments.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
           <p className="text-lg mb-2">No comments yet</p>
@@ -124,7 +121,7 @@ const toViewModel = (row) => ({
               comment={comment}
               currentUser={currentUser}
               onUpdate={handleUpdateComment}
-              onReply={handleCreateComment} // <-- add this line
+              onReply={handleCreateComment}
             />
           ))}
         </div>

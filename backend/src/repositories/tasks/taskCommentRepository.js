@@ -1,5 +1,5 @@
 // src/repositories/commentRepository.js (CommonJS)
-const { supabase } = require('../../utils/supabase'); 
+const supabase = require('../../utils/supabase'); 
 // ^ If your file is at src/repositories/commentRepository.js and supabase is at src/utils/supabase.js,
 // this is the correct relative path. Adjust if your structure differs.
 

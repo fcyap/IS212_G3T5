@@ -3,6 +3,7 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Settings, CalendarDays, ArchiveRestore } from "lucide-react"
+import { CommentSection } from "./task-comment/task-comment-section"
 
 export function TaskCard({ title, priority, status, assignees = [], dateRange, description, deadline, onClick, tags = [], onUnarchive, }) {
 
