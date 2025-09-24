@@ -8,7 +8,7 @@ import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ArrowLeft, Plus, Search, X, Check, Filter, ChevronDown, ChevronRight } from "lucide-react"
+import { ArrowLeft, Plus, Search, X, Check, Filter, ChevronDown, ChevronRight, Edit, Trash } from "lucide-react"
 
 export function ProjectDetails({ projectId, onBack }) {
   const [project, setProject] = useState(null)
@@ -30,6 +30,7 @@ export function ProjectDetails({ projectId, onBack }) {
   })
   const [showFilters, setShowFilters] = useState(false)
   const [expandedTasks, setExpandedTasks] = useState(new Set())
+  const [editingTask, setEditingTask] = useState(null)
 
   const currentUserId = parseInt(process.env.NEXT_PUBLIC_DEFAULT_USER_ID || 1) // Allow override via env
 
@@ -268,6 +269,56 @@ export function ProjectDetails({ projectId, onBack }) {
       priority: 'all',
       status: 'all'
     })
+  }
+
+  const handleUpdateTask = async (taskData) => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/tasks/${editingTask.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: taskData.title,
+          description: taskData.description || null,
+          priority: taskData.priority.toLowerCase(),
+          status: taskData.status,
+          deadline: taskData.deadline || null,
+          tags: taskData.tags || [],
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Failed to update task: ${response.status}`)
+      }
+
+      const updatedTask = await response.json()
+      setTasks(prev => prev.map(task => task.id === updatedTask.id ? updatedTask : task))
+      setEditingTask(null)
+    } catch (error) {
+      console.error('Error updating task:', error)
+      alert(`Error updating task: ${error.message}`)
+    }
+  }
+
+  const handleDeleteTask = async (taskId) => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: true }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Failed to delete task: ${response.status}`)
+      }
+
+      setTasks(prev => prev.filter(task => task.id !== taskId))
+      setEditingTask(null)
+    } catch (error) {
+      console.error('Error deleting task:', error)
+      alert(`Error deleting task: ${error.message}`)
+    }
   }
 
   // Filter tasks based on current filters
@@ -714,6 +765,21 @@ export function ProjectDetails({ projectId, onBack }) {
                                     </p>
                                   </div>
                                 </div>
+
+                                {/* Edit Task Button */}
+                                <div className="flex justify-end pt-2">
+                                  <Button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setEditingTask(task)
+                                    }}
+                                    size="sm"
+                                    className="bg-blue-500 hover:bg-blue-600 text-white"
+                                  >
+                                    <Edit className="w-4 h-4 mr-1" />
+                                    Edit Task
+                                  </Button>
+                                </div>
                               </div>
                             </div>
                           )}
@@ -748,6 +814,17 @@ export function ProjectDetails({ projectId, onBack }) {
           )}
         </div>
       </div>
+
+      {/* Task Editing Side Panel */}
+      {editingTask && (
+        <TaskEditingSidePanel
+          task={editingTask}
+          onClose={() => setEditingTask(null)}
+          onSave={handleUpdateTask}
+          onDelete={() => handleDeleteTask(editingTask.id)}
+          allUsers={allUsers}
+        />
+      )}
     </div>
   )
 }
@@ -894,6 +971,216 @@ function ProjectTaskForm({ onSave, onCancel }) {
         <Button variant="ghost" onClick={onCancel} className="text-gray-300 hover:text-white">
           <X className="w-4 h-4 mr-1" /> Cancel
         </Button>
+      </div>
+    </div>
+  )
+}
+
+function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers }) {
+  const [title, setTitle] = useState(task.title || "")
+  const [description, setDescription] = useState(task.description || "")
+  const [priority, setPriority] = useState(task.priority || "low")
+  const [status, setStatus] = useState(task.status || "pending")
+  const [deadline, setDeadline] = useState(task.deadline || "")
+  const [tags, setTags] = useState(Array.isArray(task.tags) ? task.tags : [])
+  const [tagInput, setTagInput] = useState("")
+
+  const canSave = title.trim().length > 0 && priority
+  const assignees = Array.isArray(task.assigned_to) ? task.assigned_to : []
+
+  function addTagFromInput() {
+    const t = tagInput.trim()
+    if (!t) return
+    if (!tags.includes(t)) setTags(prev => [...prev, t])
+    setTagInput("")
+  }
+
+  function removeTagAt(idx) {
+    setTags(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  const handleDelete = () => {
+    if (window.confirm('Are you sure you want to delete this task?')) {
+      onDelete()
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-40">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+
+      {/* Panel */}
+      <div className="absolute right-0 top-0 h-full w-[420px] bg-[#1f2023] border-l border-gray-700 p-6 overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-white text-lg font-semibold">Edit task</h3>
+          <button onClick={onClose} className="text-gray-300 hover:text-white text-xl leading-none">×</button>
+        </div>
+
+        <div className="space-y-4">
+          {/* Title */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Title</label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="bg-transparent text-gray-100 border-gray-700"
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Description</label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={4}
+              className="bg-transparent text-gray-100 border-gray-700"
+            />
+          </div>
+
+          {/* Priority */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Priority</label>
+            <Select value={priority} onValueChange={setPriority}>
+              <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+                <SelectValue placeholder="Select priority" />
+              </SelectTrigger>
+              <SelectContent className="bg-white">
+                {["low", "medium", "high"].map((p) => (
+                  <SelectItem key={p} value={p}>
+                    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${
+                      p === 'high' ? 'bg-fuchsia-300 text-fuchsia-950' :
+                      p === 'medium' ? 'bg-amber-300 text-amber-950' :
+                      'bg-teal-200 text-teal-900'
+                    }`}>
+                      {p.charAt(0).toUpperCase() + p.slice(1)}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Status */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Status</label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent className="bg-white">
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="blocked">Blocked</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Tags */}
+          <div>
+            <label className="block text-xs text-gray-400">Tags</label>
+
+            {tags.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {tags.map((t, i) => (
+                  <span
+                    key={`${t}-${i}`}
+                    className="inline-flex items-center rounded-md px-2 py-0.5 mb-1 text-xs font-medium bg-gray-700 text-gray-200"
+                  >
+                    {t}
+                    <button
+                      type="button"
+                      className="ml-1 text-gray-300 hover:text-white"
+                      onClick={() => removeTagAt(i)}
+                      aria-label={`Remove ${t}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <input
+              className="mt-1 w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault()
+                  addTagFromInput()
+                }
+                if (e.key === "Backspace" && tagInput === "" && tags.length) {
+                  removeTagAt(tags.length - 1)
+                }
+              }}
+              placeholder="Type a tag and press Enter (or comma)"
+            />
+          </div>
+
+          {/* Assignees */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Assignees</label>
+            {assignees.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {assignees.map((userId) => {
+                  const user = (allUsers || []).find(u => u.id === userId)
+                  return (
+                    <span
+                      key={userId}
+                      className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200 rounded-md"
+                      title={user?.name || 'Unknown User'}
+                    >
+                      {user?.name || 'Unknown User'}
+                    </span>
+                  )
+                })}
+              </div>
+            ) : (
+              <span className="text-xs text-gray-500">No assignees</span>
+            )}
+          </div>
+
+          {/* Deadline */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Deadline</label>
+            <Input
+              type="date"
+              value={deadline || ""}
+              onChange={(e) => setDeadline(e.target.value)}
+              className="bg-transparent text-gray-100 border-gray-700"
+            />
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="mt-6 flex gap-2">
+          <Button
+            onClick={() => onSave({
+              title: title.trim(),
+              description: description.trim(),
+              priority,
+              status,
+              deadline,
+              tags
+            })}
+            disabled={!canSave}
+            className="bg-white/90 text-black"
+          >
+            Save
+          </Button>
+          <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDelete}
+            className="bg-red-400 hover:bg-red-700 text-white ml-auto"
+            type="button">
+            <Trash className="w-4 h-4 mr-1" /> Delete
+          </Button>
+        </div>
       </div>
     </div>
   )
