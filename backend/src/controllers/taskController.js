@@ -3,11 +3,49 @@ const taskService = require('../services/taskService');
 /**
  * Task Controller - Handles HTTP requests and responses for tasks
  * This layer only deals with request validation and response formatting
+ *
  */
 
+const list = async (req, res) => {
+  try {
+    const archived = String(req.query.archived ?? "false").toLowerCase() === "true";
+    const tasks = await taskService.listWithAssignees ?
+      await taskService.listWithAssignees({ archived }) :
+      await taskService.getAllTasks({ archived });
+    res.json(tasks);
+  } catch (e) {
+    console.error("[GET /tasks]", e);
+    res.status(e.status || 500).json({ error: e.message || "Server error" });
+  }
+};
+
+const create = async (req, res) => {
+  try {
+    const task = await taskService.createTask(req.body);
+    res.status(201).json(task);
+  } catch (e) {
+    console.error("[POST /tasks]", e);
+    res.status(e.status || 500).json({ error: e.message || "Server error" });
+  }
+};
+
+const update = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: "Invalid id" });
+    }
+    const task = await taskService.updateTask(id, req.body);
+    res.json(task);
+  } catch (e) {
+    console.error("[PUT /tasks/:id]", e);
+    res.status(e.status || 500).json({ error: e.message || "Server error" });
+  }
+};
+
+// Original detailed methods with comprehensive validation
 const getAllTasks = async (req, res) => {
   try {
-    // Input validation and query parameter parsing
     const filters = {
       status: req.query.status,
       assignedTo: req.query.assignedTo ? parseInt(req.query.assignedTo) : undefined,
@@ -18,22 +56,17 @@ const getAllTasks = async (req, res) => {
       limit: req.query.limit ? parseInt(req.query.limit) : 20
     };
 
-    // Validate page and limit
     if (filters.page < 1) {
       return res.status(400).json({ success: false, message: 'Page must be a positive integer' });
     }
-    
+
     if (filters.limit < 1 || filters.limit > 100) {
       return res.status(400).json({ success: false, message: 'Limit must be between 1 and 100' });
     }
 
-    // Calculate offset for pagination
     filters.offset = (filters.page - 1) * filters.limit;
-
-    // Call service layer
     const result = await taskService.getAllTasks(filters);
-    
-    // Format response
+
     res.json({
       success: true,
       tasks: result.tasks,
@@ -55,9 +88,8 @@ const getAllTasks = async (req, res) => {
 
 const getTasksByProject = async (req, res) => {
   try {
-    // Input validation
     const { projectId } = req.params;
-    
+
     if (!projectId || isNaN(projectId)) {
       return res.status(400).json({ success: false, message: 'Valid project ID is required' });
     }
@@ -72,22 +104,17 @@ const getTasksByProject = async (req, res) => {
       limit: req.query.limit ? parseInt(req.query.limit) : 20
     };
 
-    // Validate page and limit
     if (filters.page < 1) {
       return res.status(400).json({ success: false, message: 'Page must be a positive integer' });
     }
-    
+
     if (filters.limit < 1 || filters.limit > 100) {
       return res.status(400).json({ success: false, message: 'Limit must be between 1 and 100' });
     }
 
-    // Calculate offset for pagination
     filters.offset = (filters.page - 1) * filters.limit;
-
-    // Call service layer
     const result = await taskService.getTasksByProject(parseInt(projectId), filters);
-    
-    // Format response
+
     res.json({
       success: true,
       projectId: parseInt(projectId),
@@ -111,17 +138,13 @@ const getTasksByProject = async (req, res) => {
 
 const getTaskById = async (req, res) => {
   try {
-    // Input validation
     const { taskId } = req.params;
-    
+
     if (!taskId || isNaN(taskId)) {
       return res.status(400).json({ success: false, message: 'Valid task ID is required' });
     }
 
-    // Call service layer
     const task = await taskService.getTaskById(parseInt(taskId));
-    
-    // Format response
     res.json({ success: true, task });
   } catch (err) {
     console.error('Error in getTaskById:', err);
@@ -132,7 +155,6 @@ const getTaskById = async (req, res) => {
 
 const createTask = async (req, res) => {
   try {
-    // Input validation
     const { title, description, project_id, assigned_to, status, priority, deadline } = req.body;
     const creatorId = req.user?.id || 1;
 
@@ -140,58 +162,33 @@ const createTask = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Title is required' });
     }
 
-    if (!project_id || isNaN(project_id)) {
-      return res.status(400).json({ success: false, message: 'Valid project ID is required' });
-    }
-
-    if (!creatorId) {
-      return res.status(400).json({ success: false, message: 'Creator ID is required' });
-    }
-
-    // Validate assigned_to array if provided
-    let validAssignedTo = [];
-    if (assigned_to && Array.isArray(assigned_to)) {
-      validAssignedTo = assigned_to.map(id => {
-        const numId = parseInt(id);
-        if (isNaN(numId)) {
-          throw new Error('All assigned user IDs must be valid numbers');
-        }
-        return numId;
-      });
-    }
-
-    // Validate status if provided
-    const validStatuses = ['pending', 'in_progress', 'completed', 'cancelled'];
+    const validStatuses = ['pending', 'in_progress', 'completed', 'cancelled', 'blocked'];
     if (status && !validStatuses.includes(status)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Status must be one of: ${validStatuses.join(', ')}` 
+      return res.status(400).json({
+        success: false,
+        message: `Status must be one of: ${validStatuses.join(', ')}`
       });
     }
 
-    // Validate priority if provided
     const validPriorities = ['low', 'medium', 'high'];
     if (priority && !validPriorities.includes(priority)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Priority must be one of: ${validPriorities.join(', ')}` 
+      return res.status(400).json({
+        success: false,
+        message: `Priority must be one of: ${validPriorities.join(', ')}`
       });
     }
 
     const taskData = {
       title: title.trim(),
       description: description?.trim() || '',
-      project_id: parseInt(project_id),
-      assigned_to: validAssignedTo,
+      project_id: project_id ? parseInt(project_id) : undefined,
+      assigned_to: assigned_to || [],
       status: status || 'pending',
       priority: priority || 'medium',
       deadline: deadline || null
     };
 
-    // Call service layer
     const task = await taskService.createTask(taskData, creatorId);
-    
-    // Format response
     res.status(201).json({ success: true, task });
   } catch (err) {
     console.error('Error in createTask:', err);
@@ -201,7 +198,6 @@ const createTask = async (req, res) => {
 
 const updateTask = async (req, res) => {
   try {
-    // Input validation
     const { taskId } = req.params;
     const { title, description, assigned_to, status, priority, deadline } = req.body;
     const requestingUserId = req.user?.id || 1;
@@ -210,49 +206,29 @@ const updateTask = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Valid task ID is required' });
     }
 
-    if (!requestingUserId) {
-      return res.status(400).json({ success: false, message: 'User ID is required' });
-    }
-
     const updates = {};
     if (title !== undefined) updates.title = title.trim();
     if (description !== undefined) updates.description = description.trim();
     if (deadline !== undefined) updates.deadline = deadline;
+    if (assigned_to !== undefined) updates.assigned_to = assigned_to;
 
-    // Validate assigned_to array if provided
-    if (assigned_to !== undefined) {
-      if (Array.isArray(assigned_to)) {
-        updates.assigned_to = assigned_to.map(id => {
-          const numId = parseInt(id);
-          if (isNaN(numId)) {
-            throw new Error('All assigned user IDs must be valid numbers');
-          }
-          return numId;
-        });
-      } else {
-        return res.status(400).json({ success: false, message: 'assigned_to must be an array' });
-      }
-    }
-
-    // Validate status if provided
     if (status !== undefined) {
-      const validStatuses = ['pending', 'in_progress', 'completed', 'cancelled'];
+      const validStatuses = ['pending', 'in_progress', 'completed', 'cancelled', 'blocked'];
       if (!validStatuses.includes(status)) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Status must be one of: ${validStatuses.join(', ')}` 
+        return res.status(400).json({
+          success: false,
+          message: `Status must be one of: ${validStatuses.join(', ')}`
         });
       }
       updates.status = status;
     }
 
-    // Validate priority if provided
     if (priority !== undefined) {
       const validPriorities = ['low', 'medium', 'high'];
       if (!validPriorities.includes(priority)) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Priority must be one of: ${validPriorities.join(', ')}` 
+        return res.status(400).json({
+          success: false,
+          message: `Priority must be one of: ${validPriorities.join(', ')}`
         });
       }
       updates.priority = priority;
@@ -262,10 +238,7 @@ const updateTask = async (req, res) => {
       return res.status(400).json({ success: false, message: 'At least one field to update is required' });
     }
 
-    // Call service layer
     const updatedTask = await taskService.updateTask(parseInt(taskId), updates, requestingUserId);
-    
-    // Format response
     res.json({ success: true, task: updatedTask });
   } catch (err) {
     console.error('Error in updateTask:', err);
@@ -279,7 +252,6 @@ const updateTask = async (req, res) => {
 
 const deleteTask = async (req, res) => {
   try {
-    // Input validation
     const { taskId } = req.params;
     const requestingUserId = req.user?.id || 1;
 
@@ -287,14 +259,7 @@ const deleteTask = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Valid task ID is required' });
     }
 
-    if (!requestingUserId) {
-      return res.status(400).json({ success: false, message: 'User ID is required' });
-    }
-
-    // Call service layer
     await taskService.deleteTask(parseInt(taskId), requestingUserId);
-    
-    // Format response
     res.json({ success: true, message: 'Task deleted successfully' });
   } catch (err) {
     console.error('Error in deleteTask:', err);
@@ -308,17 +273,14 @@ const deleteTask = async (req, res) => {
 
 const getProjectTaskStats = async (req, res) => {
   try {
-    // Input validation
     const { projectId } = req.params;
-    
+
     if (!projectId || isNaN(projectId)) {
       return res.status(400).json({ success: false, message: 'Valid project ID is required' });
     }
 
-    // Call service layer
     const stats = await taskService.getProjectTaskStats(parseInt(projectId));
-    
-    // Format response
+
     res.json({
       success: true,
       projectId: parseInt(projectId),
@@ -332,6 +294,11 @@ const getProjectTaskStats = async (req, res) => {
 };
 
 module.exports = {
+  list,
+  create,
+  update,
+
+  // Original comprehensive interface
   getAllTasks,
   getTasksByProject,
   getTaskById,
