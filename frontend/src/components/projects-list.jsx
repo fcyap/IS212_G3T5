@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Search, Filter, SortAsc, SortDesc } from "lucide-react"
+import { useProjects } from "@/contexts/project-context"
+import { CreateProjectDialog } from "@/components/create-project"
 
 export function ProjectsList({ onProjectSelect }) {
-  const [projects, setProjects] = useState([])
+  const { projects, loading, loadProjects } = useProjects()
   const [filteredProjects, setFilteredProjects] = useState([])
-  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [sortBy, setSortBy] = useState("name") // name, created_at, updated_at
   const [sortOrder, setSortOrder] = useState("asc")
@@ -19,30 +20,20 @@ export function ProjectsList({ onProjectSelect }) {
   const currentUserId = parseInt(process.env.NEXT_PUBLIC_DEFAULT_USER_ID || 1)
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchUsers = async () => {
       try {
-        const [projectsRes, usersRes] = await Promise.all([
-          fetch('http://localhost:3001/api/projects'),
-          fetch('http://localhost:3001/api/users')
-        ])
-
-        if (projectsRes.ok) {
-          const projectsData = await projectsRes.json()
-          setProjects(projectsData.projects || [])
-        }
-
+        const usersRes = await fetch('http://localhost:3001/api/users')
         if (usersRes.ok) {
           const usersData = await usersRes.json()
           setAllUsers(usersData.users || [])
         }
       } catch (error) {
-        console.error('Error fetching data:', error)
-      } finally {
-        setLoading(false)
+        console.error('Error fetching users:', error)
       }
     }
 
-    fetchData()
+    fetchUsers()
+    // Projects are loaded by the ProjectProvider
   }, [])
 
   useEffect(() => {

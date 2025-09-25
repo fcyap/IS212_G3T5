@@ -460,6 +460,35 @@ class ProjectRepository {
     return await this.getProjectById(projectId);
   }
 
+  /**
+   * Delete a project and all its members
+   * @param {number} projectId - The project ID
+   * @returns {boolean} True if deleted successfully
+   */
+  async delete(projectId) {
+    // First delete all project members
+    const { error: membersError } = await supabase
+      .from('project_members')
+      .delete()
+      .eq('project_id', projectId);
+
+    if (membersError) {
+      throw new Error(`Failed to delete project members: ${membersError.message}`);
+    }
+
+    // Then delete the project
+    const { error: projectError } = await supabase
+      .from('projects')
+      .delete()
+      .eq('id', projectId);
+
+    if (projectError) {
+      throw new Error(`Failed to delete project: ${projectError.message}`);
+    }
+
+    return true;
+  }
+
 }
 
 module.exports = new ProjectRepository();

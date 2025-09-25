@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
+import { CreateProjectDialog } from "@/components/create-project"
 import {
     Home,
     CheckSquare,
@@ -128,16 +129,18 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                 </div>
 
                 {currentUserRole === 'manager' && (
-                    isCollapsed ? (
-                        <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-lg p-2">
-                            <Plus className="w-4 h-4" />
-                        </Button>
-                    ) : (
-                        <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-lg">
-                            <Plus className="w-4 h-4 mr-2" />
-                            Create
-                        </Button>
-                    )
+                    <CreateProjectDialog>
+                        {isCollapsed ? (
+                            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-lg p-2">
+                                <Plus className="w-4 h-4" />
+                            </Button>
+                        ) : (
+                            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-lg">
+                                <Plus className="w-4 h-4 mr-2" />
+                                Create
+                            </Button>
+                        )}
+                    </CreateProjectDialog>
                 )}
             </div>
 
@@ -202,7 +205,13 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                                 Projects
                                             </span>
                                         </div>
-                                        {currentUserRole === 'manager' && <Plus className="w-4 h-4" />}
+                                        {currentUserRole === 'manager' && (
+                                            <CreateProjectDialog>
+                                                <button className="text-gray-400 hover:text-white transition-colors">
+                                                    <Plus className="w-4 h-4" />
+                                                </button>
+                                            </CreateProjectDialog>
+                                        )}
                                     </div>
                                     {isProjectsExpanded && (
                                         <nav className="space-y-1">
