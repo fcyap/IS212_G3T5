@@ -8,6 +8,7 @@ const apiRoutes = require('./routes');
 const tasksRouter = require('./routes/tasks.js');
 const projectTasksRoutes = require('./routes/projectTasks');
 const taskCommentRoutes = require('./routes/tasks/taskCommentRoute');
+const teamMembersRoutes = require('./routes/users');
 const { createLoggerMiddleware, logError } = require('./middleware/logger');
 
 const app = express();
@@ -31,8 +32,10 @@ async function initializeApp() {
 
   // Routes
   app.use('/api', apiRoutes);
+  app.use('/users', teamMembersRoutes);
   app.use('/api/tasks', taskCommentRoutes);
   app.use('/api/projects', projectTasksRoutes);
+  console.log('Mounting /tasks router');
   app.use('/tasks', tasksRouter);
 
   app.get('/', (req, res) => {

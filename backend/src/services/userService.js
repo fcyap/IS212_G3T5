@@ -1,11 +1,11 @@
-﻿const userRepository = require('../repositories/userRepository');
+﻿
+const userRepository = require('../repositories/userRepository');
 
 /**
  * User Service - Contains business logic for user operations
  * This layer orchestrates data from repositories and applies business rules
  */
 class UserService {
-  
   /**
    * Get all users
    */
@@ -168,6 +168,14 @@ class UserService {
       throw new Error('Invalid credentials');
     }
   }
+  
+    /**
+   * Search users by name or email
+   */
+  async searchUsers(query, limit = 8) {
+    return await userRepository.searchUsers(query, limit);
+  }
+  
 }
 
 module.exports = new UserService();

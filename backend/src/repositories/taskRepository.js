@@ -21,7 +21,30 @@ class TaskRepository {
   }
 
   async updateById(id, patch) {
-    return supabase.from("tasks").update(patch).eq("id", id).select().single();
+    if (patch.assigned_to !== undefined) {
+      console.log(`[TaskRepository] (updateById) Updating assignees for task_id=${id}:`, patch.assigned_to);
+      console.log('[TaskRepository] assigned_to type:', typeof patch.assigned_to, Array.isArray(patch.assigned_to) ? 'array' : 'not array');
+    }
+    const { data, error } = await supabase
+      .from('tasks')
+      .update(patch)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    // hydrate
+    const ids = Array.isArray(data.assigned_to) ? data.assigned_to.filter(Boolean) : [];
+    let assignees = [];
+    if (ids.length) {
+      const { data: users, error: uerr } = await supabase
+        .from('users')
+        .select('id, name')
+        .in('id', ids);
+      if (uerr) throw new Error(uerr.message);
+      const map = new Map(users.map(u => [u.id, u]));
+      assignees = ids.map(id => map.get(id)).filter(Boolean);
+    }
+    return { ...data, assignees }; // return the task object (hydrated)
   }
 
   async getUsersByIds(ids) {
@@ -97,17 +120,33 @@ class TaskRepository {
    * Update task
    */
   async updateTask(taskId, updates) {
+    if (updates.assigned_to !== undefined) {
+      console.log(`[TaskRepository] Updating assignees for task_id=${taskId}:`, updates.assigned_to);
+    }
     const { data, error } = await supabase
       .from('tasks')
       .update(updates)
       .eq('id', taskId)
-      .select();
+      .select()
+      .single();
 
     if (error) {
       throw new Error(error.message);
     }
 
-    return data[0];
+    // hydrate
+    const ids = Array.isArray(data.assigned_to) ? data.assigned_to.filter(Boolean) : [];
+    let assignees = [];
+    if (ids.length) {
+      const { data: users, error: uerr } = await supabase
+        .from('users')
+        .select('id, name, email')
+        .in('id', ids);
+      if (uerr) throw new Error(uerr.message);
+      const map = new Map(users.map(u => [u.id, u]));
+      assignees = ids.map(id => map.get(id)).filter(Boolean);
+    }
+    return { ...data, assignees }; // return the task object (hydrated)
   }
 
   /**
@@ -160,7 +199,7 @@ class TaskRepository {
 
     // Apply pagination
     if (filters.offset !== undefined && filters.limit) {
-      query = query.range(filters.offset, filters.offset + filters.limit - 1);
+      query = query.range(filters.offset, filters.offset +  filters.limit - 1);
     }
 
     const { data, error } = await query;
