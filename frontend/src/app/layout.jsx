@@ -6,7 +6,7 @@ import { Toaster } from "react-hot-toast"
 import "./globals.css"
 
 export const metadata = {
-  title: "Asana Project Timeline",
+  title: "G3T5 Project Timeline",
   description: "Project management timeline interface",
   generator: "v0.app",
 }

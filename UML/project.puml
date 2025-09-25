@@ -1,0 +1,173 @@
+@startuml Project Structure
+
+!define ENTITY class
+!define ENUM enum
+
+' Enums
+ENUM ProjectStatus {
+    ACTIVE
+    ON_HOLD
+    COMPLETED
+    CANCELLED
+}
+
+ENUM CollaboratorRole {
+    OWNER
+    ADMIN
+    CONTRIBUTOR
+    VIEWER
+}
+
+ENUM UserRole {
+    STAFF
+    MANAGER
+    DIRECTOR
+    HR
+}
+
+ENUM TaskStatus {
+    TODO
+    IN_PROGRESS
+    UNDER_REVIEW
+    COMPLETED
+    CANCELLED
+}
+
+' Main Entities
+ENTITY User {
+    - userId: UUID
+    - email: String
+    - firstName: String
+    - lastName: String
+    - role: UserRole
+    - department: String
+    - managerId: UUID
+    - createdAt: DateTime
+    - lastLogin: DateTime
+    --
+    + getFullName(): String
+    + isManager(): Boolean
+    + getDirectReports(): List<User>
+}
+
+ENTITY Project {
+    - projectId: UUID
+    - name: String
+    - description: String
+    - status: ProjectStatus
+    - ownerId: UUID
+    - createdAt: DateTime
+    - updatedAt: DateTime
+    - dueDate: DateTime
+    - estimatedHours: Integer
+    --
+    + getTotalTasks(): Integer
+    + getCompletedTasks(): Integer
+    + getProgressPercentage(): Double
+    + isOverdue(): Boolean
+    + canUserAccess(userId: UUID): Boolean
+}
+
+ENTITY Task {
+    - taskId: UUID
+    - title: String
+    - description: String
+    - status: TaskStatus
+    - priority: Integer
+    - assignedTo: UUID
+    - createdBy: UUID
+    - projectId: UUID
+    - parentTaskId: UUID
+    - estimatedHours: Integer
+    - actualHours: Integer
+    - dueDate: DateTime
+    - createdAt: DateTime
+    - updatedAt: DateTime
+    --
+    + isOverdue(): Boolean
+    + getSubtasks(): List<Task>
+    + canUserEdit(userId: UUID): Boolean
+}
+
+ENTITY ProjectCollaborator {
+    - projectId: UUID
+    - userId: UUID
+    - role: CollaboratorRole
+    - invitedBy: UUID
+    - invitedAt: DateTime
+    - acceptedAt: DateTime
+    - isActive: Boolean
+    --
+    + hasPermission(permission: String): Boolean
+}
+
+ENTITY Category {
+    - categoryId: UUID
+    - name: String
+    - description: String
+    - color: String
+    - createdBy: UUID
+    - isSystemCategory: Boolean
+    --
+    + getProjectCount(): Integer
+}
+
+ENTITY ProjectCategory {
+    - projectId: UUID
+    - categoryId: UUID
+    - assignedAt: DateTime
+    - assignedBy: UUID
+}
+
+ENTITY TaskComment {
+    - commentId: UUID
+    - taskId: UUID
+    - userId: UUID
+    - content: String
+    - createdAt: DateTime
+    - updatedAt: DateTime
+    - isEdited: Boolean
+    --
+    + canUserEdit(userId: UUID): Boolean
+}
+
+ENTITY Notification {
+    - notificationId: UUID
+    - userId: UUID
+    - type: String
+    - title: String
+    - message: String
+    - relatedEntityType: String
+    - relatedEntityId: UUID
+    - isRead: Boolean
+    - createdAt: DateTime
+    --
+    + markAsRead(): void
+}
+
+' Relationships
+User ||--o{ Project : "owns"
+User ||--o{ Task : "creates"
+User ||--o{ Task : "assigned to"
+User ||--o{ Category : "creates"
+User ||--o{ TaskComment : "writes"
+User ||--o{ Notification : "receives"
+
+Project ||--o{ Task : "contains"
+Project ||--o{ ProjectCollaborator : "has collaborators"
+Project ||--o{ ProjectCategory : "has categories"
+
+Task ||--o{ Task : "has subtasks"
+Task ||--o{ TaskComment : "has comments"
+
+ProjectCollaborator }o--|| User : "collaborator"
+ProjectCategory }o--|| Category : "category"
+
+User ||--o{ User : "manages"
+
+' Notes
+note right of Project : "Central entity for organizing\ntasks and enabling collaboration"
+note right of ProjectCollaborator : "Junction table managing\nuser access and roles\nwithin projects"
+note right of Task : "Can be standalone or\npart of a project.\nSupports hierarchical\nsubtask structure"
+
+@enduml

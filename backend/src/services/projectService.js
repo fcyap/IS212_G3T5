@@ -1,6 +1,11 @@
 const projectRepository = require('../repository/projectRepository');
 const supabase = require('../utils/supabase');
+const userRepository = require('../repository/userRepository');
 
+/**
+ * Project Service - Contains business logic for project operations
+ * This layer orchestrates data from repositories and applies business rules
+ */
 class ProjectService {
   /**
    * Create a new project
@@ -96,61 +101,57 @@ class ProjectService {
   }
 
   /**
-   * Get all projects
-   * @returns {Object} Array of projects or error
+   * Get all projects for a user (creator or member)
    */
-  async getAllProjects() {
-    try {
-      const data = await projectRepository.findAll();
+  async getAllProjectsForUser(userId) {
+    // Get user to validate they exist
+    const user = await userRepository.getUserById(userId);
 
-      return {
-        success: true,
-        projects: data,
-        count: data.length,
-        message: 'Projects retrieved successfully'
-      };
+    // Get project IDs where user is a member
+    const memberProjectIds = await projectRepository.getProjectIdsForUser(userId);
 
-    } catch (error) {
-      console.error('Error getting projects:', error);
-      return {
-        success: false,
-        error: error.message,
-        message: 'Failed to retrieve projects'
-      };
-    }
+    // Get project IDs where user is creator
+    const creatorProjectIds = await projectRepository.getProjectIdsByCreator(userId);
+
+    // Combine and deduplicate project IDs
+    const allProjectIds = [...new Set([...memberProjectIds, ...creatorProjectIds])];
+
+    // Get project details for these IDs
+    const userProjects = await projectRepository.getProjectsByIds(allProjectIds);
+
+    // Enhance projects with additional data
+    const enhancedProjects = await Promise.all(userProjects.map(async (project) => {
+      try {
+        // Get task count
+        const taskCount = await projectRepository.getTaskCountByProject(project.id);
+
+        // Get collaborator details including creator
+        const members = await projectRepository.getProjectMembersWithDetails(project.id);
+        const collaborators = members.map(member => member.users.name).join(', ');
+
+        return {
+          ...project,
+          task_count: taskCount,
+          collaborators: collaborators || ''
+        };
+      } catch (error) {
+        console.error(`Error enhancing project ${project.id}:`, error);
+        return {
+          ...project,
+          task_count: 0,
+          collaborators: ''
+        };
+      }
+    }));
+
+    return enhancedProjects;
   }
 
   /**
-   * Get a project by ID
-   * @param {number} projectId - The project ID
-   * @returns {Object} Project data or error
+   * Get project by ID
    */
   async getProjectById(projectId) {
-    try {
-      if (!projectId) {
-        throw new Error('Project ID is required');
-      }
-
-      const data = await projectRepository.findById(projectId);
-
-      if (!data) {
-        throw new Error('Project not found');
-      }
-
-      return {
-        success: true,
-        project: data,
-        message: 'Project retrieved successfully'
-      };
-
-    } catch (error) {
-      console.error('Error getting project:', error);
-      return {
-        success: false,
-        error: error.message,
-        message: 'Failed to retrieve project'
-      };
-    }
+    return await projectRepository.getProjectById(projectId);
   }
 
   /**
@@ -307,12 +308,73 @@ class ProjectService {
   }
 
   /**
+   * Get project members with roles
+   */
+  async getProjectMembers(projectId) {
+    // Clean up any orphaned member records first
+    await projectRepository.cleanupOrphanedMembers(projectId);
+
+    const members = await projectRepository.getProjectMembersWithDetails(projectId);
+
+    // Format the response
+    return members.map(member => ({
+      user_id: member.user_id,
+      email: member.users?.email || '',
+      name: member.users?.name || 'Unknown User',
+      role: member.member_role,
+      joined_at: member.added_at
+    }));
+  }
+
+  /**
+   * Add users to project
+   */
+  async addUsersToProject(projectId, newUserIds, requestingUserId, message, role = 'collaborator') {
+    // Check permissions
+    const hasPermission = await projectRepository.canUserManageMembers(projectId, requestingUserId);
+    if (!hasPermission) {
+      throw new Error('Only managers and creators can add members to the project');
+    }
+
+    // Add each user with specified role
+    const addedMembers = [];
+    for (const userId of newUserIds) {
+      try {
+        // Check if user is already a member
+        const existingMembers = await projectRepository.getProjectMembersWithDetails(projectId);
+        const isAlreadyMember = existingMembers.some(member => member.user_id === userId);
+
+        if (isAlreadyMember) {
+          console.log(`User ${userId} is already a member of project ${projectId}`);
+          continue;
+        }
+
+        const addedMember = await projectRepository.addUserToProject(projectId, userId, role);
+        addedMembers.push(addedMember);
+      } catch (error) {
+        console.error(`Error adding user ${userId} to project ${projectId}:`, error);
+        throw error;
+      }
+    }
+
+    // Return updated project
+    return await projectRepository.getProjectById(projectId);
+  }
+
+  /**
+   * Remove user from project
+   */
+  async removeUserFromProject(projectId, userIdToRemove, requestingUserId) {
+    return await projectRepository.removeUserFromProject(projectId, userIdToRemove, requestingUserId);
+  }
+
+  /**
    * Remove user from project
    * @param {number} projectId - The project ID
    * @param {number} userId - The user ID to remove
    * @returns {Object} Updated project data or error
    */
-  async removeUserFromProject(projectId, userId) {
+  async removeUserFromProjectLegacy(projectId, userId) {
     try {
       if (!projectId || !userId) {
         throw new Error('Project ID and User ID are required');
@@ -352,6 +414,23 @@ class ProjectService {
         message: 'Failed to remove user from project'
       };
     }
+  }
+
+  /**
+   * Archive project and all its tasks
+   */
+  async archiveProject(projectId, requestingUserId) {
+    // Check permissions - only managers and creators can archive projects
+    const hasPermission = await projectRepository.canUserManageMembers(projectId, requestingUserId);
+    if (!hasPermission) {
+      throw new Error('Only managers and creators can archive the project');
+    }
+
+    // Ensure project exists
+    await projectRepository.getProjectById(projectId);
+
+    // Archive the project and its tasks
+    return await projectRepository.archiveProject(projectId);
   }
 }
 

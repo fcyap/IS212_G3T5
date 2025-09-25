@@ -1,55 +1,64 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const projectRoutes = require('./routes/projects');
+const morgan = require('morgan');
+
+// Import routes and middleware
+const apiRoutes = require('./routes');
+const tasksRouter = require('./routes/tasks.js');
+const projectTasksRoutes = require('./routes/projectTasks');
+const taskCommentRoutes = require('./routes/tasks/taskCommentRoute');
+const { createLoggerMiddleware, logError } = require('./middleware/logger');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// Initialize logger middleware asynchronously
+async function initializeApp() {
+  const loggerMiddleware = await createLoggerMiddleware();
+  app.use(loggerMiddleware);
 
-// Routes
-app.use('/api/projects', projectRoutes);
+  // Middleware
+  app.use(
+    cors({
+      origin: true, // Allow all origins in development
+      credentials: true,
+    })
+  );
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+  app.use(morgan("dev"));
 
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Project Management Backend API',
-    version: '1.0.0',
-    endpoints: {
-      projects: '/api/projects'
-    }
+  // Routes
+  app.use('/api', apiRoutes);
+  app.use('/api/tasks', taskCommentRoutes);
+  app.use('/api/projects', projectTasksRoutes);
+  app.use('/tasks', tasksRouter);
+
+  app.get('/', (req, res) => {
+    res.send('Backend is running!');
   });
-});
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({
-    success: false,
-    error: 'Internal server error',
-    message: 'An unexpected error occurred'
+  // Use /api/ routes
+  app.use('/api/projects', projectTasksRoutes);
+
+  // Global error handler
+  app.use(async (err, req, res, next) => {
+    console.error('Unhandled error:', err);
+    await logError(err, req);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error:
+        process.env.NODE_ENV === 'development'
+          ? err.message
+          : 'Something went wrong',
+    });
   });
-});
 
-// Handle 404 routes
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Route not found',
-    message: `Route ${req.originalUrl} not found`
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
   });
-});
+}
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log('Available endpoints:');
-  console.log('- GET  /api/projects       - Get all projects');
-  console.log('- POST /api/projects       - Create new project');
-  console.log('- GET  /api/projects/:id   - Get project by ID');
-  console.log('- PUT  /api/projects/:id   - Update project');
-  console.log('- DELETE /api/projects/:id - Delete project');
-  console.log('- POST /api/projects/:id/users   - Add user to project');
-  console.log('- DELETE /api/projects/:id/users - Remove user from project');
-});
+initializeApp().catch(console.error);
