@@ -121,6 +121,23 @@ class ProjectService {
   async removeUserFromProject(projectId, userIdToRemove, requestingUserId) {
     return await projectRepository.removeUserFromProject(projectId, userIdToRemove, requestingUserId);
   }
+
+  /**
+   * Archive project and all its tasks
+   */
+  async archiveProject(projectId, requestingUserId) {
+    // Check permissions - only managers and creators can archive projects
+    const hasPermission = await projectRepository.canUserManageMembers(projectId, requestingUserId);
+    if (!hasPermission) {
+      throw new Error('Only managers and creators can archive the project');
+    }
+
+    // Ensure project exists
+    await projectRepository.getProjectById(projectId);
+
+    // Archive the project and its tasks
+    return await projectRepository.archiveProject(projectId);
+  }
 }
 
 module.exports = new ProjectService();

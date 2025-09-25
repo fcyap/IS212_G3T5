@@ -8,7 +8,7 @@ import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ArrowLeft, Plus, Search, X, Check, Filter, ChevronDown, ChevronRight, Edit, Trash } from "lucide-react"
+import { ArrowLeft, Plus, Search, X, Check, Filter, ChevronDown, ChevronRight, Edit, Trash, Archive } from "lucide-react"
 
 export function ProjectDetails({ projectId, onBack }) {
   const [project, setProject] = useState(null)
@@ -31,6 +31,7 @@ export function ProjectDetails({ projectId, onBack }) {
   const [showFilters, setShowFilters] = useState(false)
   const [expandedTasks, setExpandedTasks] = useState(new Set())
   const [editingTask, setEditingTask] = useState(null)
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
 
   const currentUserId = parseInt(process.env.NEXT_PUBLIC_DEFAULT_USER_ID || 1) // Allow override via env
 
@@ -321,6 +322,39 @@ export function ProjectDetails({ projectId, onBack }) {
     }
   }
 
+  const handleArchiveProject = async () => {
+    setShowArchiveConfirm(false)
+
+    try {
+      console.log(`Archiving project ${projectId}`)
+      const response = await fetch(`http://localhost:3001/api/projects/${projectId}/archive`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      if (response.ok) {
+        const responseData = await response.json()
+        console.log('Successfully archived project:', responseData)
+        alert('Project and all its tasks have been archived successfully!')
+
+        // Update the project state to reflect archived status
+        setProject(prev => ({ ...prev, status: 'archived' }))
+
+        // Optionally redirect back to projects list
+        if (onBack) {
+          onBack()
+        }
+      } else {
+        const errorData = await response.json()
+        console.error('Failed to archive project:', errorData.message)
+        alert(`Failed to archive project: ${errorData.message}`)
+      }
+    } catch (error) {
+      console.error('Error archiving project:', error)
+      alert('Error archiving project. Please try again.')
+    }
+  }
+
   // Filter tasks based on current filters
   const filteredTasks = (tasks || []).filter(task => {
     if (taskFilters.assignee && !task.assigned_to?.some(userId => {
@@ -378,7 +412,22 @@ export function ProjectDetails({ projectId, onBack }) {
           </Button>
           <div className="flex items-center gap-2 flex-1">
             <h1 className="text-2xl font-bold text-white">{project.name || 'Unnamed Project'}</h1>
+            {project.status === 'archived' && (
+              <span className="px-2 py-1 bg-gray-600 text-gray-200 text-sm rounded-full">
+                Archived
+              </span>
+            )}
           </div>
+          {userPermissions.canManageMembers && project.status !== 'archived' && (
+            <Button
+              onClick={() => setShowArchiveConfirm(true)}
+              variant="outline"
+              className="border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white"
+            >
+              <Archive className="w-4 h-4 mr-2" />
+              Archive Project
+            </Button>
+          )}
         </div>
 
         {/* Project Info */}
@@ -824,6 +873,60 @@ export function ProjectDetails({ projectId, onBack }) {
           onDelete={() => handleDeleteTask(editingTask.id)}
           allUsers={allUsers}
         />
+      )}
+
+      {/* Archive Confirmation Modal */}
+      {showArchiveConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowArchiveConfirm(false)}
+          />
+
+          {/* Modal */}
+          <div className="relative bg-[#2a2a2e] border border-gray-600 rounded-lg p-6 max-w-md mx-4 shadow-2xl">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center">
+                <Archive className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+              </div>
+
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  Archive Project
+                </h3>
+                <p className="text-gray-300 text-sm mb-6">
+                  Are you sure you want to archive this project? This action will:
+                </p>
+                <ul className="text-gray-400 text-sm mb-6 space-y-1 ml-4">
+                  <li>• Set the project status to "archived"</li>
+                  <li>• Archive all tasks within the project</li>
+                  <li>• Make the project read-only</li>
+                </ul>
+                <p className="text-gray-400 text-sm mb-6">
+                  This action cannot be undone from the interface.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-600">
+              <Button
+                onClick={() => setShowArchiveConfirm(false)}
+                variant="outline"
+                className="border-gray-500 text-gray-300 hover:text-white hover:border-gray-400"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleArchiveProject}
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                <Archive className="w-4 h-4 mr-2" />
+                Archive Project
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -1,4 +1,4 @@
-﻿const supabase = require('../utils/supabase');
+const supabase = require('../utils/supabase');
 
 /**
  * Project Repository - Handles all database operations for projects
@@ -322,6 +322,34 @@ class ProjectRepository {
     }
 
     return orphanedUserIds.length;
+  }
+
+  /**
+   * Archive project and all its tasks
+   */
+  async archiveProject(projectId) {
+    // Update project status to archived
+    const { data: projectData, error: projectError } = await supabase
+      .from('projects')
+      .update({ status: 'archived' })
+      .eq('id', projectId)
+      .select();
+
+    if (projectError) {
+      throw new Error(projectError.message);
+    }
+
+    // Update all tasks in the project to archived = true
+    const { error: tasksError } = await supabase
+      .from('tasks')
+      .update({ archived: true })
+      .eq('project_id', projectId);
+
+    if (tasksError) {
+      throw new Error(tasksError.message);
+    }
+
+    return projectData[0];
   }
 }
 

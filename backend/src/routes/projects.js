@@ -5,7 +5,8 @@ const {
   getProjectById,
   getProjectMembers,
   addProjectMembers,
-  removeProjectMember
+  removeProjectMember,
+  archiveProject
 } = require('../controllers/projectController');
 
 router.get('/', getAllProjects);
@@ -13,5 +14,6 @@ router.get('/:projectId', getProjectById);
 router.get('/:projectId/members', getProjectMembers);
 router.post('/:projectId/members', addProjectMembers);
 router.delete('/:projectId/members/:userId', removeProjectMember);
+router.patch('/:projectId/archive', archiveProject);
 
 module.exports = router;
