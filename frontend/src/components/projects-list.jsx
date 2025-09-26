@@ -17,7 +17,7 @@ export function ProjectsList({ onProjectSelect }) {
   const [filterStatus, setFilterStatus] = useState("all") // all, active, hold, completed, archived
   const [filterRole, setFilterRole] = useState("all") // all, owner, collaborator
   const [allUsers, setAllUsers] = useState([])
-  const currentUserId = parseInt(process.env.NEXT_PUBLIC_DEFAULT_USER_ID || 1)
+  const currentUserId = parseInt(process.env.NEXT_PUBLIC_USER_ID || 1)
 
   useEffect(() => {
     const fetchUsers = async () => {

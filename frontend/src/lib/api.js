@@ -69,22 +69,49 @@ class ProjectService {
     const response = await fetch(`${API_BASE_URL}/api/projects/${id}`, {
       method: 'DELETE',
     });
-    
+
     if (!response.ok) {
       throw new Error(`Failed to delete project ${id}: ${response.statusText}`);
     }
     return response.json();
   }
 
+  async getProjectMembers(projectId) {
+    const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/members`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch members for project ${projectId}: ${response.statusText}`);
+    }
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch project members');
+    }
+    return data.members;
+  }
+
+  async archiveProject(projectId) {
+    const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/archive`, {
+      method: 'PATCH',
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to archive project ${projectId}: ${response.statusText}`);
+    }
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to archive project');
+    }
+    return data.project;
+  }
+
   async addUserToProject(projectId, userId) {
-    const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/users`, {
+    const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/members`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify({ userIds: [userId] }),
     });
-    
+
     if (!response.ok) {
       throw new Error(`Failed to add user ${userId} to project ${projectId}: ${response.statusText}`);
     }
@@ -92,10 +119,10 @@ class ProjectService {
   }
 
   async removeUserFromProject(projectId, userId) {
-    const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/users/${userId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/members/${userId}`, {
       method: 'DELETE',
     });
-    
+
     if (!response.ok) {
       throw new Error(`Failed to remove user ${userId} from project ${projectId}: ${response.statusText}`);
     }
