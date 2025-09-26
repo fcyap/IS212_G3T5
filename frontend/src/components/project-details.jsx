@@ -7,8 +7,17 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ArrowLeft, Plus, Search, X, Check, Filter, ChevronDown, ChevronRight, Edit, Trash, Archive } from "lucide-react"
+import { useProjects } from "@/contexts/project-context"
+import toast from "react-hot-toast"
 
 export function ProjectDetails({ projectId, onBack }) {
   const [project, setProject] = useState(null)
@@ -32,8 +41,10 @@ export function ProjectDetails({ projectId, onBack }) {
   const [expandedTasks, setExpandedTasks] = useState(new Set())
   const [editingTask, setEditingTask] = useState(null)
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
+  const [showEditProject, setShowEditProject] = useState(false)
 
   const currentUserId = parseInt(process.env.NEXT_PUBLIC_DEFAULT_USER_ID || 1) // Allow override via env
+  const { updateProject } = useProjects()
 
   useEffect(() => {
     const fetchProjectData = async () => {
@@ -355,6 +366,28 @@ export function ProjectDetails({ projectId, onBack }) {
     }
   }
 
+  const handleEditProject = async (formData) => {
+    try {
+      const updatedProject = await updateProject(projectId, {
+        name: formData.name,
+        description: formData.description
+      })
+
+      // Update local state with new project data
+      setProject(prev => ({
+        ...prev,
+        name: formData.name,
+        description: formData.description
+      }))
+
+      setShowEditProject(false)
+      toast.success("Project updated successfully!")
+    } catch (error) {
+      console.error("Failed to update project:", error)
+      toast.error("Failed to update project. Please try again.")
+    }
+  }
+
   // Filter tasks based on current filters
   const filteredTasks = (tasks || []).filter(task => {
     if (taskFilters.assignee && !task.assigned_to?.some(userId => {
@@ -418,16 +451,28 @@ export function ProjectDetails({ projectId, onBack }) {
               </span>
             )}
           </div>
-          {userPermissions.canManageMembers && project.status !== 'archived' && (
-            <Button
-              onClick={() => setShowArchiveConfirm(true)}
-              variant="outline"
-              className="border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white"
-            >
-              <Archive className="w-4 h-4 mr-2" />
-              Archive Project
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {userPermissions.canManageMembers && project.status !== 'archived' && (
+              <Button
+                onClick={() => setShowEditProject(true)}
+                variant="outline"
+                className="border-blue-500 text-blue-400 hover:bg-blue-500 hover:text-white"
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Edit Project
+              </Button>
+            )}
+            {userPermissions.canManageMembers && project.status !== 'archived' && (
+              <Button
+                onClick={() => setShowArchiveConfirm(true)}
+                variant="outline"
+                className="border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white"
+              >
+                <Archive className="w-4 h-4 mr-2" />
+                Archive Project
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Project Info */}
@@ -875,6 +920,16 @@ export function ProjectDetails({ projectId, onBack }) {
         />
       )}
 
+      {/* Edit Project Dialog */}
+      {showEditProject && (
+        <EditProjectDialog
+          project={project}
+          open={showEditProject}
+          onClose={() => setShowEditProject(false)}
+          onSave={handleEditProject}
+        />
+      )}
+
       {/* Archive Confirmation Modal */}
       {showArchiveConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -929,6 +984,107 @@ export function ProjectDetails({ projectId, onBack }) {
         </div>
       )}
     </div>
+  )
+}
+
+function EditProjectDialog({ project, open, onClose, onSave }) {
+  const [formData, setFormData] = useState({
+    name: project?.name || '',
+    description: project?.description || ''
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Reset form data when project changes or dialog opens
+  useEffect(() => {
+    if (open && project) {
+      setFormData({
+        name: project.name || '',
+        description: project.description || ''
+      })
+    }
+  }, [open, project])
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!formData.name.trim()) return
+
+    setIsSubmitting(true)
+    try {
+      await onSave(formData)
+    } catch (error) {
+      // Error handling is done in the parent component
+      console.error("Error in EditProjectDialog:", error)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleChange = (e) => {
+    setFormData(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }))
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="bg-[#1f1f23] border-gray-700 text-white max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-semibold">Edit Project</DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium mb-2">
+              Project Name
+            </label>
+            <Input
+              id="name"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              placeholder="Enter project name..."
+              className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+              required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="description" className="block text-sm font-medium mb-2">
+              Description
+            </label>
+            <Textarea
+              id="description"
+              name="description"
+              value={formData.description}
+              onChange={handleChange}
+              placeholder="Enter project description..."
+              className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 resize-none"
+              rows={4}
+            />
+          </div>
+
+          <div className="flex gap-2 justify-end pt-4">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="text-gray-300 hover:text-white"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={isSubmitting || !formData.name.trim()}
+              className="bg-blue-500 hover:bg-blue-600 text-white"
+            >
+              {isSubmitting ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 
