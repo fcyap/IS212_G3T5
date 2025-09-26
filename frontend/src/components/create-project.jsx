@@ -11,11 +11,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { useProjects } from "@/contexts/project-context"
-import { Plus } from "lucide-react"
+import { useAuth } from "@/hooks/useAuth"
+import { Plus, Lock } from "lucide-react"
 import toast from "react-hot-toast"
 
-export function CreateProjectDialog({ children, variant = "default" }) {
-  const currentUserId = parseInt(process.env.NEXT_PUBLIC_USER_ID || '1')
+export function CreateProjectDialog({ children, variant = "default", isCollapsed = false }) {
+  const { user, currentUserId, canCreateProject, loading } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
   const [formData, setFormData] = useState({
     project_name: "",
@@ -26,6 +27,35 @@ export function CreateProjectDialog({ children, variant = "default" }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   
   const { createProject, error } = useProjects()
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <Button disabled variant={variant}>
+        <Plus className="h-4 w-4 mr-2" />
+        Loading...
+      </Button>
+    )
+  }
+
+  // Show disabled button if user cannot create projects
+  if (!canCreateProject()) {
+    return (
+      <div className="relative group">
+        <Button disabled variant={variant} className="opacity-50">
+          <Lock className="h-4 w-4" />
+          {!isCollapsed && (
+            <>
+              <span className="ml-2">Create Project</span>
+            </>
+          )}
+        </Button>
+        <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-gray-800 text-white text-sm px-2 py-1 rounded whitespace-nowrap z-10">
+          Only managers can create projects. Your role: {user?.role || 'Unknown'}
+        </div>
+      </div>
+    )
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()

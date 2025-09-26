@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { CreateProjectDialog } from "@/components/create-project"
+import { useProjects } from "@/contexts/project-context"
+import { useAuth } from "@/hooks/useAuth"
 import {
     Home,
     CheckSquare,
@@ -44,69 +46,8 @@ const NavItem = ({ icon: Icon, label, isActive, isCollapsed, onClick, hasChevron
 export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSelect, onViewSelect, selectedProjectId, currentView }) {
     const [isProjectsExpanded, setIsProjectsExpanded] = useState(true)
     const [isTeamsExpanded, setIsTeamsExpanded] = useState(true)
-    const [projects, setProjects] = useState([])
-    const [currentUserRole, setCurrentUserRole] = useState('staff')
-    const currentUserId = parseInt(process.env.NEXT_PUBLIC_DEFAULT_USER_ID || 1) // Allow override via env
-
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                console.log('Fetching user data...');
-                // Fetch current user info
-                const userRes = await fetch('http://localhost:3001/api/users')
-                console.log('User API response status:', userRes.status);
-                if (userRes.ok) {
-                    const usersData = await userRes.json()
-                    console.log('Users data:', usersData);
-                    const currentUser = usersData.users.find(u => u.id === currentUserId)
-                    console.log('Current user found:', currentUser);
-                    if (currentUser) {
-                        console.log('Setting user role to:', currentUser.role);
-                        setCurrentUserRole(currentUser.role)
-                    } else {
-                        console.log('User not found, defaulting to manager for testing');
-                        setCurrentUserRole('manager') // Default to manager for testing
-                    }
-                } else {
-                    console.error('Failed to fetch users:', userRes.status, userRes.statusText);
-                    console.log('Defaulting to manager role for testing');
-                    setCurrentUserRole('manager') // Default to manager for testing
-                }
-
-                console.log('Fetching projects...');
-                // Fetch projects (backend will filter based on user permissions)
-                const response = await fetch('http://localhost:3001/api/projects')
-                console.log('Projects API response status:', response.status);
-                console.log('Projects API response ok:', response.ok);
-                const rawText = await response.text();
-                console.log('Projects API raw response:', rawText);
-                const data = JSON.parse(rawText);
-                console.log('Projects data:', data);
-                if (data.success) {
-                    console.log('Setting projects from API:', data.projects);
-                    setProjects(data.projects)
-                } else {
-                    console.log('Projects API failed, using sample data for testing');
-                    // Add sample projects for testing
-                    setProjects([
-                        { id: 1, name: 'Website Redesign' },
-                        { id: 3, name: 'Database Migration' },
-                        { id: 5, name: 'Security Audit' }
-                    ])
-                }
-            } catch (error) {
-                console.error('Error fetching data:', error)
-                console.log('Using fallback data for testing');
-                setCurrentUserRole('manager') // Default to manager for testing
-                setProjects([
-                    { id: 1, name: 'Website Redesign' },
-                    { id: 3, name: 'Database Migration' },
-                    { id: 5, name: 'Security Audit' }
-                ])
-            }
-        }
-        fetchData()
-    }, [currentUserId]) // Include currentUserId dependency
+    const { projects, loading, error, selectedProject, selectProject } = useProjects()
+    const { user, loading: authLoading, canCreateProject } = useAuth()
 
     return (
         <div
@@ -128,19 +69,21 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                     )}
                 </div>
 
-                {currentUserRole === 'manager' && (
-                    <CreateProjectDialog>
-                        {isCollapsed ? (
+                {canCreateProject() && (
+                    isCollapsed ? (
+                        <CreateProjectDialog isCollapsed={true}>
                             <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-lg p-2">
                                 <Plus className="w-4 h-4" />
                             </Button>
-                        ) : (
+                        </CreateProjectDialog>
+                    ) : (
+                        <CreateProjectDialog isCollapsed={false}>
                             <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-lg">
                                 <Plus className="w-4 h-4 mr-2" />
                                 Create
                             </Button>
-                        )}
-                    </CreateProjectDialog>
+                        </CreateProjectDialog>
+                    )
                 )}
             </div>
 
@@ -205,7 +148,7 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                                 Projects
                                             </span>
                                         </div>
-                                        {currentUserRole === 'manager' && (
+                                        {canCreateProject() && (
                                             <CreateProjectDialog>
                                                 <button className="text-gray-400 hover:text-white transition-colors">
                                                     <Plus className="w-4 h-4" />
@@ -213,9 +156,15 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                             </CreateProjectDialog>
                                         )}
                                     </div>
-                                    {isProjectsExpanded && (
-                                        <nav className="space-y-1">
-                                            {projects.map((project) => (
+                                {isProjectsExpanded && (
+                                    <nav className="space-y-1">
+                                        {error && (
+                                            <div className="px-3 py-2 text-xs text-red-400">
+                                                Error loading projects: {error}
+                                            </div>
+                                        )}
+                                        {projects.length > 0 ? (
+                                            projects.map((project) => (
                                                 <NavItem
                                                     key={project.id}
                                                     icon={FolderOpen}
@@ -224,9 +173,16 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                                     isCollapsed={isCollapsed}
                                                     onClick={() => onProjectSelect(project.id)}
                                                 />
-                                            ))}
-                                        </nav>
-                                    )}
+                                            ))
+                                        ) : (
+                                            !loading && (
+                                                <div className="px-3 py-2 text-xs text-gray-400">
+                                                    No projects available
+                                                </div>
+                                            )
+                                        )}
+                                    </nav>
+                                )}
                                 </div>
                             )}
 
@@ -274,6 +230,31 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                     )}
                 </div>
             </div>
+
+            {/* User Info Section */}
+            {!authLoading && user && (
+                <div className="p-4 border-t border-gray-700">
+                    {isCollapsed ? (
+                        <div className="flex items-center justify-center p-2 bg-gray-800 rounded-lg">
+                            <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-xs font-semibold">
+                                {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-gray-800 rounded-lg p-3">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-sm font-semibold">
+                                    {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                                </div>
+                                <div className="flex-1">
+                                    <div className="text-sm font-medium text-white">{user.name || 'Unknown User'}</div>
+                                    <div className="text-xs text-gray-400 capitalize">{user.role || 'No Role'}</div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Bottom Section */}
             <div className="p-4 border-t border-gray-700 space-y-3">

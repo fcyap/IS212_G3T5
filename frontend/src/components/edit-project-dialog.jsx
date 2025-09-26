@@ -6,16 +6,22 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useProjects } from "@/contexts/project-context"
+import { useAuth } from "@/hooks/useAuth"
+import { Lock } from "lucide-react"
 import toast from "react-hot-toast"
 
 export function EditProjectDialog({ project, isOpen, onClose }) {
   const { updateProject } = useProjects()
+  const { canEditProject, user } = useAuth()
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     status: "active"
   })
   const [isLoading, setIsLoading] = useState(false)
+
+  // Check if user can edit this project
+  const canEdit = canEditProject(project?.creator_id)
 
   const statusOptions = [
     { value: "active", label: "Active" },
@@ -69,7 +75,33 @@ export function EditProjectDialog({ project, isOpen, onClose }) {
           <DialogHeader>
             <DialogTitle className="text-white">Edit Project Details</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          
+          {!canEdit ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-center p-6 bg-gray-800 rounded-lg">
+                <div className="text-center">
+                  <Lock className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-gray-300 text-sm">
+                    You don't have permission to edit this project.
+                  </p>
+                  <p className="text-gray-400 text-xs mt-1">
+                    Only the project creator can edit project details.
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onClose}
+                  className="border-gray-600 text-gray-300 hover:bg-gray-700"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <label htmlFor="name" className="text-sm font-medium text-gray-300">
                 Project Name
@@ -132,6 +164,7 @@ export function EditProjectDialog({ project, isOpen, onClose }) {
               </Button>
             </div>
           </form>
+          )}
         </DialogContent>
       </div>
     </Dialog>
