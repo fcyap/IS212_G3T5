@@ -106,7 +106,7 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
             }
         }
         fetchData()
-    }, []) // Remove currentUserRole dependency to avoid timing issues
+    }, [currentUserId]) // Include currentUserId dependency
 
     return (
         <div

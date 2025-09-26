@@ -112,7 +112,7 @@ export function ProjectDetails({ projectId, onBack }) {
     if (projectId) {
       fetchProjectData()
     }
-  }, [projectId])
+  }, [projectId, currentUserId])
 
   const filteredUsers = (allUsers || []).filter(user => {
     const isAlreadyMember = (members || []).some(member => member.user_id === user.id);
@@ -954,7 +954,7 @@ export function ProjectDetails({ projectId, onBack }) {
                   Are you sure you want to archive this project? This action will:
                 </p>
                 <ul className="text-gray-400 text-sm mb-6 space-y-1 ml-4">
-                  <li>• Set the project status to "archived"</li>
+                  <li>• Set the project status to &quot;archived&quot;</li>
                   <li>• Archive all tasks within the project</li>
                   <li>• Make the project read-only</li>
                 </ul>
