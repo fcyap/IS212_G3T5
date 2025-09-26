@@ -103,4 +103,31 @@ class ProjectService {
   }
 }
 
+class UserService {
+  async getUserById(id) {
+    const response = await fetch(`${API_BASE_URL}/api/users/${id}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch user ${id}: ${response.statusText}`);
+    }
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch user');
+    }
+    return data.user;
+  }
+
+  async getAllUsers() {
+    const response = await fetch(`${API_BASE_URL}/api/users`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch users: ${response.statusText}`);
+    }
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch users');
+    }
+    return data.users;
+  }
+}
+
 export const projectService = new ProjectService();
+export const userService = new UserService();

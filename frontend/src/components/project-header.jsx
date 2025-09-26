@@ -27,10 +27,12 @@ import {
   Edit,
 } from "lucide-react"
 import { useProjects } from "@/contexts/project-context"
+import { useAuth } from "@/hooks/useAuth"
 import { EditProjectDialog } from "./edit-project-dialog"
 
 export function ProjectHeader() {
   const { selectedProject } = useProjects()
+  const { canEditProject, user } = useAuth()
   const [showDropdown, setShowDropdown] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
 
@@ -96,16 +98,24 @@ export function ProjectHeader() {
                 </Button>
                 {showDropdown && (
                   <div className="absolute top-full left-0 mt-1 bg-[#1f1f23] border border-gray-600 rounded-md shadow-lg z-10 min-w-[200px]">
-                    <button
-                      className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 flex items-center gap-2"
-                      onClick={() => {
-                        setShowEditDialog(true)
-                        setShowDropdown(false)
-                      }}
-                    >
-                      <Edit className="w-4 h-4" />
-                      Edit Project Details
-                    </button>
+                    {canEditProject(selectedProject?.creator_id) ? (
+                      <button
+                        className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 flex items-center gap-2"
+                        onClick={() => {
+                          setShowEditDialog(true)
+                          setShowDropdown(false)
+                        }}
+                      >
+                        <Edit className="w-4 h-4" />
+                        Edit Project Details
+                      </button>
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-gray-500 flex items-center gap-2">
+                        <Edit className="w-4 h-4" />
+                        <span>Edit Project Details</span>
+                        <span className="text-xs">(Creator only)</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

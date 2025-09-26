@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const projectRoutes = require('./routes/projects');
+const userRoutes = require('./routes/users');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -12,13 +13,15 @@ app.use(express.json());
 
 // Routes
 app.use('/api/projects', projectRoutes);
+app.use('/api/users', userRoutes);
 
 app.get('/', (req, res) => {
   res.json({
     message: 'Project Management Backend API',
     version: '1.0.0',
     endpoints: {
-      projects: '/api/projects'
+      projects: '/api/projects',
+      users: '/api/users'
     }
   });
 });

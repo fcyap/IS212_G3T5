@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { CreateProjectDialog } from "@/components/create-project"
 import { useProjects } from "@/contexts/project-context"
+import { useAuth } from "@/hooks/useAuth"
 import {
     Home,
     CheckSquare,
@@ -25,6 +26,7 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
     const [isProjectsExpanded, setIsProjectsExpanded] = useState(true)
     const [isTeamsExpanded, setIsTeamsExpanded] = useState(true)
     const { projects, loading, error, selectedProject, selectProject } = useProjects()
+    const { user, loading: authLoading } = useAuth()
 
     return (
         <div
@@ -47,13 +49,13 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
                 </div>
 
                 {isCollapsed ? (
-                    <CreateProjectDialog>
+                    <CreateProjectDialog isCollapsed={true}>
                         <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg p-2">
                             <Plus className="w-4 h-4" />
                         </Button>
                     </CreateProjectDialog>
                 ) : (
-                    <CreateProjectDialog>
+                    <CreateProjectDialog isCollapsed={false}>
                         <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg">
                             <Plus className="w-4 h-4 mr-2" />
                             Create
@@ -104,11 +106,6 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
                                             <span>Projects</span>
                                         </button>
                                     </div>
-                                    <CreateProjectDialog>
-                                        <button className="p-1 hover:bg-gray-700 rounded">
-                                            <Plus className="w-4 h-4" />
-                                        </button>
-                                    </CreateProjectDialog>
                                 </div>
                                 {isProjectsExpanded && (
                                     <nav className="space-y-1">
@@ -170,6 +167,31 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
                     )}
                 </div>
             </div>
+
+            {/* User Info Section */}
+            {!authLoading && user && (
+                <div className="p-4 border-t border-gray-700">
+                    {isCollapsed ? (
+                        <div className="flex items-center justify-center p-2 bg-gray-800 rounded-lg">
+                            <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-xs font-semibold">
+                                {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-gray-800 rounded-lg p-3">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-sm font-semibold">
+                                    {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                                </div>
+                                <div className="flex-1">
+                                    <div className="text-sm font-medium text-white">{user.name || 'Unknown User'}</div>
+                                    <div className="text-xs text-gray-400 capitalize">{user.role || 'No Role'}</div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Bottom Section */}
             <div className="p-4 border-t border-gray-700 space-y-3">
