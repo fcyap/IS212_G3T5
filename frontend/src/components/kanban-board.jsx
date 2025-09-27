@@ -1,5 +1,5 @@
 "use client"
-
+import { CurrentUser } from "@/components/task-comment/test-task-comments";
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { TaskCard } from "./task-card"
@@ -55,7 +55,7 @@ export function KanbanBoard() {
           status: editorLane,
           deadline: dueDate || null,
           team_id: 1,
-          assigned_to: [],
+          assigned_to: [CurrentUser.id],
           tags,
         }),
       })
@@ -65,8 +65,15 @@ export function KanbanBoard() {
       }
       const row = await res.json()
       const card = rowToCard(row)
+      const withAssignees = {
+     ...card,
+     assignees: [{ id: CurrentUser.id, name: CurrentUser.name }],
+   }
 
-      setTasks(prev => editorPosition === "top" ? [card, ...prev] : [...prev, card])
+      // setTasks(prev => editorPosition === "top" ? [card, ...prev] : [...prev, card])
+      setTasks(prev =>
+     editorPosition === "top" ? [withAssignees, ...prev] : [...prev, withAssignees]
+   )
       setBanner("Task Successfully Created")
       cancelAddTask()
     } catch (err) {
