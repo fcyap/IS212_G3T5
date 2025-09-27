@@ -8,6 +8,7 @@ const apiRoutes = require('./routes');
 const tasksRouter = require('./routes/tasks.js');
 const projectTasksRoutes = require('./routes/projectTasks');
 const taskCommentRoutes = require('./routes/tasks/taskCommentRoute');
+const teamMembersRoutes = require('./routes/users');
 const projectRoutes = require('./routes/projects');
 const userRoutes = require('./routes/users');
 const { createLoggerMiddleware, logError } = require('./middleware/logger');
@@ -33,6 +34,7 @@ async function initializeApp() {
 
   // Routes
   app.use('/api', apiRoutes);
+  app.use('/users', teamMembersRoutes);
   app.use('/api/tasks', taskCommentRoutes);
   app.use('/api/projects', projectTasksRoutes);
   app.use('/api/projects', projectRoutes);

@@ -15,6 +15,8 @@ const router = express.Router();
 
 // Get all users
 router.get('/', getAllUsers);
+// Search users (for assignee search box)
+router.get('/search', require('../controllers/userController').searchUsers);
 
 // Get user by ID
 router.get('/:userId', getUserById);

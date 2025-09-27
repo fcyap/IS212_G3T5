@@ -24,24 +24,23 @@ const API = process.env.NEXT_PUBLIC_API_URL
 const cap = (s) => (s ? s.toString().charAt(0).toUpperCase() + s.toString().slice(1).toLowerCase() : "")
 
 function rowToCard(r) {
-  const workflow = String(r.status || "pending").toLowerCase()
-  const assignees = Array.isArray(r.assigned_to)
-    ? r.assigned_to.map((v) => String(v))
-    : r.assigned_to
-      ? [String(r.assigned_to)]
-      : []
+  const workflow = String(r.status || 'pending').toLowerCase();
+  const normalizedAssignees =
+    Array.isArray(r.assignees) ? r.assignees
+    : Array.isArray(r.assigned_to) ? r.assigned_to.map(id => ({ id }))
+    : [];
+
   return {
     id: r.id,
-    title: r.title ?? "",
-    description: r.description || "",
-    priority: cap(r.priority) || "Low",
+    title: r.title ?? '',
+    description: r.description || '',
+    priority: cap(r.priority) || 'Low',
     workflow,
     deadline: r.deadline || null,
-    assignees: Array.isArray(r.assignees) ? r.assignees : [],
+    assignees: normalizedAssignees,  // <-- use this
     tags: Array.isArray(r.tags) ? r.tags : [],
-  }
+  };
 }
-
 
 export function KanbanBoard() {
   async function handleSaveNewTask({ title, description, dueDate, priority, tags }) {
@@ -303,23 +302,31 @@ export function KanbanBoard() {
           onClose={closePanel}
           onSave={async (patch) => {
             try {
+              // Convert assignees (array of user objects) to assigned_to (array of user IDs)
+              const assigned_to = Array.isArray(patch.assignees)
+                ? patch.assignees.map(a => a.id)
+                : [];
+              const payload = {
+                title: patch.title,
+                description: patch.description || null,
+                priority: patch.priority,
+                status: patch.status,
+                deadline: patch.deadline || null,
+                tags: patch.tags || [],
+                assigned_to,
+              };
+              console.log('[KanbanBoard] Sending payload to backend:', payload);
               const res = await fetch(`${API}/tasks/${panelTask.id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  title: patch.title,
-                  description: patch.description || null,
-                  priority: patch.priority,
-                  status: patch.status,
-                  deadline: patch.deadline || null,
-                  tags: patch.tags || [],
-                }),
+                body: JSON.stringify(payload),
               })
               if (!res.ok) {
                 const { error } = await res.json().catch(() => ({}))
                 throw new Error(error || `PUT /tasks/${panelTask.id} ${res.status}`)
               }
               const row = await res.json()
+              console.log("[kanban board]",row);
               const updated = rowToCard(row)
               setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
               closePanel()
@@ -338,27 +345,73 @@ export function KanbanBoard() {
   )
 }
 
-function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
-  const [title, setTitle] = useState(task.title || "")
-  const [description, setDescription] = useState(task.description || "")
-  const [priority, setPriority] = useState(task.priority || "Low")
-  const [status, setStatus] = useState(task.workflow || "pending")
-  const [deadline, setDeadline] = useState(task.deadline || "")
-  const [tags, setTags] = useState(Array.isArray(task.tags) ? task.tags : [])
-  const [tagInput, setTagInput] = useState("")
-  const assignees = Array.isArray(task.assignees) ? task.assignees : []
 
-  const canSave = title.trim().length > 0 && priority
+function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
+  const [title, setTitle] = useState(task.title || "");
+  const [description, setDescription] = useState(task.description || "");
+  const [priority, setPriority] = useState(task.priority || "Low");
+  const [status, setStatus] = useState(task.workflow || "pending");
+  const [deadline, setDeadline] = useState(task.deadline || "");
+  const [tags, setTags] = useState(Array.isArray(task.tags) ? task.tags : []);
+  const [tagInput, setTagInput] = useState("");
+  const [assignees, setAssignees] = useState(Array.isArray(task.assignees) ? task.assignees : []);
+  const [userSearch, setUserSearch] = useState("");
+  const [userSearchResults, setUserSearchResults] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+
+  // Fetch user suggestions from backend on each keydown
+  // Debounce timer for user search
+  const [userSearchDebounce, setUserSearchDebounce] = useState(null);
+
+  function handleUserSearchInput(e) {
+    const value = e.target.value;
+    console.log('[AssigneeSearch] (input onChange) value:', value);
+    setUserSearch(value);
+    if (userSearchDebounce) clearTimeout(userSearchDebounce);
+    if (!value.trim()) {
+      setUserSearchResults([]);
+      return;
+    }
+    setLoadingUsers(true);
+    const timer = setTimeout(async () => {
+      const apiUrl = `${API}/users/search?q=${encodeURIComponent(value)}&limit=8`;
+      console.log('[AssigneeSearch] Fetching:', apiUrl);
+      try {
+        const res = await fetch(apiUrl);
+        const data = await res.json();
+        setUserSearchResults(data.users || []);
+      } catch (err) {
+        console.log('[AssigneeSearch] Fetch error:', err);
+        setUserSearchResults([]);
+      } finally {
+        setLoadingUsers(false);
+      }
+    }, 250);
+    setUserSearchDebounce(timer);
+  }
+
+  const canSave = title.trim().length > 0 && priority;
   function addTagFromInput() {
-    const t = tagInput.trim()
-    if (!t) return
-    // avoid exact duplicates (case-sensitive; make it case-insensitive if you prefer)
-    if (!tags.includes(t)) setTags(prev => [...prev, t])
-    setTagInput("")
+    const t = tagInput.trim();
+    if (!t) return;
+    if (!tags.includes(t)) setTags((prev) => [...prev, t]);
+    setTagInput("");
   }
 
   function removeTagAt(idx) {
-    setTags(prev => prev.filter((_, i) => i !== idx))
+    setTags((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function addAssignee(user) {
+    if (!assignees.some((a) => a.id === user.id)) {
+      setAssignees((prev) => [...prev, user]);
+    }
+    setUserSearch("");
+    setUserSearchResults([]);
+  }
+
+  function removeAssignee(userId) {
+    setAssignees((prev) => prev.filter((a) => a.id !== userId));
   }
 
   async function handleDelete() {
@@ -367,15 +420,15 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ archived: true }),
-      })
+      });
       if (!res.ok) {
-        const { error } = await res.json().catch(() => ({}))
-        throw new Error(error || `PUT /tasks/${task.id} ${res.status}`)
+        const { error } = await res.json().catch(() => ({}));
+        throw new Error(error || `PUT /tasks/${task.id} ${res.status}`);
       }
-      onDeleted?.(task.id)
+      onDeleted?.(task.id);
     } catch (e) {
-      console.error("[archive task]", e)
-      alert(e.message)
+      console.error("[archive task]", e);
+      alert(e.message);
     }
   }
 
@@ -489,15 +542,48 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
           {/* Assignees */}
           <div>
             <label className="block text-xs text-gray-400 mb-1">Assignees</label>
+            <div className="mb-2">
+              <input
+                type="text"
+                className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                placeholder="Search users by name or email..."
+                value={userSearch}
+                onChange={handleUserSearchInput}
+                aria-busy={loadingUsers ? 'true' : 'false'}
+                autoComplete="off"
+              />
+              {userSearchResults.length > 0 && (
+                <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
+                  {userSearchResults.map((u) => (
+                    <div
+                      key={u.id}
+                      className="px-3 py-2 hover:bg-gray-700 cursor-pointer text-gray-100"
+                      onClick={() => addAssignee(u)}
+                    >
+                      <span className="font-medium">{u.name}</span>
+                      <span className="ml-2 text-xs text-gray-400">{u.email}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             {assignees.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {assignees.map((a) => (
                   <Badge
                     key={a.id}
-                    className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200"
+                    className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200 flex items-center"
                     title={a.name}
                   >
                     {a.name}
+                    <button
+                      type="button"
+                      className="ml-1 text-gray-300 hover:text-white"
+                      onClick={() => removeAssignee(a.id)}
+                      aria-label={`Remove ${a.name}`}
+                    >
+                      ×
+                    </button>
                   </Badge>
                 ))}
               </div>
@@ -521,7 +607,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
         {/* Actions */}
         <div className="mt-6 flex gap-2">
           <Button
-            onClick={() => onSave({ title: title.trim(), description: description.trim(), priority, status, deadline, tags })}
+            onClick={() => onSave({ title: title.trim(), description: description.trim(), priority, status, deadline, tags, assignees })}
             disabled={!canSave}
             className="bg-white/90 text-black"
           >

@@ -185,6 +185,14 @@ class UserService {
       throw new Error('Invalid credentials');
     }
   }
+  
+    /**
+   * Search users by name or email
+   */
+  async searchUsers(query, limit = 8) {
+    return await userRepository.searchUsers(query, limit);
+  }
+  
 }
 
 module.exports = new UserService();

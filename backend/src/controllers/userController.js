@@ -70,14 +70,14 @@ const getUserById = async (req, res) => {
   try {
     // Input validation
     const { userId } = req.params;
-    
+
     if (!userId || isNaN(userId)) {
       return res.status(400).json({ success: false, message: 'Valid user ID is required' });
     }
 
     // Call service layer
     const user = await userService.getUserById(parseInt(userId));
-    
+
     // Format response
     res.json({ success: true, user });
   } catch (err) {
@@ -91,7 +91,7 @@ const getUserByEmail = async (req, res) => {
   try {
     // Input validation
     const { email } = req.params;
-    
+
     if (!email || email.trim() === '') {
       return res.status(400).json({ success: false, message: 'Email is required' });
     }
@@ -104,7 +104,7 @@ const getUserByEmail = async (req, res) => {
 
     // Call service layer
     const user = await userService.getUserByEmail(email.trim().toLowerCase());
-    
+
     // Format response
     res.json({ success: true, user });
   } catch (err) {
@@ -140,9 +140,9 @@ const createUser = async (req, res) => {
     // Validate role if provided
     const validRoles = ['admin', 'project_manager', 'team_member'];
     if (role && !validRoles.includes(role)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Role must be one of: ${validRoles.join(', ')}` 
+      return res.status(400).json({
+        success: false,
+        message: `Role must be one of: ${validRoles.join(', ')}`
       });
     }
 
@@ -155,7 +155,7 @@ const createUser = async (req, res) => {
 
     // Call service layer
     const user = await userService.createUser(userData);
-    
+
     // Format response (exclude password from response)
     const { password: _, ...userWithoutPassword } = user;
     res.status(201).json({ success: true, user: userWithoutPassword });
@@ -192,13 +192,13 @@ const updateUser = async (req, res) => {
       if (email.trim() === '') {
         return res.status(400).json({ success: false, message: 'Email cannot be empty' });
       }
-      
+
       // Basic email validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
         return res.status(400).json({ success: false, message: 'Invalid email format' });
       }
-      
+
       updates.email = email.trim().toLowerCase();
     }
 
@@ -206,9 +206,9 @@ const updateUser = async (req, res) => {
     if (role !== undefined) {
       const validRoles = ['admin', 'project_manager', 'team_member'];
       if (!validRoles.includes(role)) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Role must be one of: ${validRoles.join(', ')}` 
+        return res.status(400).json({
+          success: false,
+          message: `Role must be one of: ${validRoles.join(', ')}`
         });
       }
       updates.role = role;
@@ -227,7 +227,7 @@ const updateUser = async (req, res) => {
 
     // Call service layer
     const updatedUser = await userService.updateUser(parseInt(userId), updates, requestingUserId);
-    
+
     // Format response (exclude password from response)
     const { password: _, ...userWithoutPassword } = updatedUser;
     res.json({ success: true, user: userWithoutPassword });
@@ -259,7 +259,7 @@ const deleteUser = async (req, res) => {
 
     // Call service layer
     await userService.deleteUser(parseInt(userId), requestingUserId);
-    
+
     // Format response
     res.json({ success: true, message: 'User deleted successfully' });
   } catch (err) {
@@ -293,7 +293,7 @@ const updateUserPassword = async (req, res) => {
 
     // Call service layer
     await userService.updateUserPassword(parseInt(userId), currentPassword, newPassword, requestingUserId);
-    
+
     // Format response
     res.json({ success: true, message: 'Password updated successfully' });
   } catch (err) {
@@ -324,7 +324,7 @@ const getUserProjects = async (req, res) => {
 
     // Call service layer
     const projects = await userService.getUserProjects(parseInt(userId), options);
-    
+
     // Format response
     res.json({
       success: true,
@@ -357,7 +357,7 @@ const getUserTasks = async (req, res) => {
 
     // Call service layer
     const tasks = await userService.getUserTasks(parseInt(userId), options);
-    
+
     // Format response
     res.json({
       success: true,
@@ -369,10 +369,26 @@ const getUserTasks = async (req, res) => {
         includeCompleted: options.includeCompleted
       }
     });
+
   } catch (err) {
     console.error('Error in getUserTasks:', err);
     const statusCode = err.message.includes('not found') ? 404 : 500;
     res.status(statusCode).json({ success: false, message: err.message });
+  }
+}
+
+// Search users by name or email (for assignee search)
+const searchUsers = async (req, res) => {
+  try {
+    const { q, limit } = req.query;
+    if (!q || typeof q !== 'string' || !q.trim()) {
+      return res.status(400).json({ success: false, message: 'Query parameter q is required' });
+    }
+    const users = await userService.searchUsers(q, limit ? parseInt(limit) : 8);
+    res.json({ success: true, users });
+  } catch (err) {
+    console.error('Error in searchUsers:', err);
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
@@ -386,4 +402,5 @@ module.exports = {
   updateUserPassword,
   getUserProjects,
   getUserTasks
+  , searchUsers
 };

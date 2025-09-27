@@ -1,3 +1,4 @@
+const { createLoggerMiddleware } = require('../middleware/logger');
 const taskService = require('../services/taskService');
 
 /**
@@ -35,6 +36,7 @@ const update = async (req, res) => {
     if (!Number.isFinite(id)) {
       return res.status(400).json({ error: "Invalid id" });
     }
+    console.log("req.body:", req.body);
     const task = await taskService.updateTask(id, req.body);
     res.json(task);
   } catch (e) {
@@ -198,6 +200,8 @@ const createTask = async (req, res) => {
 
 const updateTask = async (req, res) => {
   try {
+    // Log the full request body for debugging
+    console.log('[TaskController] Full req.body:', req.body);
     const { taskId } = req.params;
     const { title, description, assigned_to, status, priority, deadline } = req.body;
     const requestingUserId = req.user?.id || 1;
@@ -206,11 +210,15 @@ const updateTask = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Valid task ID is required' });
     }
 
+
     const updates = {};
     if (title !== undefined) updates.title = title.trim();
     if (description !== undefined) updates.description = description.trim();
     if (deadline !== undefined) updates.deadline = deadline;
-    if (assigned_to !== undefined) updates.assigned_to = assigned_to;
+    if (assigned_to !== undefined) {
+      updates.assigned_to = assigned_to;
+      console.log(`[TaskController] Received update for task_id=${taskId}, assigned_to:`, assigned_to);
+    }
 
     if (status !== undefined) {
       const validStatuses = ['pending', 'in_progress', 'completed', 'cancelled', 'blocked'];
@@ -239,7 +247,8 @@ const updateTask = async (req, res) => {
     }
 
     const updatedTask = await taskService.updateTask(parseInt(taskId), updates, requestingUserId);
-    res.json({ success: true, task: updatedTask });
+    res.json(updatedTask);
+    console.log("[taskcontroller]:", res.json(updatedTask));
   } catch (err) {
     console.error('Error in updateTask:', err);
     if (err.message.includes('permission')) {

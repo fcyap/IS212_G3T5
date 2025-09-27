@@ -133,8 +133,8 @@ class TaskService {
     const tagsArr = Array.isArray(tags)
       ? tags
       : typeof tags === "string"
-      ? tags.split(",")
-      : [];
+        ? tags.split(",")
+        : [];
     const normTags = Array.from(
       new Set(
         tagsArr
@@ -182,13 +182,26 @@ class TaskService {
       if (input.deadline !== undefined) patch.deadline = input.deadline || null;
       if (input.archived !== undefined) patch.archived = !!input.archived;
 
+      if (input.assigned_to !== undefined) {
+        // Accept number[], string[] of numbers, or null/empty
+        const arr = Array.isArray(input.assigned_to) ? input.assigned_to : [];
+        const normalized = arr
+          .map(v => (typeof v === 'string' ? v.trim() : v))
+          .filter(v => v !== '' && v !== null && v !== undefined)
+          .map(Number)
+          .filter(Number.isFinite) // keep only valid numbers
+          .map(n => Math.trunc(n)); // ensure integers
+
+        patch.assigned_to = normalized; // <-- Supabase column of type int4[]
+      }
+
       // Handle tags
       if (input.tags !== undefined) {
         const tagsArr = Array.isArray(input.tags)
           ? input.tags
           : typeof input.tags === "string"
-          ? input.tags.split(",")
-          : [];
+            ? input.tags.split(",")
+            : [];
         patch.tags = Array.from(
           new Set(
             tagsArr
@@ -201,11 +214,12 @@ class TaskService {
       patch.updated_at = new Date().toISOString();
 
       if (taskRepository.updateById) {
-        const { data, error } = await taskRepository.updateById(id, patch);
-        if (error) throw error;
-        return data;
+        const updated = await taskRepository.updateById(id, patch); 
+        console.log(updated)// hydrated task
+        return updated;
       } else {
-        return await taskRepository.updateTask(id, patch);
+        const updated = await taskRepository.updateTask(id, patch); // hydrated task
+        return updated;
       }
     }
 

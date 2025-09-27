@@ -1,16 +1,17 @@
 const supabase = require('../utils/supabase');
-
 /**
  * User Repository - Handles all database operations for users
  * This layer only deals with CRUD operations and database queries
  */
 class UserRepository {
 
+
   /**
    * Get all users
    */
   async getAllUsers(filters = {}) {
     console.log('UserRepository.getAllUsers called with filters:', filters);
+
 
     try {
       // Simple test query first
@@ -257,6 +258,27 @@ class UserRepository {
     } catch (error) {
       return false;
     }
+  }
+  /**
+ * Search users by name or email (case-insensitive, partial match)
+ */
+  async searchUsers(query, limit = 8) {
+    if (!query || typeof query !== 'string' || !query.trim()) {
+      return [];
+    }
+    const search = query.trim().toLowerCase();
+    // Supabase ilike for case-insensitive partial match
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .or(`name.ilike.%${search}%,email.ilike.%${search}%`)
+      .limit(limit)
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('Error searching users:', error);
+      return [];
+    }
+    return data || [];
   }
 }
 

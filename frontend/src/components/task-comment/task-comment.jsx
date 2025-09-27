@@ -15,7 +15,6 @@ export const CommentBox = ({ onSubmit, currentUser, placeholder = "Start typing 
           .join('')
           .substring(0, 2)
       : '?');
-    console.log('[CommentBox] computed initials:', initials);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -8,6 +8,7 @@ const taskCommentRoutes = require('./tasks/taskCommentRoute');
 
 router.use('/users', teamMembersRoutes);
 router.use('/projects', projectsRoutes);
+console.log("task upd received in routes>index.js")
 router.use('/tasks', tasksRoutes);
 router.use('/api/tasks', taskCommentRoutes);
 
