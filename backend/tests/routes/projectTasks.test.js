@@ -218,7 +218,7 @@ describe('ProjectTasks Routes', () => {
   describe('GET /tasks', () => {
     test('should get all tasks with default parameters', async () => {
       const response = await request(app)
-        .get('/tasks')
+        .get('/projects/tasks')
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -229,7 +229,7 @@ describe('ProjectTasks Routes', () => {
 
     test('should apply filters for all tasks', async () => {
       const response = await request(app)
-        .get('/tasks?status=completed&priority=high&project_id=1&assigned_to=123')
+        .get('/projects/tasks?status=completed&priority=high&project_id=1&assigned_to=123')
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -241,7 +241,7 @@ describe('ProjectTasks Routes', () => {
 
     test('should reject invalid status for all tasks', async () => {
       const response = await request(app)
-        .get('/tasks?status=invalid')
+        .get('/projects/tasks?status=invalid')
         .expect(400);
 
       expect(response.body.success).toBe(false);
@@ -250,7 +250,7 @@ describe('ProjectTasks Routes', () => {
 
     test('should reject invalid priority for all tasks', async () => {
       const response = await request(app)
-        .get('/tasks?priority=invalid')
+        .get('/projects/tasks?priority=invalid')
         .expect(400);
 
       expect(response.body.success).toBe(false);
@@ -261,7 +261,7 @@ describe('ProjectTasks Routes', () => {
   describe('GET /projects', () => {
     test('should get all projects with default parameters', async () => {
       const response = await request(app)
-        .get('/projects')
+        .get('/projects/projects')
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -272,7 +272,7 @@ describe('ProjectTasks Routes', () => {
 
     test('should apply status filter for projects', async () => {
       const response = await request(app)
-        .get('/projects?status=active')
+        .get('/projects/projects?status=active')
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -281,7 +281,7 @@ describe('ProjectTasks Routes', () => {
 
     test('should apply sorting for projects', async () => {
       const response = await request(app)
-        .get('/projects?sortBy=name&sortOrder=asc')
+        .get('/projects/projects?sortBy=name&sortOrder=asc')
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -359,7 +359,7 @@ describe('ProjectTasks Routes', () => {
 
     test('should return mock projects', async () => {
       const response = await request(app)
-        .get('/projects')
+        .get('/projects/projects')
         .expect(200);
 
       expect(response.body.success).toBe(true);
