@@ -33,6 +33,7 @@ import { useKanban } from "@/components/kanban-context"
 import { useProjects } from "@/contexts/project-context"
 import { useAuth } from "@/hooks/useAuth"
 import { EditProjectDialog } from "./edit-project-dialog"
+import { CreateProjectDialog } from "./create-project"
 
 export function ProjectHeader({ currentView }) {
   const { startAddTask } = useKanban()
@@ -69,6 +70,12 @@ export function ProjectHeader({ currentView }) {
         </div>
 
         <div className="flex items-center gap-3">
+          <CreateProjectDialog>
+            <Button variant="default" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+              <Plus className="w-4 h-4 mr-2" />
+              New Project
+            </Button>
+          </CreateProjectDialog>
           <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
             <HelpCircle className="w-4 h-4" />
           </Button>

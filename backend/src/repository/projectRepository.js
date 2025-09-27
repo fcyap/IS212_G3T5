@@ -11,6 +11,7 @@ class ProjectRepository {
    * Get all projects from database
    */
   async getAllProjects() {
+    console.log('Fetching all projects...');
     const { data: projects, error: projectsError } = await supabase
       .from('projects')
       .select('*');
@@ -19,6 +20,7 @@ class ProjectRepository {
       throw new Error(projectsError.message);
     }
 
+    console.log('Fetched projects:', projects); // Log projects to console
     return projects || [];
   }
 
@@ -55,22 +57,28 @@ class ProjectRepository {
    * Get project IDs for a user (projects they are a member of)
    */
   async getProjectIdsForUser(userId) {
+    console.log('🔍 [ProjectRepository] Getting project IDs for user:', userId);
     const { data, error } = await supabase
       .from('project_members')
       .select('project_id')
       .eq('user_id', userId);
 
     if (error) {
+      console.error('❌ [ProjectRepository] Error getting project IDs for user:', error);
       throw new Error(error.message);
     }
 
-    return data ? data.map(item => item.project_id) : [];
+    console.log('✅ [ProjectRepository] Project member data:', data);
+    const projectIds = data ? data.map(item => item.project_id) : [];
+    console.log('📊 [ProjectRepository] Project IDs for user:', projectIds);
+    return projectIds;
   }
 
   /**
    * Get project IDs where user is creator (has 'creator' role in project_members)
    */
   async getProjectIdsByCreator(userId) {
+    console.log('🔍 [ProjectRepository] Getting creator project IDs for user:', userId);
     const { data, error } = await supabase
       .from('project_members')
       .select('project_id')
@@ -78,17 +86,24 @@ class ProjectRepository {
       .eq('member_role', 'creator');
 
     if (error) {
+      console.error('❌ [ProjectRepository] Error getting creator project IDs:', error);
       throw new Error(error.message);
     }
 
-    return data ? data.map(item => item.project_id) : [];
+    console.log('✅ [ProjectRepository] Creator project data:', data);
+    const projectIds = data ? data.map(item => item.project_id) : [];
+    console.log('📊 [ProjectRepository] Creator project IDs:', projectIds);
+    return projectIds;
   }
 
   /**
    * Get projects by IDs
    */
   async getProjectsByIds(projectIds) {
+    console.log('🔍 [ProjectRepository] Getting projects by IDs:', projectIds);
+    
     if (!projectIds || projectIds.length === 0) {
+      console.log('⚠️ [ProjectRepository] No project IDs provided, returning empty array');
       return [];
     }
 
@@ -98,9 +113,12 @@ class ProjectRepository {
       .in('id', projectIds);
 
     if (error) {
+      console.error('❌ [ProjectRepository] Error getting projects by IDs:', error);
       throw new Error(error.message);
     }
 
+    console.log('✅ [ProjectRepository] Projects found by IDs:', data?.length || 0);
+    console.log('📋 [ProjectRepository] Projects data:', data);
     return data || [];
   }
 

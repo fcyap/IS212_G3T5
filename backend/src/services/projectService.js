@@ -104,20 +104,37 @@ class ProjectService {
    * Get all projects for a user (creator or member)
    */
   async getAllProjectsForUser(userId) {
-    // Get user to validate they exist
-    const user = await userRepository.getUserById(userId);
+    console.log('🔍 [ProjectService] Getting all projects for user:', userId);
+    
+    try {
+      // Get user to validate they exist
+      console.log('📋 [ProjectService] Validating user exists...');
+      const user = await userRepository.getUserById(userId);
+      console.log('✅ [ProjectService] User found:', user?.name || 'Unknown');
 
-    // Get project IDs where user is a member
-    const memberProjectIds = await projectRepository.getProjectIdsForUser(userId);
+      // Get project IDs where user is a member
+      console.log('📋 [ProjectService] Getting member project IDs...');
+      const memberProjectIds = await projectRepository.getProjectIdsForUser(userId);
+      console.log('✅ [ProjectService] Member project IDs:', memberProjectIds);
 
-    // Get project IDs where user is creator
-    const creatorProjectIds = await projectRepository.getProjectIdsByCreator(userId);
+      // Get project IDs where user is creator
+      console.log('📋 [ProjectService] Getting creator project IDs...');
+      const creatorProjectIds = await projectRepository.getProjectIdsByCreator(userId);
+      console.log('✅ [ProjectService] Creator project IDs:', creatorProjectIds);
 
-    // Combine and deduplicate project IDs
-    const allProjectIds = [...new Set([...memberProjectIds, ...creatorProjectIds])];
+      // Combine and deduplicate project IDs
+      const allProjectIds = [...new Set([...memberProjectIds, ...creatorProjectIds])];
+      console.log('📊 [ProjectService] All project IDs combined:', allProjectIds);
 
-    // Get project details for these IDs
-    const userProjects = await projectRepository.getProjectsByIds(allProjectIds);
+      if (allProjectIds.length === 0) {
+        console.log('⚠️ [ProjectService] No projects found for user');
+        return [];
+      }
+
+      // Get project details for these IDs
+      console.log('📋 [ProjectService] Getting project details...');
+      const userProjects = await projectRepository.getProjectsByIds(allProjectIds);
+      console.log('✅ [ProjectService] User projects found:', userProjects.length);
 
     // Enhance projects with additional data
     const enhancedProjects = await Promise.all(userProjects.map(async (project) => {
@@ -144,7 +161,13 @@ class ProjectService {
       }
     }));
 
+    console.log('✅ [ProjectService] Returning enhanced projects:', enhancedProjects.length);
     return enhancedProjects;
+    
+    } catch (error) {
+      console.error('❌ [ProjectService] Error getting all projects for user:', error);
+      throw error;
+    }
   }
 
   /**
