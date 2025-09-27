@@ -1,43 +1,46 @@
 const projectRepository = require('../../src/repository/projectRepository');
 const supabase = require('../../src/utils/supabase');
 
-jest.mock('../../src/utils/supabase', () => ({
-  from: jest.fn()
-}));
+// Create a comprehensive Supabase mock
+const createSupabaseMock = () => {
+  const chainMethods = {
+    select: jest.fn(),
+    insert: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    eq: jest.fn(),
+    neq: jest.fn(),
+    in: jest.fn(),
+    not: jest.fn(),
+    order: jest.fn(),
+    single: jest.fn(),
+    limit: jest.fn(),
+    offset: jest.fn()
+  };
+
+  // Make each method return an object with all other methods
+  Object.keys(chainMethods).forEach(methodName => {
+    chainMethods[methodName].mockReturnValue(chainMethods);
+  });
+
+  return {
+    from: jest.fn().mockReturnValue(chainMethods),
+    ...chainMethods
+  };
+};
+
+jest.mock('../../src/utils/supabase', () => createSupabaseMock());
 
 describe('ProjectRepository', () => {
-  let mockFrom, mockSelect, mockInsert, mockUpdate, mockDelete, mockEq, mockOrder, mockSingle;
-
   beforeEach(() => {
-    mockSingle = jest.fn();
-    mockEq = jest.fn().mockReturnValue({ single: mockSingle });
-    mockOrder = jest.fn().mockReturnValue({ eq: mockEq });
-    mockSelect = jest.fn().mockReturnValue({
-      order: mockOrder,
-      eq: mockEq,
-      single: mockSingle
-    });
-    mockInsert = jest.fn().mockReturnValue({
-      select: mockSelect,
-      eq: mockEq,
-      single: mockSingle
-    });
-    mockUpdate = jest.fn().mockReturnValue({
-      eq: mockEq,
-      select: mockSelect,
-      single: mockSingle
-    });
-    mockDelete = jest.fn().mockReturnValue({
-      eq: mockEq
-    });
-    mockFrom = jest.fn().mockReturnValue({
-      select: mockSelect,
-      insert: mockInsert,
-      update: mockUpdate,
-      delete: mockDelete
-    });
-    supabase.from = mockFrom;
     jest.clearAllMocks();
+    // Reset all mocks to return themselves for chaining
+    Object.keys(supabase).forEach(key => {
+      if (typeof supabase[key] === 'function' && key !== 'from') {
+        supabase[key].mockReturnValue(supabase);
+      }
+    });
+    supabase.from.mockReturnValue(supabase);
   });
 
   describe('getAllProjects', () => {

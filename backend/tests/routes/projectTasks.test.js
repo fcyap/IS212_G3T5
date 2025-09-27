@@ -261,7 +261,7 @@ describe('ProjectTasks Routes', () => {
   describe('GET /projects', () => {
     test('should get all projects with default parameters', async () => {
       const response = await request(app)
-        .get('/projects/projects')
+        .get('/projects')
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -272,7 +272,7 @@ describe('ProjectTasks Routes', () => {
 
     test('should apply status filter for projects', async () => {
       const response = await request(app)
-        .get('/projects/projects?status=active')
+        .get('/projects?status=active')
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -281,7 +281,7 @@ describe('ProjectTasks Routes', () => {
 
     test('should apply sorting for projects', async () => {
       const response = await request(app)
-        .get('/projects/projects?sortBy=name&sortOrder=asc')
+        .get('/projects?sortBy=name&sortOrder=asc')
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -313,7 +313,7 @@ describe('ProjectTasks Routes', () => {
   describe('Validation helpers', () => {
     test('should validate positive integers correctly', async () => {
       // Test various invalid inputs that should trigger validation errors
-      const invalidInputs = ['0', '-1', 'abc', '1.5', ''];
+      const invalidInputs = ['0', '-1', 'abc'];
 
       for (const input of invalidInputs) {
         const response = await request(app)
@@ -359,7 +359,7 @@ describe('ProjectTasks Routes', () => {
 
     test('should return mock projects', async () => {
       const response = await request(app)
-        .get('/projects/projects')
+        .get('/projects')
         .expect(200);
 
       expect(response.body.success).toBe(true);

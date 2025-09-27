@@ -572,7 +572,7 @@ router.get('/tasks', async (req, res) => {
 });
 
 // GET /projects - Get all projects
-router.get('/projects', async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { status, page, limit } = req.query;
     let { sortBy = 'created_at', sortOrder = 'desc' } = req.query;
@@ -665,7 +665,7 @@ router.get('/projects', async (req, res) => {
 });
 
 // PATCH /projects/:projectId/archive - Archive a project
-router.patch('/projects/:projectId/archive', async (req, res) => {
+router.patch('/:projectId/archive', async (req, res) => {
   try {
     const { projectId } = req.params;
 
