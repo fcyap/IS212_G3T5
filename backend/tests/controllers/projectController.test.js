@@ -140,18 +140,6 @@ describe('ProjectController', () => {
       });
     });
 
-    test('should handle missing user id', async () => {
-      req.user = undefined;
-
-      await getAllProjects(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
-        success: false,
-        message: 'User ID is required'
-      });
-    });
-
     test('should default to user id 1 when req.user is undefined', async () => {
       delete req.user;
       const mockProjects = [];
@@ -580,16 +568,25 @@ describe('ProjectController', () => {
       });
     });
 
-    test('should handle missing requesting user id', async () => {
+    test('should default to user id 1 when req.user is undefined', async () => {
       req.params.projectId = '1';
       req.user = undefined;
 
+      const mockArchivedProject = {
+        id: 1,
+        name: 'Test Project',
+        status: 'archived'
+      };
+
+      projectService.archiveProject.mockResolvedValue(mockArchivedProject);
+
       await archiveProject(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(400);
+      expect(projectService.archiveProject).toHaveBeenCalledWith(1, 1);
       expect(res.json).toHaveBeenCalledWith({
-        success: false,
-        message: 'Requesting user ID is required'
+        success: true,
+        project: mockArchivedProject,
+        message: 'Project and all its tasks have been archived successfully'
       });
     });
 

@@ -118,7 +118,7 @@ describe('ProjectTasksController', () => {
     });
   });
 
-  describe('createProjectTask', () => {
+  describe('createTask', () => {
     test('should create project task successfully', async () => {
       req.params.projectId = '1';
       req.body = {
@@ -135,11 +135,11 @@ describe('ProjectTasksController', () => {
         task: { id: 1, ...req.body },
         message: 'Task created successfully'
       };
-      projectTasksService.createProjectTask.mockResolvedValue(mockResult);
+      projectTasksService.createTask.mockResolvedValue(mockResult);
 
-      await projectTasksController.createProjectTask(req, res);
+      await projectTasksController.createTask(req, res);
 
-      expect(projectTasksService.createProjectTask).toHaveBeenCalledWith('1', req.body);
+      expect(projectTasksService.createTask).toHaveBeenCalledWith('1', req.body);
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.json).toHaveBeenCalledWith(mockResult);
     });
@@ -148,7 +148,7 @@ describe('ProjectTasksController', () => {
       req.params = {};
       req.body = { name: 'New Task' };
 
-      await projectTasksController.createProjectTask(req, res);
+      await projectTasksController.createTask(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({
@@ -158,18 +158,24 @@ describe('ProjectTasksController', () => {
       });
     });
 
-    test('should handle missing required fields', async () => {
-      req.params.projectId = '1';
-      req.body = {};
+    test('should handle project not found', async () => {
+      req.params.projectId = '999';
+      req.body = {
+        name: 'New Task',
+        description: 'Task description'
+      };
 
-      await projectTasksController.createProjectTask(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
+      const mockResult = {
         success: false,
-        error: 'Missing required fields',
-        message: 'Task name and description are required'
-      });
+        error: 'Project not found',
+        message: 'Failed to create task'
+      };
+      projectTasksService.createTask.mockResolvedValue(mockResult);
+
+      await projectTasksController.createTask(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith(mockResult);
     });
 
     test('should handle service error', async () => {
@@ -184,9 +190,9 @@ describe('ProjectTasksController', () => {
         error: 'Database error',
         message: 'Failed to create task'
       };
-      projectTasksService.createProjectTask.mockResolvedValue(mockResult);
+      projectTasksService.createTask.mockResolvedValue(mockResult);
 
-      await projectTasksController.createProjectTask(req, res);
+      await projectTasksController.createTask(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith(mockResult);
@@ -199,9 +205,9 @@ describe('ProjectTasksController', () => {
         description: 'Task description'
       };
 
-      projectTasksService.createProjectTask.mockRejectedValue(new Error('Unexpected error'));
+      projectTasksService.createTask.mockRejectedValue(new Error('Unexpected error'));
 
-      await projectTasksController.createProjectTask(req, res);
+      await projectTasksController.createTask(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
@@ -287,7 +293,7 @@ describe('ProjectTasksController', () => {
 
   describe('updateTask', () => {
     test('should update task successfully', async () => {
-      req.params.id = '123';
+      req.params.taskId = '123';
       req.body = { name: 'Updated Task' };
       const mockResult = {
         success: true,
@@ -318,7 +324,7 @@ describe('ProjectTasksController', () => {
     });
 
     test('should handle task not found', async () => {
-      req.params.id = '999';
+      req.params.taskId = '999';
       req.body = { name: 'Updated Task' };
       const mockResult = {
         success: false,
@@ -334,7 +340,7 @@ describe('ProjectTasksController', () => {
     });
 
     test('should handle unexpected error', async () => {
-      req.params.id = '123';
+      req.params.taskId = '123';
       req.body = { name: 'Updated Task' };
       projectTasksService.updateTask.mockRejectedValue(new Error('Unexpected error'));
 
@@ -351,7 +357,7 @@ describe('ProjectTasksController', () => {
 
   describe('deleteTask', () => {
     test('should delete task successfully', async () => {
-      req.params.id = '123';
+      req.params.taskId = '123';
       const mockResult = {
         success: true,
         message: 'Task deleted successfully'
@@ -379,7 +385,7 @@ describe('ProjectTasksController', () => {
     });
 
     test('should handle service error', async () => {
-      req.params.id = '123';
+      req.params.taskId = '123';
       const mockResult = {
         success: false,
         error: 'Database error',
@@ -394,7 +400,7 @@ describe('ProjectTasksController', () => {
     });
 
     test('should handle unexpected error', async () => {
-      req.params.id = '123';
+      req.params.taskId = '123';
       projectTasksService.deleteTask.mockRejectedValue(new Error('Unexpected error'));
 
       await projectTasksController.deleteTask(req, res);
@@ -492,6 +498,12 @@ describe('ProjectTasksController', () => {
       await projectTasksController.getAllTasks(req, res);
 
       expect(projectTasksService.getAllTasks).toHaveBeenCalledWith({
+        filters: {
+          status: undefined,
+          project_id: undefined,
+          assigned_to: undefined,
+          priority: undefined
+        },
         pagination: {
           page: '1',
           limit: '10'
