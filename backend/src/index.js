@@ -2,8 +2,14 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
 
-// Import routes and middleware
+// Import UAA modules
+const { sql } = require('./db');
+const { authRoutes } = require('./routes/auth');
+const { authMiddleware } = require('./middleware/auth');
+
+// Import existing routes and middleware
 const apiRoutes = require('./routes');
 const tasksRouter = require('./routes/tasks.js');
 const projectTasksRoutes = require('./routes/projectTasks');
@@ -22,17 +28,21 @@ async function initializeApp() {
   app.use(loggerMiddleware);
 
   // Middleware
+  app.use(morgan("dev"));
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+  app.use(cookieParser()); // Add cookie parser for UAA
   app.use(
     cors({
-      origin: true, // Allow all origins in development
+      origin: process.env.FRONTEND_ORIGIN || true, // Allow all origins in development
       credentials: true,
     })
   );
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
-  app.use(morgan("dev"));
 
-  // Routes
+  // UAA Auth endpoints (unprotected)
+  app.use('/auth', authRoutes(sql));
+
+  // Existing API routes (now can be protected with UAA)
   app.use('/api', apiRoutes);
   app.use('/users', teamMembersRoutes);
   app.use('/api/tasks', taskCommentRoutes);
@@ -41,11 +51,17 @@ async function initializeApp() {
   app.use('/api/users', userRoutes);
   app.use('/tasks', tasksRouter);
 
+  // UAA Protected route example
+  app.get('/protected/ping', authMiddleware(sql), (req, res) => {
+    res.json({ ok: true, at: new Date().toISOString(), user: res.locals.session });
+  });
+
   app.get('/', (req, res) => {
     res.json({
       message: 'Project Management Backend API - G3T5',
       version: '1.0.0',
       endpoints: {
+        auth: '/auth',
         projects: '/api/projects',
         users: '/api/users',
         tasks: '/api/tasks'
