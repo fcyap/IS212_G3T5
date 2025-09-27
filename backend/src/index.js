@@ -8,6 +8,8 @@ const apiRoutes = require('./routes');
 const tasksRouter = require('./routes/tasks.js');
 const projectTasksRoutes = require('./routes/projectTasks');
 const taskCommentRoutes = require('./routes/tasks/taskCommentRoute');
+const projectRoutes = require('./routes/projects');
+const userRoutes = require('./routes/users');
 const { createLoggerMiddleware, logError } = require('./middleware/logger');
 
 const app = express();
@@ -33,14 +35,21 @@ async function initializeApp() {
   app.use('/api', apiRoutes);
   app.use('/api/tasks', taskCommentRoutes);
   app.use('/api/projects', projectTasksRoutes);
+  app.use('/api/projects', projectRoutes);
+  app.use('/api/users', userRoutes);
   app.use('/tasks', tasksRouter);
 
   app.get('/', (req, res) => {
-    res.send('Backend is running!');
+    res.json({
+      message: 'Project Management Backend API - G3T5',
+      version: '1.0.0',
+      endpoints: {
+        projects: '/api/projects',
+        users: '/api/users',
+        tasks: '/api/tasks'
+      }
+    });
   });
-
-  // Use /api/ routes
-  app.use('/api/projects', projectTasksRoutes);
 
   // Global error handler
   app.use(async (err, req, res, next) => {

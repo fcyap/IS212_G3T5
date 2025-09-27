@@ -23,7 +23,7 @@ const getAllUsers = async (req, res) => {
     if (filters.page < 1) {
       return res.status(400).json({ success: false, message: 'Page must be a positive integer' });
     }
-    
+
     if (filters.limit < 1 || filters.limit > 100) {
       return res.status(400).json({ success: false, message: 'Limit must be between 1 and 100' });
     }
@@ -35,13 +35,20 @@ const getAllUsers = async (req, res) => {
     console.log('About to call userService.getAllUsers with filters:', filters);
     const result = await userService.getAllUsers(filters);
     console.log('User service result:', result);
-    
-    // Format response
+
+    // Format response - handle both new and legacy format
     const response = {
       success: true,
-      users: result.users,
-      totalUsers: result.totalCount,
-      pagination: result.pagination,
+      users: Array.isArray(result) ? result : result.users,
+      totalUsers: Array.isArray(result) ? result.length : result.totalCount,
+      pagination: Array.isArray(result) ? {
+        page: filters.page,
+        limit: filters.limit,
+        totalPages: Math.ceil(result.length / filters.limit),
+        hasNextPage: false,
+        hasPrevPage: false,
+        totalCount: result.length
+      } : result.pagination,
       filters: {
         role: filters.role || null,
         email: filters.email || null,

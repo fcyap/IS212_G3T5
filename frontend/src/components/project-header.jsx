@@ -1,5 +1,6 @@
 "use client"
-import Link from "next/link"  
+import Link from "next/link"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -24,12 +25,23 @@ import {
   Menu,
   HelpCircle,
   ArchiveRestore,
+  ChevronDown,
+  Edit,
 } from "lucide-react"
 
 import { useKanban } from "@/components/kanban-context"
+import { useProjects } from "@/contexts/project-context"
+import { useAuth } from "@/hooks/useAuth"
+import { EditProjectDialog } from "./edit-project-dialog"
+import { CreateProjectDialog } from "./create-project"
 
 export function ProjectHeader({ currentView }) {
   const { startAddTask } = useKanban()
+  const { selectedProject } = useProjects()
+  const { canEditProject, user } = useAuth()
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [showEditDialog, setShowEditDialog] = useState(false)
+
   return (
     <div className="bg-[#1f1f23] text-white">
       {/* Top Bar */}
@@ -58,6 +70,12 @@ export function ProjectHeader({ currentView }) {
         </div>
 
         <div className="flex items-center gap-3">
+          <CreateProjectDialog>
+            <Button variant="default" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+              <Plus className="w-4 h-4 mr-2" />
+              New Project
+            </Button>
+          </CreateProjectDialog>
           <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
             <HelpCircle className="w-4 h-4" />
           </Button>
@@ -77,7 +95,43 @@ export function ProjectHeader({ currentView }) {
             <div className="w-8 h-8 bg-teal-500 rounded flex items-center justify-center">
               <LayoutGrid className="w-4 h-4 text-white" />
             </div>
-            <h1 className="text-xl font-semibold">Software Project Management (SPM)</h1>
+            <h1 className="text-xl font-semibold">
+              {selectedProject ? selectedProject.name : "Software Project Management (SPM)"}
+            </h1>
+            {selectedProject && (
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-gray-400 hover:text-white p-1"
+                  onClick={() => setShowDropdown(!showDropdown)}
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </Button>
+                {showDropdown && (
+                  <div className="absolute top-full left-0 mt-1 bg-[#1f1f23] border border-gray-600 rounded-md shadow-lg z-10 min-w-[200px]">
+                    {canEditProject(selectedProject?.creator_id) ? (
+                      <button
+                        className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 flex items-center gap-2"
+                        onClick={() => {
+                          setShowEditDialog(true)
+                          setShowDropdown(false)
+                        }}
+                      >
+                        <Edit className="w-4 h-4" />
+                        Edit Project Details
+                      </button>
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-gray-500 flex items-center gap-2">
+                        <Edit className="w-4 h-4" />
+                        <span>Edit Project Details</span>
+                        <span className="text-xs">(Creator only)</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
               <Star className="w-4 h-4" />
             </Button>
@@ -169,6 +223,15 @@ export function ProjectHeader({ currentView }) {
           </div>
         </div>
       </div>
+
+      {/* Edit Project Dialog */}
+      {showEditDialog && selectedProject && (
+        <EditProjectDialog
+          isOpen={showEditDialog}
+          onClose={() => setShowEditDialog(false)}
+          project={selectedProject}
+        />
+      )}
     </div>
   )
 }

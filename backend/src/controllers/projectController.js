@@ -5,6 +5,33 @@ const projectService = require('../services/projectService');
  * This layer only deals with request validation and response formatting
  */
 
+/**
+ * Create a new project
+ */
+const createProject = async (req, res) => {
+  try {
+    const { name, description, user_ids, creator_id } = req.body;
+
+    const projectData = {
+      name,
+      description,
+      user_ids: user_ids || [],
+      creator_id
+    };
+
+    const result = await projectService.createProject(projectData);
+
+    if (result.success) {
+      res.status(201).json(result);
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (err) {
+    console.error('Error in createProject:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 const getAllProjects = async (req, res) => {
   try {
     // Input validation
@@ -206,6 +233,7 @@ const archiveProject = async (req, res) => {
 };
 
 module.exports = {
+  createProject,
   getAllProjects,
   getProjectById,
   getProjectMembers,

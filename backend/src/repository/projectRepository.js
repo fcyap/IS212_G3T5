@@ -11,6 +11,7 @@ class ProjectRepository {
    * Get all projects from database
    */
   async getAllProjects() {
+    console.log('Fetching all projects...');
     const { data: projects, error: projectsError } = await supabase
       .from('projects')
       .select('*');
@@ -19,29 +20,65 @@ class ProjectRepository {
       throw new Error(projectsError.message);
     }
 
+    console.log('Fetched projects:', projects); // Log projects to console
     return projects || [];
+  }
+
+  /**
+   * Get all projects from the database with their members
+   * @returns {Array} Array of projects with user_ids populated from project_members
+   */
+  async getAllProjectsWithMembers() {
+    const { data, error } = await supabase
+      .from('projects')
+      .select(`
+        *,
+        project_members (
+          user_id,
+          member_role
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    // Transform the data to include user_ids array for backward compatibility
+    const transformedData = data.map(project => ({
+      ...project,
+      user_ids: project.project_members ? project.project_members.map(member => member.user_id) : []
+    }));
+
+    return transformedData;
   }
 
   /**
    * Get project IDs for a user (projects they are a member of)
    */
   async getProjectIdsForUser(userId) {
+    console.log('🔍 [ProjectRepository] Getting project IDs for user:', userId);
     const { data, error } = await supabase
       .from('project_members')
       .select('project_id')
       .eq('user_id', userId);
 
     if (error) {
+      console.error('❌ [ProjectRepository] Error getting project IDs for user:', error);
       throw new Error(error.message);
     }
 
-    return data ? data.map(item => item.project_id) : [];
+    console.log('✅ [ProjectRepository] Project member data:', data);
+    const projectIds = data ? data.map(item => item.project_id) : [];
+    console.log('📊 [ProjectRepository] Project IDs for user:', projectIds);
+    return projectIds;
   }
 
   /**
    * Get project IDs where user is creator (has 'creator' role in project_members)
    */
   async getProjectIdsByCreator(userId) {
+    console.log('🔍 [ProjectRepository] Getting creator project IDs for user:', userId);
     const { data, error } = await supabase
       .from('project_members')
       .select('project_id')
@@ -49,17 +86,24 @@ class ProjectRepository {
       .eq('member_role', 'creator');
 
     if (error) {
+      console.error('❌ [ProjectRepository] Error getting creator project IDs:', error);
       throw new Error(error.message);
     }
 
-    return data ? data.map(item => item.project_id) : [];
+    console.log('✅ [ProjectRepository] Creator project data:', data);
+    const projectIds = data ? data.map(item => item.project_id) : [];
+    console.log('📊 [ProjectRepository] Creator project IDs:', projectIds);
+    return projectIds;
   }
 
   /**
    * Get projects by IDs
    */
   async getProjectsByIds(projectIds) {
+    console.log('🔍 [ProjectRepository] Getting projects by IDs:', projectIds);
+    
     if (!projectIds || projectIds.length === 0) {
+      console.log('⚠️ [ProjectRepository] No project IDs provided, returning empty array');
       return [];
     }
 
@@ -69,9 +113,12 @@ class ProjectRepository {
       .in('id', projectIds);
 
     if (error) {
+      console.error('❌ [ProjectRepository] Error getting projects by IDs:', error);
       throw new Error(error.message);
     }
 
+    console.log('✅ [ProjectRepository] Projects found by IDs:', data?.length || 0);
+    console.log('📋 [ProjectRepository] Projects data:', data);
     return data || [];
   }
 
@@ -81,7 +128,13 @@ class ProjectRepository {
   async getProjectById(projectId) {
     const { data, error } = await supabase
       .from('projects')
-      .select('*')
+      .select(`
+        *,
+        project_members (
+          user_id,
+          member_role
+        )
+      `)
       .eq('id', projectId)
       .single();
 
@@ -89,7 +142,52 @@ class ProjectRepository {
       throw new Error(error.message);
     }
 
-    return data;
+    // Transform the data to include user_ids array for backward compatibility
+    const transformedData = {
+      ...data,
+      user_ids: data.project_members ? data.project_members.map(member => member.user_id) : []
+    };
+
+    return transformedData;
+  }
+
+  /**
+   * Update a project by ID
+   * @param {number} projectId - The project ID
+   * @param {Object} updateData - The data to update
+   * @returns {Object|null} Updated project data with members or null if not found
+   */
+  async update(projectId, updateData) {
+    // Add updated_at timestamp
+    const dataToUpdate = {
+      ...updateData,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from('projects')
+      .update(dataToUpdate)
+      .eq('id', projectId)
+      .select(`
+        *,
+        project_members (
+          user_id,
+          member_role
+        )
+      `)
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    // Transform the data to include user_ids array for backward compatibility
+    const transformedData = {
+      ...data,
+      user_ids: data.project_members ? data.project_members.map(member => member.user_id) : []
+    };
+
+    return transformedData;
   }
 
   /**
@@ -351,6 +449,64 @@ class ProjectRepository {
 
     return projectData[0];
   }
+
+  /**
+   * Create a new project
+   * @param {Object} projectData - The project data to create
+   * @returns {Object} The created project data
+   */
+  async create(projectData) {
+    const { data, error } = await supabase
+      .from('projects')
+      .insert([projectData])
+      .select('*')
+      .single();
+
+    if (error) {
+      throw new Error(`Database error: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  /**
+   * Find a project by ID with members (alias for getProjectById)
+   * @param {number} projectId - The project ID
+   * @returns {Object|null} Project data with members or null if not found
+   */
+  async findById(projectId) {
+    return await this.getProjectById(projectId);
+  }
+
+  /**
+   * Delete a project and all its members
+   * @param {number} projectId - The project ID
+   * @returns {boolean} True if deleted successfully
+   */
+  async delete(projectId) {
+    // First delete all project members
+    const { error: membersError } = await supabase
+      .from('project_members')
+      .delete()
+      .eq('project_id', projectId);
+
+    if (membersError) {
+      throw new Error(`Failed to delete project members: ${membersError.message}`);
+    }
+
+    // Then delete the project
+    const { error: projectError } = await supabase
+      .from('projects')
+      .delete()
+      .eq('id', projectId);
+
+    if (projectError) {
+      throw new Error(`Failed to delete project: ${projectError.message}`);
+    }
+
+    return true;
+  }
+
 }
 
 module.exports = new ProjectRepository();

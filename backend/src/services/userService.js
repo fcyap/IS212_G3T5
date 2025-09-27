@@ -1,23 +1,40 @@
-﻿const userRepository = require('../repository/userRepository');
+const userRepository = require('../repository/userRepository');
 
 /**
  * User Service - Contains business logic for user operations
  * This layer orchestrates data from repositories and applies business rules
  */
 class UserService {
-  
+
   /**
    * Get all users
    */
   async getAllUsers(filters = {}) {
-    return await userRepository.getAllUsers(filters);
+    // Support both new format (with filters) and simple format (jiaxin branch compatibility)
+    if (filters && Object.keys(filters).length > 0) {
+      return await userRepository.getAllUsers(filters);
+    } else {
+      // For jiaxin branch compatibility - return simple array
+      const result = await userRepository.getAllUsers();
+      return Array.isArray(result) ? result : result.users;
+    }
   }
 
   /**
    * Get user by ID
    */
   async getUserById(userId) {
-    return await userRepository.getUserById(userId);
+    try {
+      // Try the comprehensive method first
+      return await userRepository.getUserById(userId);
+    } catch (error) {
+      // Fallback to jiaxin branch method
+      try {
+        return await userRepository.findById(userId);
+      } catch (fallbackError) {
+        throw error; // Throw original error
+      }
+    }
   }
 
   /**
