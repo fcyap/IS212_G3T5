@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { CreateProjectDialog } from "@/components/create-project"
 import { useProjects } from "@/contexts/project-context"
@@ -22,11 +22,32 @@ import {
     Mail,
 } from "lucide-react"
 
-export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
+const NavItem = ({ icon: Icon, label, isActive, isCollapsed, onClick, hasChevron }) => {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors ${
+        isActive
+          ? "bg-blue-500 text-white"
+          : "text-gray-300 hover:bg-gray-700 hover:text-white"
+      }`}
+    >
+      <Icon className="w-4 h-4" />
+      {!isCollapsed && (
+        <>
+          <span className="flex-1 text-left">{label}</span>
+          {hasChevron && <ChevronRight className="w-4 h-4" />}
+        </>
+      )}
+    </button>
+  )
+}
+
+export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSelect, onViewSelect, selectedProjectId, currentView }) {
     const [isProjectsExpanded, setIsProjectsExpanded] = useState(true)
     const [isTeamsExpanded, setIsTeamsExpanded] = useState(true)
     const { projects, loading, error, selectedProject, selectProject } = useProjects()
-    const { user, loading: authLoading } = useAuth()
+    const { user, loading: authLoading, canCreateProject } = useAuth()
 
     return (
         <div
@@ -40,7 +61,7 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
                     </button>
                     {!isCollapsed && (
                         <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
+                            <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
                                 <div className="w-3 h-3 bg-white rounded-full"></div>
                             </div>
                             <span className="text-lg font-semibold">G3T5</span>
@@ -48,19 +69,21 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
                     )}
                 </div>
 
-                {isCollapsed ? (
-                    <CreateProjectDialog isCollapsed={true}>
-                        <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg p-2">
-                            <Plus className="w-4 h-4" />
-                        </Button>
-                    </CreateProjectDialog>
-                ) : (
-                    <CreateProjectDialog isCollapsed={false}>
-                        <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg">
-                            <Plus className="w-4 h-4 mr-2" />
-                            Create
-                        </Button>
-                    </CreateProjectDialog>
+                {canCreateProject() && (
+                    isCollapsed ? (
+                        <CreateProjectDialog isCollapsed={true}>
+                            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-lg p-2">
+                                <Plus className="w-4 h-4" />
+                            </Button>
+                        </CreateProjectDialog>
+                    ) : (
+                        <CreateProjectDialog isCollapsed={false}>
+                            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-lg">
+                                <Plus className="w-4 h-4 mr-2" />
+                                Create
+                            </Button>
+                        </CreateProjectDialog>
+                    )
                 )}
             </div>
 
@@ -69,9 +92,22 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
                 <div className="p-2">
                     {/* Primary Navigation */}
                     <nav className="space-y-1 mb-6">
-                        <NavItem icon={Home} label="Home" isCollapsed={isCollapsed} />
+                        <NavItem 
+                          icon={Home} 
+                          label="Home" 
+                          isActive={currentView === 'home' && !selectedProjectId}
+                          isCollapsed={isCollapsed} 
+                          onClick={() => onViewSelect('home')}
+                        />
                         <NavItem icon={CheckSquare} label="My tasks" isCollapsed={isCollapsed} />
                         <NavItem icon={Inbox} label="Inbox" isCollapsed={isCollapsed} />
+                        <NavItem 
+                          icon={BarChart3} 
+                          label="Board" 
+                          isActive={currentView === 'board' && !selectedProjectId}
+                          isCollapsed={isCollapsed} 
+                          onClick={() => onViewSelect('board')}
+                        />
                     </nav>
 
                     {!isCollapsed && (
@@ -89,24 +125,37 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
                                 </nav>
                             </div>
 
-                            {/* Projects Section */}
-                            <div className="mb-6">
-                                <div className="flex items-center justify-between px-3 py-2 text-sm font-medium text-white">
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => setIsProjectsExpanded(!isProjectsExpanded)}
-                                            className="p-0 bg-[#1f1f23] text-white"
-                                        >
-                                            {isProjectsExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                                        </button>
-                                        <button
-                                            onClick={() => selectProject(null)}
-                                            className="hover:bg-gray-700 px-2 py-1 rounded transition-colors"
-                                        >
-                                            <span>Projects</span>
-                                        </button>
+                            {/* Projects Section - Show for all users who have projects */}
+                            {projects.length > 0 && (
+                                <div className="mb-6">
+                                    <div className="flex items-center justify-between px-3 py-2 text-sm font-medium text-white">
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => {
+                                                    setIsProjectsExpanded(!isProjectsExpanded);
+                                                    if (!isProjectsExpanded) {
+                                                        onViewSelect('projects');
+                                                    }
+                                                }}
+                                                className="p-0 bg-[#1f1f23] text-white"
+                                            >
+                                                {isProjectsExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                            </button>
+                                            <span
+                                                className="cursor-pointer hover:text-gray-300"
+                                                onClick={() => onViewSelect('projects')}
+                                            >
+                                                Projects
+                                            </span>
+                                        </div>
+                                        {canCreateProject() && (
+                                            <CreateProjectDialog>
+                                                <button className="text-gray-400 hover:text-white transition-colors">
+                                                    <Plus className="w-4 h-4" />
+                                                </button>
+                                            </CreateProjectDialog>
+                                        )}
                                     </div>
-                                </div>
                                 {isProjectsExpanded && (
                                     <nav className="space-y-1">
                                         {error && (
@@ -116,23 +165,28 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
                                         )}
                                         {projects.length > 0 ? (
                                             projects.map((project) => (
-                                                <NavItem 
+                                                <NavItem
                                                     key={project.id}
-                                                    icon={FolderOpen} 
-                                                    label={project.name} 
-                                                    isActive={selectedProject?.id === project.id} 
+                                                    icon={FolderOpen}
+                                                    label={project.name}
+                                                    isActive={selectedProjectId === project.id}
                                                     isCollapsed={isCollapsed}
-                                                    onClick={() => selectProject(project.id)}
+                                                    onClick={() => onProjectSelect(project.id)}
                                                 />
                                             ))
-                                        ) : !loading && (
-                                            <div className="px-3 py-2 text-xs text-gray-400">
-                                                No projects yet. Create your first project!
-                                            </div>
+                                        ) : (
+                                            !loading && (
+                                                <div className="px-3 py-2 text-xs text-gray-400">
+                                                    No projects available
+                                                </div>
+                                            )
                                         )}
                                     </nav>
                                 )}
-                            </div>
+                                </div>
+                            )}
+
+                            {/* Teams Section */}
                             <div className="mb-6">
                                 <div className="flex items-center justify-between px-3 py-2 text-sm font-medium text-white">
                                     <div className="flex items-center gap-2">
@@ -160,7 +214,16 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
                             <NavItem icon={BarChart3} label="Reporting" isCollapsed={isCollapsed} />
                             <NavItem icon={Briefcase} label="Portfolios" isCollapsed={isCollapsed} />
                             <NavItem icon={Target} label="Goals" isCollapsed={isCollapsed} />
-                            <NavItem icon={FolderOpen} label="Software Project Management" isActive isCollapsed={isCollapsed} />
+                            {projects.map((project) => (
+                                <NavItem
+                                    key={project.id}
+                                    icon={FolderOpen}
+                                    label={project.name}
+                                    isActive={selectedProjectId === project.id}
+                                    isCollapsed={isCollapsed}
+                                    onClick={() => onProjectSelect(project.id)}
+                                />
+                            ))}
                             <NavItem icon={Users} label="YANG's first team" isCollapsed={isCollapsed} />
                             <NavItem icon={Settings} label="Settings" isCollapsed={isCollapsed} />
                         </nav>
@@ -206,29 +269,6 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse }) {
                     </Button>
                 )}
             </div>
-        </div>
-    )
-}
-
-function NavItem({ icon: Icon, label, isActive, hasChevron, isCollapsed, onClick }) {
-    return (
-        <div
-            className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors ${isActive ? "bg-gray-700 text-white" : "bg-[#1f1f23] text-white hover:text-white hover:bg-gray-700"
-                }`}
-            title={isCollapsed ? label : undefined}
-            onClick={onClick}
-        >
-            {isCollapsed ? (
-                <Icon className="w-4 h-4 mx-auto" />
-            ) : (
-                <>
-                    <div className="flex items-center gap-3">
-                        <Icon className="w-4 h-4" />
-                        <span>{label}</span>
-                    </div>
-                    {hasChevron && <ChevronRight className="w-4 h-4" />}
-                </>
-            )}
         </div>
     )
 }

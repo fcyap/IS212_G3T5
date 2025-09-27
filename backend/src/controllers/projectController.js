@@ -1,270 +1,243 @@
 const projectService = require('../services/projectService');
 
-class ProjectController {
-  /**
-   * Create a new project
-   */
-  async createProject(req, res) {
-    try {
-      const { name, description, user_ids, creator_id } = req.body;
+/**
+ * Project Controller - Handles HTTP requests and responses for projects
+ * This layer only deals with request validation and response formatting
+ */
 
-      // Validate request body
-      if (!name || !description) {
-        return res.status(400).json({
-          success: false,
-          error: 'Missing required fields',
-          message: 'Name and description are required'
-        });
+/**
+ * Create a new project
+ */
+const createProject = async (req, res) => {
+  try {
+    const { name, description, user_ids, creator_id } = req.body;
+
+    const projectData = {
+      name,
+      description,
+      user_ids: user_ids || [],
+      creator_id
+    };
+
+    const result = await projectService.createProject(projectData);
+
+    if (result.success) {
+      res.status(201).json(result);
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (err) {
+    console.error('Error in createProject:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const getAllProjects = async (req, res) => {
+  try {
+    // Input validation
+    const userId = req.user?.id || 1;
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'User ID is required' });
+    }
+
+    // Call service layer
+    const projects = await projectService.getAllProjectsForUser(userId);
+
+    // Format response
+    res.json({ success: true, projects });
+  } catch (err) {
+    console.error('Error in getAllProjects:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const getProjectById = async (req, res) => {
+  try {
+    // Input validation
+    const { projectId } = req.params;
+
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ success: false, message: 'Valid project ID is required' });
+    }
+
+    // Call service layer
+    const project = await projectService.getProjectById(parseInt(projectId));
+
+    // Format response
+    res.json({ success: true, project });
+  } catch (err) {
+    console.error('Error in getProjectById:', err);
+    const statusCode = err.message.includes('not found') ? 404 : 500;
+    res.status(statusCode).json({ success: false, message: err.message });
+  }
+};
+
+const getProjectMembers = async (req, res) => {
+  try {
+    // Input validation
+    const { projectId } = req.params;
+
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ success: false, message: 'Valid project ID is required' });
+    }
+
+    // Call service layer
+    const members = await projectService.getProjectMembers(parseInt(projectId));
+
+    // Format response
+    res.json({ success: true, projectId: parseInt(projectId), members });
+  } catch (err) {
+    console.error('Error in getProjectMembers:', err);
+    const statusCode = err.message.includes('not found') ? 404 : 500;
+    res.status(statusCode).json({ success: false, message: err.message });
+  }
+};
+
+const addProjectMembers = async (req, res) => {
+  try {
+    // Input validation
+    const { projectId } = req.params;
+    const { userIds, message, role } = req.body;
+    const requestingUserId = req.user?.id || 1;
+
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ success: false, message: 'Valid project ID is required' });
+    }
+
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'userIds array is required and cannot be empty' });
+    }
+
+    // Validate role if provided
+    const memberRole = role || 'collaborator';
+    const validRoles = ['creator', 'manager', 'collaborator'];
+    if (!validRoles.includes(memberRole)) {
+      return res.status(400).json({ success: false, message: 'Invalid role. Must be creator, manager, or collaborator' });
+    }
+
+    // Validate all user IDs are numbers
+    const validUserIds = userIds.map(id => {
+      const numId = parseInt(id);
+      if (isNaN(numId)) {
+        throw new Error('All user IDs must be valid numbers');
       }
+      return numId;
+    });
 
-      // Validate user_ids if provided
-      if (user_ids && !Array.isArray(user_ids)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid user_ids format',
-          message: 'user_ids must be an array of integers'
-        });
-      }
+    if (!requestingUserId) {
+      return res.status(400).json({ success: false, message: 'Requesting user ID is required' });
+    }
 
-      const projectData = {
-        name,
-        description,
-        user_ids: user_ids || [],
-        creator_id
-      };
+    // Call service layer
+    const updatedProject = await projectService.addUsersToProject(
+      parseInt(projectId),
+      validUserIds,
+      requestingUserId,
+      message,
+      memberRole
+    );
 
-      const result = await projectService.createProject(projectData);
-
-      if (result.success) {
-        return res.status(201).json(result);
-      } else {
-        return res.status(400).json(result);
-      }
-
-    } catch (error) {
-      console.error('Error in createProject controller:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Internal server error',
-        message: 'An unexpected error occurred'
-      });
+    // Format response
+    res.json({
+      success: true,
+      project: updatedProject,
+      message: `Successfully added ${validUserIds.length} member(s) to project`
+    });
+  } catch (err) {
+    console.error('Error in addProjectMembers:', err);
+    if (err.message.includes('Only managers') || err.message.includes('Cannot remove')) {
+      res.status(403).json({ success: false, message: err.message });
+    } else {
+      res.status(500).json({ success: false, message: err.message });
     }
   }
+};
 
-  /**
-   * Get all projects
-   */
-  async getAllProjects(req, res) {
-    try {
-      const result = await projectService.getAllProjects();
+const removeProjectMember = async (req, res) => {
+  try {
+    // Input validation
+    const { projectId, userId } = req.params;
+    const requestingUserId = req.user?.id || 1;
 
-      if (result.success) {
-        return res.status(200).json(result);
-      } else {
-        return res.status(400).json(result);
-      }
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ success: false, message: 'Valid project ID is required' });
+    }
 
-    } catch (error) {
-      console.error('Error in getAllProjects controller:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Internal server error',
-        message: 'An unexpected error occurred'
-      });
+    if (!userId || isNaN(userId)) {
+      return res.status(400).json({ success: false, message: 'Valid user ID is required' });
+    }
+
+    if (!requestingUserId) {
+      return res.status(400).json({ success: false, message: 'Requesting user ID is required' });
+    }
+
+    // Call service layer
+    const updatedProject = await projectService.removeUserFromProject(
+      parseInt(projectId),
+      parseInt(userId),
+      requestingUserId
+    );
+
+    // Format response
+    res.json({
+      success: true,
+      project: updatedProject,
+      message: 'Member successfully removed from project'
+    });
+  } catch (err) {
+    console.error('Error in removeProjectMember:', err);
+    if (err.message.includes('Only managers') || err.message.includes('Cannot remove')) {
+      res.status(403).json({ success: false, message: err.message });
+    } else {
+      res.status(500).json({ success: false, message: err.message });
     }
   }
+};
 
-  /**
-   * Get a project by ID
-   */
-  async getProjectById(req, res) {
-    try {
-      const { id } = req.params;
+const archiveProject = async (req, res) => {
+  try {
+    // Input validation
+    const { projectId } = req.params;
+    const requestingUserId = req.user?.id || 1;
 
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          error: 'Missing project ID',
-          message: 'Project ID is required'
-        });
-      }
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ success: false, message: 'Valid project ID is required' });
+    }
 
-      const result = await projectService.getProjectById(id);
+    if (!requestingUserId) {
+      return res.status(400).json({ success: false, message: 'Requesting user ID is required' });
+    }
 
-      if (result.success) {
-        return res.status(200).json(result);
-      } else {
-        const statusCode = result.error === 'Project not found' ? 404 : 400;
-        return res.status(statusCode).json(result);
-      }
+    // Call service layer
+    const archivedProject = await projectService.archiveProject(
+      parseInt(projectId),
+      requestingUserId
+    );
 
-    } catch (error) {
-      console.error('Error in getProjectById controller:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Internal server error',
-        message: 'An unexpected error occurred'
-      });
+    // Format response
+    res.json({
+      success: true,
+      project: archivedProject,
+      message: 'Project and all its tasks have been archived successfully'
+    });
+  } catch (err) {
+    console.error('Error in archiveProject:', err);
+    if (err.message.includes('Only managers') || err.message.includes('not found')) {
+      const statusCode = err.message.includes('not found') ? 404 : 403;
+      res.status(statusCode).json({ success: false, message: err.message });
+    } else {
+      res.status(500).json({ success: false, message: err.message });
     }
   }
+};
 
-  /**
-   * Update a project
-   */
-  async updateProject(req, res) {
-    try {
-      const { id } = req.params;
-      const updateData = req.body;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          error: 'Missing project ID',
-          message: 'Project ID is required'
-        });
-      }
-
-      const result = await projectService.updateProject(id, updateData);
-
-      if (result.success) {
-        return res.status(200).json(result);
-      } else {
-        const statusCode = result.error === 'Project not found' ? 404 : 400;
-        return res.status(statusCode).json(result);
-      }
-
-    } catch (error) {
-      console.error('Error in updateProject controller:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Internal server error',
-        message: 'An unexpected error occurred'
-      });
-    }
-  }
-
-  /**
-   * Delete a project
-   */
-  async deleteProject(req, res) {
-    try {
-      const { id } = req.params;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          error: 'Missing project ID',
-          message: 'Project ID is required'
-        });
-      }
-
-      const result = await projectService.deleteProject(id);
-
-      if (result.success) {
-        return res.status(200).json(result);
-      } else {
-        return res.status(400).json(result);
-      }
-
-    } catch (error) {
-      console.error('Error in deleteProject controller:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Internal server error',
-        message: 'An unexpected error occurred'
-      });
-    }
-  }
-
-  /**
-   * Add user to project
-   */
-  async addUserToProject(req, res) {
-    try {
-      const { id } = req.params;
-      const { userId } = req.body;
-
-      if (!id || !userId) {
-        return res.status(400).json({
-          success: false,
-          error: 'Missing required fields',
-          message: 'Project ID and user ID are required'
-        });
-      }
-
-      // Validate userId is a number
-      const userIdNum = parseInt(userId);
-      if (isNaN(userIdNum)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid user ID',
-          message: 'User ID must be a valid integer'
-        });
-      }
-
-      const result = await projectService.addUserToProject(id, userIdNum);
-
-      if (result.success) {
-        return res.status(200).json(result);
-      } else {
-        const statusCode = result.error === 'Project not found' ? 404 : 400;
-        return res.status(statusCode).json(result);
-      }
-
-    } catch (error) {
-      console.error('Error in addUserToProject controller:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Internal server error',
-        message: 'An unexpected error occurred'
-      });
-    }
-  }
-
-  /**
-   * Remove user from project
-   */
-  async removeUserFromProject(req, res) {
-    try {
-      const { id } = req.params;
-      const { userId } = req.body;
-
-      if (!id || !userId) {
-        return res.status(400).json({
-          success: false,
-          error: 'Missing required fields',
-          message: 'Project ID and user ID are required'
-        });
-      }
-
-      // Validate userId is a number
-      const userIdNum = parseInt(userId);
-      if (isNaN(userIdNum)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid user ID',
-          message: 'User ID must be a valid integer'
-        });
-      }
-
-      const result = await projectService.removeUserFromProject(id, userIdNum);
-
-      if (result.success) {
-        return res.status(200).json(result);
-      } else {
-        const statusCode = result.error === 'Project not found' ? 404 : 400;
-        return res.status(statusCode).json(result);
-      }
-
-    } catch (error) {
-      console.error('Error in removeUserFromProject controller:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Internal server error',
-        message: 'An unexpected error occurred'
-      });
-    }
-  }
-}
-
-module.exports = new ProjectController();
+module.exports = {
+  createProject,
+  getAllProjects,
+  getProjectById,
+  getProjectMembers,
+  addProjectMembers,
+  removeProjectMember,
+  archiveProject
+};

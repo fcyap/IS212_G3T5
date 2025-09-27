@@ -1,26 +1,61 @@
 const express = require('express');
 const router = express.Router();
-const projectController = require('../controllers/projectController');
+const {
+  createProject,
+  getAllProjects,
+  getProjectById,
+  getProjectMembers,
+  addProjectMembers,
+  removeProjectMember,
+  archiveProject
+} = require('../controllers/projectController');
 
-// Create a new project
-router.post('/', projectController.createProject);
+// We need to add updateProject and deleteProject controllers
+const projectService = require('../services/projectService');
 
-// Get all projects
-router.get('/', projectController.getAllProjects);
+const updateProject = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const updateData = req.body;
 
-// Get a specific project by ID
-router.get('/:id', projectController.getProjectById);
+    const result = await projectService.updateProject(parseInt(projectId), updateData);
 
-// Update a project
-router.put('/:id', projectController.updateProject);
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (err) {
+    console.error('Error in updateProject:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 
-// Delete a project
-router.delete('/:id', projectController.deleteProject);
+const deleteProject = async (req, res) => {
+  try {
+    const { projectId } = req.params;
 
-// Add user to project
-router.post('/:id/users', projectController.addUserToProject);
+    const result = await projectService.deleteProject(parseInt(projectId));
 
-// Remove user from project
-router.delete('/:id/users', projectController.removeUserFromProject);
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (err) {
+    console.error('Error in deleteProject:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+router.post('/', createProject);
+router.get('/', getAllProjects);
+router.get('/:projectId', getProjectById);
+router.put('/:projectId', updateProject);
+router.delete('/:projectId', deleteProject);
+router.get('/:projectId/members', getProjectMembers);
+router.post('/:projectId/members', addProjectMembers);
+router.delete('/:projectId/members/:userId', removeProjectMember);
+router.patch('/:projectId/archive', archiveProject);
 
 module.exports = router;

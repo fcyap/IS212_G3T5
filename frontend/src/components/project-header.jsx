@@ -1,4 +1,5 @@
 "use client"
+import Link from "next/link"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,14 +24,19 @@ import {
   Palette,
   Menu,
   HelpCircle,
+  ArchiveRestore,
   ChevronDown,
   Edit,
 } from "lucide-react"
+
+import { useKanban } from "@/components/kanban-context"
 import { useProjects } from "@/contexts/project-context"
 import { useAuth } from "@/hooks/useAuth"
 import { EditProjectDialog } from "./edit-project-dialog"
+import { CreateProjectDialog } from "./create-project"
 
-export function ProjectHeader() {
+export function ProjectHeader({ currentView }) {
+  const { startAddTask } = useKanban()
   const { selectedProject } = useProjects()
   const { canEditProject, user } = useAuth()
   const [showDropdown, setShowDropdown] = useState(false)
@@ -46,7 +52,7 @@ export function ProjectHeader() {
           </Button>
 
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
+            <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
               <div className="w-3 h-3 bg-white rounded-full"></div>
             </div>
             <span className="text-lg font-semibold">G3T5</span>
@@ -64,6 +70,12 @@ export function ProjectHeader() {
         </div>
 
         <div className="flex items-center gap-3">
+          <CreateProjectDialog>
+            <Button variant="default" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+              <Plus className="w-4 h-4 mr-2" />
+              New Project
+            </Button>
+          </CreateProjectDialog>
           <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
             <HelpCircle className="w-4 h-4" />
           </Button>
@@ -84,7 +96,7 @@ export function ProjectHeader() {
               <LayoutGrid className="w-4 h-4 text-white" />
             </div>
             <h1 className="text-xl font-semibold">
-              {selectedProject ? selectedProject.name : "Select a Project"}
+              {selectedProject ? selectedProject.name : "Software Project Management (SPM)"}
             </h1>
             {selectedProject && (
               <div className="relative">
@@ -138,7 +150,7 @@ export function ProjectHeader() {
                 <AvatarFallback className="bg-yellow-500 text-black text-xs">WK</AvatarFallback>
               </Avatar>
               <Avatar className="w-8 h-8 border-2 border-gray-700">
-                <AvatarFallback className="bg-orange-500 text-white text-xs">A</AvatarFallback>
+                <AvatarFallback className="bg-blue-500 text-white text-xs">A</AvatarFallback>
               </Avatar>
               <Avatar className="w-8 h-8 border-2 border-gray-700">
                 <AvatarFallback className="bg-pink-500 text-white text-xs">T</AvatarFallback>
@@ -147,51 +159,105 @@ export function ProjectHeader() {
                 +2
               </div>
             </div>
+
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+              <Share className="w-4 h-4 mr-2" />
+              Share
+            </Button>
+
+            <Button className="bg-gray-700 hover:bg-gray-600 text-white">
+              <Palette className="w-4 h-4 mr-2" />
+              Customize
+            </Button>
           </div>
         </div>
 
-        {selectedProject && (
-          <div className="flex items-center gap-6">
-            <Button variant="ghost" className="text-gray-400 hover:text-white">
-              <List className="w-4 h-4 mr-2" />
-              List
+        {/* Navigation Tabs */}
+        <div className="flex items-center gap-6 border-b border-gray-700">
+          <NavTab icon={List} label="Overview" />
+          <NavTab icon={List} label="List" />
+          <NavTab icon={LayoutGrid} label="Board" isActive />
+          <NavTab icon={Calendar} label="Timeline" />
+          <NavTab icon={BarChart3} label="Dashboard" />
+          <NavTab icon={Calendar} label="Calendar" />
+          <NavTab icon={Workflow} label="Workflow" />
+          <NavTab icon={MessageSquare} label="Messages" />
+          <NavTab icon={Files} label="Files" />
+          <NavTab icon={ArchiveRestore} label="Archive" href="archive"/>
+          <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
+            <Plus className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Action Bar */}
+      <div className="px-6 py-3 border-b border-gray-700">
+        <div className="flex items-center justify-between">
+          {currentView !== 'projects' && (
+            <Button onClick={() => startAddTask("top", "pending")} className="bg-gray-700 hover:bg-gray-600 text-white">
+              <Plus className="w-4 h-4 mr-2" />
+              Add task
             </Button>
-            <Button variant="ghost" className="text-gray-400 hover:text-white">
-              <LayoutGrid className="w-4 h-4 mr-2" />
-              Board
+          )}
+
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
+              <Filter className="w-4 h-4 mr-2" />
+              Filter
             </Button>
-            <Button variant="ghost" className="text-gray-400 hover:text-white">
-              <Calendar className="w-4 h-4 mr-2 text-white" />
-              Calendar
+            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
+              <ArrowUpDown className="w-4 h-4 mr-2" />
+              Sort
             </Button>
-            <Button variant="ghost" className="text-gray-400 hover:text-white">
-              <BarChart3 className="w-4 h-4 mr-2" />
-              Timeline
+            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
+              <Group className="w-4 h-4 mr-2" />
+              Group
             </Button>
-            <Button variant="ghost" className="text-gray-400 hover:text-white">
-              <Workflow className="w-4 h-4 mr-2" />
-              Workflow
+            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
+              <Settings className="w-4 h-4 mr-2" />
+              Options
             </Button>
-            <Button variant="ghost" className="text-gray-400 hover:text-white">
-              <MessageSquare className="w-4 h-4 mr-2" />
-              Dashboard
-            </Button>
-            <Button variant="ghost" className="text-gray-400 hover:text-white">
-              <Files className="w-4 h-4 mr-2" />
-              Docs
+            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
+              <Search className="w-4 h-4" />
             </Button>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Edit Project Dialog */}
       {showEditDialog && selectedProject && (
         <EditProjectDialog
-          project={selectedProject}
           isOpen={showEditDialog}
           onClose={() => setShowEditDialog(false)}
+          project={selectedProject}
         />
       )}
+    </div>
+  )
+}
+
+function NavTab({ icon: Icon, label, isActive, href }) {
+  const base =
+    "flex items-center gap-2 px-3 py-3 text-sm cursor-pointer border-b-2 transition-colors"
+  const active = isActive
+    ? "border-blue-500 text-white"
+    : "border-transparent text-gray-400 hover:text-white"
+
+  const className = `${base} ${active}`
+
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        <Icon className="w-4 h-4" />
+        <span>{label}</span>
+      </Link>
+    )
+  }
+
+  return (
+    <div className={className}>
+      <Icon className="w-4 h-4" />
+      <span>{label}</span>
     </div>
   )
 }

@@ -1,5 +1,15 @@
 const express = require('express');
-const { getUserById, getAllUsers } = require('../controllers/userController');
+const {
+  getAllUsers,
+  createUser,
+  getUserById,
+  getUserByEmail,
+  updateUser,
+  deleteUser,
+  updateUserPassword,
+  getUserProjects,
+  getUserTasks
+} = require('../controllers/userController');
 
 const router = express.Router();
 
@@ -7,6 +17,27 @@ const router = express.Router();
 router.get('/', getAllUsers);
 
 // Get user by ID
-router.get('/:id', getUserById);
+router.get('/:userId', getUserById);
+
+// Get user by email
+router.get('/email/:email', getUserByEmail);
+
+// Create new user
+router.post('/', createUser);
+
+// Update user
+router.put('/:userId', updateUser);
+
+// Delete user
+router.delete('/:userId', deleteUser);
+
+// Update user password
+router.patch('/:userId/password', updateUserPassword);
+
+// Get user's projects
+router.get('/:userId/projects', getUserProjects);
+
+// Get user's tasks
+router.get('/:userId/tasks', getUserTasks);
 
 module.exports = router;
