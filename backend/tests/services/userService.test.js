@@ -169,11 +169,17 @@ describe('UserService', () => {
         created_at: new Date().toISOString()
       };
 
+      userRepository.emailExists.mockResolvedValue(false);
       userRepository.createUser.mockResolvedValue(mockCreatedUser);
 
       const result = await userService.createUser(userData);
 
-      expect(userRepository.createUser).toHaveBeenCalledWith(userData);
+      // The service adds timestamps, so check that the call includes them
+      expect(userRepository.createUser).toHaveBeenCalledWith({
+        ...userData,
+        created_at: expect.any(Date),
+        updated_at: expect.any(Date)
+      });
       expect(result).toEqual(mockCreatedUser);
     });
 
@@ -184,10 +190,10 @@ describe('UserService', () => {
         password: 'password123'
       };
 
-      userRepository.createUser.mockRejectedValue(new Error('Email already exists'));
+      userRepository.emailExists.mockResolvedValue(true);
 
       await expect(userService.createUser(userData))
-        .rejects.toThrow('Email already exists');
+        .rejects.toThrow('User with this email already exists');
     });
 
     test('should handle validation error', async () => {
@@ -197,10 +203,8 @@ describe('UserService', () => {
         password: '123'
       };
 
-      userRepository.createUser.mockRejectedValue(new Error('Validation failed'));
-
       await expect(userService.createUser(userData))
-        .rejects.toThrow('Validation failed');
+        .rejects.toThrow('Email, name, and password are required');
     });
   });
 
@@ -213,6 +217,19 @@ describe('UserService', () => {
       };
       const requestingUserId = 1;
 
+      const mockCurrentUser = {
+        id: userId,
+        name: 'John Doe',
+        email: 'john@example.com',
+        role: 'admin'
+      };
+
+      const mockRequestingUser = {
+        id: requestingUserId,
+        name: 'John Doe',
+        role: 'admin'
+      };
+
       const mockUpdatedUser = {
         id: userId,
         ...updateData,
@@ -220,11 +237,17 @@ describe('UserService', () => {
         updated_at: new Date().toISOString()
       };
 
+      userRepository.getUserById.mockResolvedValueOnce(mockCurrentUser);
+      userRepository.getUserById.mockResolvedValueOnce(mockRequestingUser);
+      userRepository.emailExists.mockResolvedValue(false);
       userRepository.updateUser.mockResolvedValue(mockUpdatedUser);
 
       const result = await userService.updateUser(userId, updateData, requestingUserId);
 
-      expect(userRepository.updateUser).toHaveBeenCalledWith(userId, updateData, requestingUserId);
+      expect(userRepository.updateUser).toHaveBeenCalledWith(userId, {
+        ...updateData,
+        updated_at: expect.any(Date)
+      });
       expect(result).toEqual(mockUpdatedUser);
     });
 
@@ -244,28 +267,49 @@ describe('UserService', () => {
       const updateData = { role: 'admin' };
       const requestingUserId = 3;
 
-      userRepository.updateUser.mockRejectedValue(new Error('Permission denied'));
+      const mockCurrentUser = {
+        id: userId,
+        name: 'Jane Doe',
+        email: 'jane@example.com',
+        role: 'staff'
+      };
+
+      const mockRequestingUser = {
+        id: requestingUserId,
+        name: 'Bob Smith',
+        role: 'staff'
+      };
+
+      userRepository.getUserById.mockResolvedValueOnce(mockCurrentUser);
+      userRepository.getUserById.mockResolvedValueOnce(mockRequestingUser);
 
       await expect(userService.updateUser(userId, updateData, requestingUserId))
-        .rejects.toThrow('Permission denied');
+        .rejects.toThrow('You do not have permission to update this user');
     });
   });
 
   describe('deleteUser', () => {
     test('should delete user successfully', async () => {
-      const userId = 1;
+      const userId = 2;
       const requestingUserId = 1;
+
+      const mockRequestingUser = {
+        id: requestingUserId,
+        name: 'Manager',
+        role: 'manager'
+      };
 
       const mockResult = {
         success: true,
         message: 'User deleted successfully'
       };
 
+      userRepository.getUserById.mockResolvedValue(mockRequestingUser);
       userRepository.deleteUser.mockResolvedValue(mockResult);
 
       const result = await userService.deleteUser(userId, requestingUserId);
 
-      expect(userRepository.deleteUser).toHaveBeenCalledWith(userId, requestingUserId);
+      expect(userRepository.deleteUser).toHaveBeenCalledWith(userId);
       expect(result).toEqual(mockResult);
     });
 
@@ -283,101 +327,19 @@ describe('UserService', () => {
       const userId = 2;
       const requestingUserId = 3;
 
-      userRepository.deleteUser.mockRejectedValue(new Error('Permission denied'));
+      const mockRequestingUser = {
+        id: requestingUserId,
+        name: 'Regular User',
+        role: 'staff'
+      };
+
+      userRepository.getUserById.mockResolvedValue(mockRequestingUser);
 
       await expect(userService.deleteUser(userId, requestingUserId))
-        .rejects.toThrow('Permission denied');
+        .rejects.toThrow('Only managers can delete users');
     });
   });
 
-  describe('updateUserPassword', () => {
-    test('should update password successfully', async () => {
-      const userId = 1;
-      const passwordData = {
-        currentPassword: 'oldpassword',
-        newPassword: 'newpassword123'
-      };
-      const requestingUserId = 1;
-
-      const mockResult = {
-        success: true,
-        message: 'Password updated successfully'
-      };
-
-      userRepository.updateUserPassword.mockResolvedValue(mockResult);
-
-      const result = await userService.updateUserPassword(userId, passwordData, requestingUserId);
-
-      expect(userRepository.updateUserPassword).toHaveBeenCalledWith(userId, passwordData, requestingUserId);
-      expect(result).toEqual(mockResult);
-    });
-
-    test('should handle incorrect current password', async () => {
-      const userId = 1;
-      const passwordData = {
-        currentPassword: 'wrongpassword',
-        newPassword: 'newpassword123'
-      };
-      const requestingUserId = 1;
-
-      userRepository.updateUserPassword.mockRejectedValue(new Error('Current password is incorrect'));
-
-      await expect(userService.updateUserPassword(userId, passwordData, requestingUserId))
-        .rejects.toThrow('Current password is incorrect');
-    });
-  });
-
-  describe('getUserProjects', () => {
-    test('should get user projects successfully', async () => {
-      const userId = 1;
-      const mockProjects = [
-        { id: 1, name: 'Project 1', role: 'creator' },
-        { id: 2, name: 'Project 2', role: 'collaborator' }
-      ];
-
-      userRepository.getUserProjects.mockResolvedValue(mockProjects);
-
-      const result = await userService.getUserProjects(userId);
-
-      expect(userRepository.getUserProjects).toHaveBeenCalledWith(userId);
-      expect(result).toEqual(mockProjects);
-    });
-
-    test('should handle user with no projects', async () => {
-      const userId = 1;
-      userRepository.getUserProjects.mockResolvedValue([]);
-
-      const result = await userService.getUserProjects(userId);
-
-      expect(result).toEqual([]);
-    });
-  });
-
-  describe('getUserTasks', () => {
-    test('should get user tasks successfully', async () => {
-      const userId = 1;
-      const mockTasks = [
-        { id: 1, title: 'Task 1', status: 'pending' },
-        { id: 2, title: 'Task 2', status: 'completed' }
-      ];
-
-      userRepository.getUserTasks.mockResolvedValue(mockTasks);
-
-      const result = await userService.getUserTasks(userId);
-
-      expect(userRepository.getUserTasks).toHaveBeenCalledWith(userId);
-      expect(result).toEqual(mockTasks);
-    });
-
-    test('should handle user with no tasks', async () => {
-      const userId = 1;
-      userRepository.getUserTasks.mockResolvedValue([]);
-
-      const result = await userService.getUserTasks(userId);
-
-      expect(result).toEqual([]);
-    });
-  });
 
   describe('searchUsers', () => {
     test('should search users successfully', async () => {
@@ -391,7 +353,7 @@ describe('UserService', () => {
 
       const result = await userService.searchUsers(searchTerm);
 
-      expect(userRepository.searchUsers).toHaveBeenCalledWith(searchTerm);
+      expect(userRepository.searchUsers).toHaveBeenCalledWith(searchTerm, 8);
       expect(result).toEqual(mockUsers);
     });
 

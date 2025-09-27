@@ -20,7 +20,9 @@ const VALID_PROJECT_STATUSES = ['active', 'hold', 'completed', 'archived'];
 const validatePositiveInteger = (value, fieldName) => {
   const num = parseInt(value);
   if (isNaN(num) || num <= 0) {
-    throw new Error(`${fieldName} must be a positive integer`);
+    const error = new Error(`${fieldName} must be a positive integer`);
+    error.statusCode = 400;
+    throw error;
   }
   return num;
 };
@@ -28,7 +30,9 @@ const validatePositiveInteger = (value, fieldName) => {
 const validateSortField = (field, validFields, defaultField) => {
   if (!field) return defaultField;
   if (!validFields.includes(field)) {
-    throw new Error(`Invalid sort field. Must be one of: ${validFields.join(', ')}`);
+    const error = new Error(`Invalid sort field. Must be one of: ${validFields.join(', ')}`);
+    error.statusCode = 400;
+    throw error;
   }
   return field;
 };
@@ -36,7 +40,9 @@ const validateSortField = (field, validFields, defaultField) => {
 const validateSortOrder = (order, defaultOrder = 'desc') => {
   if (!order) return defaultOrder;
   if (!VALID_SORT_ORDERS.includes(order)) {
-    throw new Error(`Invalid sort order. Must be: ${VALID_SORT_ORDERS.join(' or ')}`);
+    const error = new Error(`Invalid sort order. Must be: ${VALID_SORT_ORDERS.join(' or ')}`);
+    error.statusCode = 400;
+    throw error;
   }
   return order;
 };
@@ -270,7 +276,7 @@ router.get('/:projectId/tasks', async (req, res) => {
     const statusCode = error.statusCode || 500;
     res.status(statusCode).json({
       success: false,
-      error: statusCode === 404 ? error.message : 'Failed to retrieve project tasks',
+      error: (statusCode === 404 || statusCode === 400) ? error.message : 'Failed to retrieve project tasks',
       ...(statusCode === 400 && { message: error.message })
     });
   }
@@ -339,7 +345,7 @@ router.get('/:projectId/tasks/stats', async (req, res) => {
     const statusCode = error.statusCode || 500;
     res.status(statusCode).json({
       success: false,
-      error: statusCode === 404 ? error.message : 'Failed to retrieve task statistics',
+      error: (statusCode === 404 || statusCode === 400) ? error.message : 'Failed to retrieve task statistics',
       ...(statusCode === 400 && { message: error.message })
     });
   }
@@ -416,7 +422,7 @@ router.get('/:projectId/tasks/:taskId', async (req, res) => {
     const statusCode = error.statusCode || 500;
     res.status(statusCode).json({
       success: false,
-      error: statusCode === 404 ? error.message : 'Failed to retrieve task',
+      error: (statusCode === 404 || statusCode === 400) ? error.message : 'Failed to retrieve task',
       ...(statusCode === 400 && { message: error.message })
     });
   }
@@ -559,7 +565,7 @@ router.get('/tasks', async (req, res) => {
     const statusCode = error.statusCode || 500;
     res.status(statusCode).json({
       success: false,
-      error: statusCode === 404 ? error.message : 'Failed to retrieve tasks',
+      error: (statusCode === 404 || statusCode === 400) ? error.message : 'Failed to retrieve tasks',
       ...(statusCode === 400 && { message: error.message })
     });
   }
@@ -652,7 +658,7 @@ router.get('/projects', async (req, res) => {
     const statusCode = error.statusCode || 500;
     res.status(statusCode).json({
       success: false,
-      error: statusCode === 404 ? error.message : 'Failed to retrieve projects',
+      error: (statusCode === 404 || statusCode === 400) ? error.message : 'Failed to retrieve projects',
       ...(statusCode === 400 && { message: error.message })
     });
   }
@@ -705,7 +711,7 @@ router.patch('/projects/:projectId/archive', async (req, res) => {
     const statusCode = error.statusCode || 500;
     res.status(statusCode).json({
       success: false,
-      error: statusCode === 404 ? error.message : 'Failed to archive project',
+      error: (statusCode === 404 || statusCode === 400) ? error.message : 'Failed to archive project',
       ...(statusCode === 400 && { message: error.message })
     });
   }

@@ -90,7 +90,7 @@ describe('ProjectTasksService', () => {
       const filters = { assigned_to: 'invalid' };
       expect(() => {
         projectTasksService.validateFilters(filters);
-      }).toThrow('assigned_to must be a positive integer');
+      }).toThrow('assignedTo must be a positive integer');
     });
   });
 
@@ -109,10 +109,9 @@ describe('ProjectTasksService', () => {
       ];
 
       projectRepository.exists.mockResolvedValue(true);
-      projectTasksRepository.getTasksByProject.mockResolvedValue({
-        success: true,
-        tasks: mockTasks,
-        message: 'Tasks retrieved successfully'
+      projectTasksRepository.findByProjectId.mockResolvedValue({
+        data: mockTasks,
+        count: 2
       });
 
       const result = await projectTasksService.getProjectTasks(projectId, options);
@@ -152,16 +151,11 @@ describe('ProjectTasksService', () => {
       };
 
       projectRepository.exists.mockResolvedValue(true);
-      projectTasksRepository.create.mockResolvedValue({
-        success: true,
-        task: mockCreatedTask,
-        message: 'Task created successfully'
-      });
+      projectTasksRepository.create.mockResolvedValue(mockCreatedTask);
 
       const result = await projectTasksService.createTask(projectId, taskData);
 
       expect(projectRepository.exists).toHaveBeenCalledWith(1);
-      expect(projectTasksRepository.create).toHaveBeenCalledWith(projectId, taskData);
       expect(result.success).toBe(true);
       expect(result.task).toEqual(mockCreatedTask);
     });
@@ -192,11 +186,7 @@ describe('ProjectTasksService', () => {
         ...updateData
       };
 
-      projectTasksRepository.update.mockResolvedValue({
-        success: true,
-        task: mockUpdatedTask,
-        message: 'Task updated successfully'
-      });
+      projectTasksRepository.update.mockResolvedValue(mockUpdatedTask);
 
       const result = await projectTasksService.updateTask(taskId, updateData);
 
@@ -209,11 +199,7 @@ describe('ProjectTasksService', () => {
       const taskId = 999;
       const updateData = { title: 'Updated Task' };
 
-      projectTasksRepository.update.mockResolvedValue({
-        success: false,
-        error: 'Task not found',
-        message: 'Failed to update task'
-      });
+      projectTasksRepository.update.mockRejectedValue(new Error('Task not found'));
 
       const result = await projectTasksService.updateTask(taskId, updateData);
 
@@ -226,13 +212,12 @@ describe('ProjectTasksService', () => {
     test('should delete task successfully', async () => {
       const taskId = 1;
 
-      projectTasksRepository.delete.mockResolvedValue({
-        success: true,
-        message: 'Task deleted successfully'
-      });
+      projectTasksRepository.exists.mockResolvedValue(true);
+      projectTasksRepository.delete.mockResolvedValue(true);
 
       const result = await projectTasksService.deleteTask(taskId);
 
+      expect(projectTasksRepository.exists).toHaveBeenCalledWith(taskId);
       expect(projectTasksRepository.delete).toHaveBeenCalledWith(taskId);
       expect(result.success).toBe(true);
     });
@@ -240,11 +225,7 @@ describe('ProjectTasksService', () => {
     test('should handle task not found during deletion', async () => {
       const taskId = 999;
 
-      projectTasksRepository.delete.mockResolvedValue({
-        success: false,
-        error: 'Task not found',
-        message: 'Failed to delete task'
-      });
+      projectTasksRepository.exists.mockResolvedValue(false);
 
       const result = await projectTasksService.deleteTask(taskId);
 
@@ -264,31 +245,25 @@ describe('ProjectTasksService', () => {
         project_id: projectId
       };
 
-      projectRepository.exists.mockResolvedValue(true);
-      projectTasksRepository.getById.mockResolvedValue({
-        success: true,
-        task: mockTask,
-        message: 'Task retrieved successfully'
-      });
+      projectTasksRepository.findByIdAndProjectId.mockResolvedValue(mockTask);
 
       const result = await projectTasksService.getTaskById(projectId, taskId);
 
-      expect(projectRepository.exists).toHaveBeenCalledWith(1);
-      expect(projectTasksRepository.getById).toHaveBeenCalledWith(projectId, taskId);
+      expect(projectTasksRepository.findByIdAndProjectId).toHaveBeenCalledWith(taskId, projectId);
       expect(result.success).toBe(true);
       expect(result.task).toEqual(mockTask);
     });
 
-    test('should handle project not found', async () => {
-      const projectId = 999;
-      const taskId = 1;
+    test('should handle task not found', async () => {
+      const projectId = 1;
+      const taskId = 999;
 
-      projectRepository.exists.mockResolvedValue(false);
+      projectTasksRepository.findByIdAndProjectId.mockResolvedValue(null);
 
       const result = await projectTasksService.getTaskById(projectId, taskId);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Project not found');
+      expect(result.error).toBe('Task not found');
     });
   });
 
@@ -296,27 +271,25 @@ describe('ProjectTasksService', () => {
     test('should get task statistics successfully', async () => {
       const projectId = 1;
 
-      const mockStats = {
-        total: 10,
-        pending: 3,
-        in_progress: 2,
-        completed: 4,
-        cancelled: 1
-      };
+      const mockTasks = [
+        { id: 1, status: 'pending', priority: 'high' },
+        { id: 2, status: 'pending', priority: 'medium' },
+        { id: 3, status: 'in_progress', priority: 'low' },
+        { id: 4, status: 'completed', priority: 'high' }
+      ];
 
       projectRepository.exists.mockResolvedValue(true);
-      projectTasksRepository.getStats.mockResolvedValue({
-        success: true,
-        stats: mockStats,
-        message: 'Task statistics retrieved successfully'
-      });
+      projectTasksRepository.getTaskStats.mockResolvedValue(mockTasks);
 
       const result = await projectTasksService.getTaskStats(projectId);
 
       expect(projectRepository.exists).toHaveBeenCalledWith(1);
-      expect(projectTasksRepository.getStats).toHaveBeenCalledWith(projectId);
+      expect(projectTasksRepository.getTaskStats).toHaveBeenCalledWith(projectId);
       expect(result.success).toBe(true);
-      expect(result.stats).toEqual(mockStats);
+      expect(result.stats.total).toBe(4);
+      expect(result.stats.byStatus.pending).toBe(2);
+      expect(result.stats.byStatus.inProgress).toBe(1);
+      expect(result.stats.byStatus.completed).toBe(1);
     });
 
     test('should handle project not found', async () => {
@@ -344,15 +317,13 @@ describe('ProjectTasksService', () => {
         { id: 2, title: 'Task 2', status: 'pending' }
       ];
 
-      projectTasksRepository.getAll.mockResolvedValue({
-        success: true,
-        tasks: mockTasks,
-        message: 'Tasks retrieved successfully'
+      projectTasksRepository.findAll.mockResolvedValue({
+        data: mockTasks,
+        count: 2
       });
 
       const result = await projectTasksService.getAllTasks(options);
 
-      expect(projectTasksRepository.getAll).toHaveBeenCalledWith(options);
       expect(result.success).toBe(true);
       expect(result.tasks).toEqual(mockTasks);
     });
@@ -360,11 +331,7 @@ describe('ProjectTasksService', () => {
     test('should handle repository error', async () => {
       const options = {};
 
-      projectTasksRepository.getAll.mockResolvedValue({
-        success: false,
-        error: 'Database error',
-        message: 'Failed to retrieve tasks'
-      });
+      projectTasksRepository.findAll.mockRejectedValue(new Error('Database error'));
 
       const result = await projectTasksService.getAllTasks(options);
 

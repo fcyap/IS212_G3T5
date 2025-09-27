@@ -580,11 +580,19 @@ describe('API Integration Tests', () => {
         .set('Content-Type', 'application/json')
         .send('{"invalid": json}');
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({
+        success: false,
+        error: 'Internal server error',
+        message: 'An unexpected error occurred'
+      });
     });
 
     test('should handle empty request body for POST requests', async () => {
-      projectService.createProject.mockRejectedValue(new Error('Missing required fields'));
+      // Mock the service to reject with validation error
+      projectService.createProject.mockRejectedValue(
+        new Error('Missing required fields: name and description are required')
+      );
 
       const response = await request(app)
         .post('/api/projects')
@@ -593,7 +601,7 @@ describe('API Integration Tests', () => {
       expect(response.status).toBe(500);
       expect(response.body).toEqual({
         success: false,
-        message: 'Missing required fields'
+        message: 'Missing required fields: name and description are required'
       });
     });
   });

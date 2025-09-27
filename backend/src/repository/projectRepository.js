@@ -352,6 +352,66 @@ class ProjectRepository {
   }
 
   /**
+   * Add multiple users to a project with permission checking
+   * @param {number} projectId - The project ID
+   * @param {Array} userIds - Array of user IDs to add
+   * @param {number} requestingUserId - The user making the request
+   * @param {string} memberRole - The role to assign (default: 'collaborator')
+   * @returns {Object} Result of the operation
+   */
+  async addUsersToProject(projectId, userIds, requestingUserId, memberRole = 'collaborator') {
+    // Check if requesting user has permission
+    const hasPermission = await this.canUserManageMembers(projectId, requestingUserId);
+    if (!hasPermission) {
+      throw new Error('Permission denied');
+    }
+
+    // Validate user IDs exist
+    const { data: users, error: usersError } = await supabase
+      .from('users')
+      .select('id')
+      .in('id', userIds);
+
+    if (usersError) {
+      throw new Error('Invalid users');
+    }
+
+    if (users.length !== userIds.length) {
+      throw new Error('Invalid users');
+    }
+
+    // Check for existing members
+    const { data: existingMembers } = await supabase
+      .from('project_members')
+      .select('user_id')
+      .eq('project_id', projectId)
+      .in('user_id', userIds);
+
+    if (existingMembers && existingMembers.length > 0) {
+      throw new Error('Users already in project');
+    }
+
+    // Add users to project
+    const membersToAdd = userIds.map(userId => ({
+      project_id: projectId,
+      user_id: userId,
+      member_role: memberRole,
+      added_at: new Date()
+    }));
+
+    const { data, error } = await supabase
+      .from('project_members')
+      .insert(membersToAdd)
+      .select();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return { success: true, data };
+  }
+
+  /**
    * Get project members with details
    */
   async getProjectMembersWithDetails(projectId) {
@@ -470,12 +530,84 @@ class ProjectRepository {
   }
 
   /**
+   * Get projects for a specific user (both as creator and member)
+   * @param {number} userId - The user ID
+   * @returns {Array} Array of projects with user role
+   */
+  async getProjectsForUser(userId) {
+    console.log('🔍 [ProjectRepository] Getting projects for user:', userId);
+
+    const { data, error } = await supabase
+      .from('project_members')
+      .select(`
+        project_id,
+        member_role,
+        projects (
+          id,
+          name,
+          description,
+          status,
+          creator_id,
+          created_at,
+          updated_at
+        )
+      `)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('❌ [ProjectRepository] Error getting projects for user:', error);
+      throw new Error(error.message);
+    }
+
+    if (!data) {
+      return [];
+    }
+
+    return data.map(item => ({
+      ...item.projects,
+      role: item.member_role
+    }));
+  }
+
+  /**
+   * Check if a project exists
+   * @param {number} projectId - The project ID
+   * @returns {boolean} True if project exists
+   */
+  async exists(projectId) {
+    try {
+      const project = await this.getProjectById(projectId);
+      return !!project;
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Find all projects (alias for getAllProjects)
+   * @returns {Array} Array of all projects
+   */
+  async findAll() {
+    return await this.getAllProjects();
+  }
+
+  /**
    * Find a project by ID with members (alias for getProjectById)
    * @param {number} projectId - The project ID
    * @returns {Object|null} Project data with members or null if not found
    */
   async findById(projectId) {
-    return await this.getProjectById(projectId);
+    try {
+      return await this.getProjectById(projectId);
+    } catch (error) {
+      if (error.message.includes('not found')) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   /**
