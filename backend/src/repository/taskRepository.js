@@ -17,8 +17,32 @@ class TaskRepository {
   }
 
   async insert(payload) {
-    return supabase.from("tasks").insert(payload).select().single();
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert(payload)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    // Return hydrated task (with assignees objects)
+    return await this._hydrateAssigneesRow(data, 'id, name, email');
   }
+
+  // Hydrate a task row with full assignee objects
+  async _hydrateAssigneesRow(row, fields = 'id, name, email') {
+    const ids = Array.isArray(row.assigned_to) ? row.assigned_to.filter(Boolean) : [];
+    if (!ids.length) return { ...row, assignees: [] };
+
+    const { data: users, error: uerr } = await supabase
+      .from('users')
+      .select(fields)
+      .in('id', ids);
+    if (uerr) throw new Error(uerr.message);
+
+    const map = new Map(users.map(u => [u.id, u]));
+    const assignees = ids.map(id => map.get(id)).filter(Boolean);
+    return { ...row, assignees };
+  }
+
 
   async updateById(id, patch) {
     if (patch.assigned_to !== undefined) {
@@ -199,7 +223,7 @@ class TaskRepository {
 
     // Apply pagination
     if (filters.offset !== undefined && filters.limit) {
-      query = query.range(filters.offset, filters.offset +  filters.limit - 1);
+      query = query.range(filters.offset, filters.offset + filters.limit - 1);
     }
 
     const { data, error } = await query;

@@ -2,6 +2,9 @@
 
 // Lazily obtain the service whether it's CommonJS or ESM
 let _servicePromise;
+let _dynamicImport = (specifier) => import(specifier);
+function __setImporter(fn) { _dynamicImport = fn; }
+
 async function getService() {
   if (_servicePromise) return _servicePromise;
 
@@ -13,7 +16,7 @@ async function getService() {
   } catch (err) {
     if (err.code !== 'ERR_REQUIRE_ESM') throw err;
     // Fallback: ESM import
-    _servicePromise = import('../../services/tasks/taskCommentService.js')
+    _servicePromise = _dynamicImport('../../services/tasks/taskCommentService.js')
       .then(mod => mod.taskCommentService || new mod.TaskCommentService());
   }
 
@@ -37,4 +40,4 @@ async function updateComment(commentId, body) {
   return service.editComment({ id: commentId, content, userId });
 }
 
-module.exports = { listForTask, createForTask, updateComment };
+module.exports = { listForTask, createForTask, updateComment, __setImporter };
