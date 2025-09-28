@@ -14,7 +14,7 @@ export default function LoginPage() {
     e.preventDefault();
     setErr("");
     try {
-      const res = await fetch(process.env.NEXT_PUBLIC_BACKEND_URL + "/auth/supabase-login", {
+      const res = await fetch(process.env.NEXT_PUBLIC_API_URL + "/auth/supabase-login", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
