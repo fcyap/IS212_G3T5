@@ -27,8 +27,8 @@ function rowToCard(r) {
   const workflow = String(r.status || 'pending').toLowerCase();
   const normalizedAssignees =
     Array.isArray(r.assignees) ? r.assignees
-    : Array.isArray(r.assigned_to) ? r.assigned_to.map(id => ({ id }))
-    : [];
+      : Array.isArray(r.assigned_to) ? r.assigned_to.map(id => ({ id }))
+        : [];
 
   return {
     id: r.id,
@@ -43,7 +43,7 @@ function rowToCard(r) {
 }
 
 export function KanbanBoard() {
-  async function handleSaveNewTask({ title, description, dueDate, priority, tags }) {
+  async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees }) {
     try {
       const res = await fetch(`${API}/tasks`, {
         method: "POST",
@@ -55,7 +55,7 @@ export function KanbanBoard() {
           status: editorLane,
           deadline: dueDate || null,
           team_id: 1,
-          assigned_to: [],
+          assigned_to: Array.isArray(assignees) ? assignees.map(a => a.id) : [],
           tags,
         }),
       })
@@ -326,7 +326,7 @@ export function KanbanBoard() {
                 throw new Error(error || `PUT /tasks/${panelTask.id} ${res.status}`)
               }
               const row = await res.json()
-              console.log("[kanban board]",row);
+              console.log("[kanban board]", row);
               const updated = rowToCard(row)
               setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
               closePanel()
@@ -642,6 +642,48 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState([]);
 
+  // --- Assignees & user search (copied from TaskSidePanel, trimmed) ---
+  const [assignees, setAssignees] = useState([]);
+  const [userSearch, setUserSearch] = useState("");
+  const [userSearchResults, setUserSearchResults] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [userSearchDebounce, setUserSearchDebounce] = useState(null);
+
+  function addAssignee(user) {
+    if (!assignees.some((a) => a.id === user.id)) {
+      setAssignees((prev) => [...prev, user]);
+    }
+    setUserSearch("");
+    setUserSearchResults([]);
+  }
+
+  function removeAssignee(userId) {
+    setAssignees((prev) => prev.filter((a) => a.id !== userId));
+  }
+
+  function handleUserSearchInput(e) {
+    const value = e.target.value;
+    setUserSearch(value);
+    if (userSearchDebounce) clearTimeout(userSearchDebounce);
+    if (!value.trim()) {
+      setUserSearchResults([]);
+      return;
+    }
+    setLoadingUsers(true);
+    const timer = setTimeout(async () => {
+      const apiUrl = `${API}/users/search?q=${encodeURIComponent(value)}&limit=8`;
+      try {
+        const res = await fetch(apiUrl);
+        const data = await res.json();
+        setUserSearchResults(data.users || []);
+      } catch {
+        setUserSearchResults([]);
+      } finally {
+        setLoadingUsers(false);
+      }
+    }, 250);
+    setUserSearchDebounce(timer);
+  }
 
   function addTagFromInput() {
     const v = tagInput.trim();
@@ -737,6 +779,57 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
         placeholder="Type a tag and press Enter (or comma)"
         className="bg-transparent text-gray-100 border-gray-700"
       />
+      {/* Assignees */}
+      <div className="mt-3 relative">
+        <label className="block text-xs text-gray-400 mb-1">Assignees</label>
+        <input
+          type="text"
+          className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+          placeholder="Search users by name or email..."
+          value={userSearch}
+          onChange={handleUserSearchInput}
+          aria-busy={loadingUsers ? 'true' : 'false'}
+          autoComplete="off"
+        />
+        {userSearchResults.length > 0 && (
+          <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
+            {userSearchResults.map((u) => (
+              <div
+                key={u.id}
+                className="px-3 py-2 hover:bg-gray-700 cursor-pointer text-gray-100"
+                onClick={() => addAssignee(u)}
+              >
+                <span className="font-medium">{u.name}</span>
+                <span className="ml-2 text-xs text-gray-400">{u.email}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {assignees.length > 0 ? (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {assignees.map((a) => (
+              <Badge
+                key={a.id}
+                className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200 flex items-center"
+                title={a.name}
+              >
+                {a.name}
+                <button
+                  type="button"
+                  className="ml-1 text-gray-300 hover:text-white"
+                  onClick={() => removeAssignee(a.id)}
+                  aria-label={`Remove ${a.name}`}
+                >
+                  ×
+                </button>
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <span className="mt-1 block text-xs text-gray-500">No assignees</span>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         {/* Due date */}
@@ -790,6 +883,7 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
               dueDate: dueDate || undefined,
               priority,
               tags,
+              assignees
             })
           }
           disabled={!canSave}

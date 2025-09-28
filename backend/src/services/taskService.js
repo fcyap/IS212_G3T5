@@ -100,7 +100,7 @@ class TaskService {
       team_id = null,
       project_id,
       assigned_to,
-      tags
+      tags,
     } = taskData;
 
     if (!title || title.trim() === '') {
@@ -158,14 +158,11 @@ class TaskService {
     };
 
     if (taskRepository.insert) {
-      const { data, error } = await taskRepository.insert(newTaskData);
-      if (error) throw error;
-      return data;
-    } else {
-      return await taskRepository.createTask(newTaskData);
+      const created = await taskRepository.insert(newTaskData); // returns hydrated task object
+      return created;
     }
+    return await taskRepository.createTask(newTaskData);
   }
-
   /**
    * Update task - supports both approaches
    */
@@ -214,7 +211,7 @@ class TaskService {
       patch.updated_at = new Date().toISOString();
 
       if (taskRepository.updateById) {
-        const updated = await taskRepository.updateById(id, patch); 
+        const updated = await taskRepository.updateById(id, patch);
         console.log(updated)// hydrated task
         return updated;
       } else {
