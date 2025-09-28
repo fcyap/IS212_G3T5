@@ -1,6 +1,7 @@
-"use client"
+"use client";
 
 import { useState } from "react"
+import { SessionProvider, useSession } from "@/components/session-provider"
 import { SidebarNavigation } from "@/components/sidebar-navigation"
 import { ProjectHeader } from "@/components/project-header"
 import { KanbanBoard } from "@/components/kanban-board"
@@ -10,14 +11,22 @@ import { CommentBox } from "@/components/task-comment/task-comment"
 import { CommentItem } from "@/components/task-comment/task-comment-item"
 import { KanbanProvider } from "@/components/kanban-context"
 
-export default function ProjectTimelinePage() {
+function RoleBadge() {
+  const { role } = useSession() || {};
+  if (!role) return null;
+  return (
+    <span className="ml-auto text-xs px-2 py-1 rounded-full border border-white/10 bg-white/5">
+      {role.label}
+    </span>
+  );
+}
+
+function ProtectedProjectTimelinePage() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState(null)
   const [currentView, setCurrentView] = useState('home') // 'home', 'board', 'projects', etc.
 
-  const toggleSidebar = () => {
-    setIsSidebarCollapsed(!isSidebarCollapsed)
-  }
+  const toggleSidebar = () => setIsSidebarCollapsed(!isSidebarCollapsed)
 
   const handleProjectSelect = (projectId) => {
     setSelectedProjectId(projectId)
@@ -44,7 +53,12 @@ export default function ProjectTimelinePage() {
       />
       <div className={`flex-1 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? "ml-0" : "ml-0"}`}>
         <KanbanProvider>
-          {currentView !== 'projects' && !selectedProjectId && <ProjectHeader currentView={currentView} />}
+          {currentView !== 'projects' && !selectedProjectId && (
+            <div className="flex items-center">
+              <ProjectHeader currentView={currentView} />
+              <RoleBadge />
+            </div>
+          )}
           {selectedProjectId ? (
             <ProjectDetails
               projectId={selectedProjectId}
@@ -97,5 +111,13 @@ export default function ProjectTimelinePage() {
         </KanbanProvider>
       </div>
     </div>
-  )
+  );
+}
+
+export default function Page() {
+  return (
+    <SessionProvider>
+      <ProtectedProjectTimelinePage />
+    </SessionProvider>
+  );
 }

@@ -15,6 +15,7 @@
   "description": "",
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
+    "bcryptjs": "^3.0.2",
     "chalk": "^5.6.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -22,7 +23,8 @@
     "env": "^0.0.2",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
-    "morgan": "^1.10.1"
+    "morgan": "^1.10.1",
+    "postgres": "^3.4.7"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

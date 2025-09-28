@@ -5,7 +5,12 @@ const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 
-// Import routes and middleware
+// Import UAA modules
+const { sql } = require('./db');
+const { authRoutes } = require('./routes/auth');
+const { authMiddleware } = require('./middleware/auth');
+
+// Import existing routes and middleware
 const apiRoutes = require('./routes');
 const tasksRouter = require('./routes/tasks.js');
 const projectTasksRoutes = require('./routes/projectTasks');
@@ -95,20 +100,23 @@ async function initializeApp() {
   app.use(loggerMiddleware);
 
   // Core middleware
-  app.use(
-    cors({
-      origin: true,      // echoes request Origin; OK for dev
-      credentials: true, // allow cookies/credentials
-    })
-  );
+  app.use(morgan("dev"));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
-  app.use(cookieParser());
-  app.use(morgan('dev'));
+  app.use(cookieParser()); // Add cookie parser for UAA
+  app.use(
+    cors({
+      origin: process.env.FRONTEND_ORIGIN || true, // Allow all origins in development
+      credentials: true,
+    })
+  );
 
   // Build a single auth middleware that either enforces session
   // or (when AUTH_BYPASS=true) fakes req.user if no session.
   const authMw = devBypass(requireSession);
+
+  // UAA Auth endpoints (unprotected)
+  app.use('/auth', authRoutes(sql));
 
   // -------------------- Dev session routes --------------------
   app.post('/dev/session/start', (req, res) => {
@@ -140,11 +148,17 @@ async function initializeApp() {
   app.use('/api/users', authMw, userRoutes);
   app.use('/tasks', authMw, tasksRouter);
 
+  // UAA Protected route example
+  app.get('/protected/ping', authMiddleware(sql), (req, res) => {
+    res.json({ ok: true, at: new Date().toISOString(), user: res.locals.session });
+  });
+
   app.get('/', (req, res) => {
     res.json({
       message: 'Project Management Backend API - G3T5',
       version: '1.0.0',
       endpoints: {
+        auth: '/auth',
         projects: '/api/projects',
         users: '/api/users',
         tasks: '/api/tasks',
