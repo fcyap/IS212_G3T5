@@ -47,9 +47,9 @@ export function ProjectHeader({ currentView }) {
       {/* Top Bar */}
       <div className="flex items-center justify-between px-6 py-3 border-b border-gray-700">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
+          {/* <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
             <Menu className="w-4 h-4" />
-          </Button>
+          </Button> */}
 
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">

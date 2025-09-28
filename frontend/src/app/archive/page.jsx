@@ -1,7 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { TaskCard } from "@/components/task-card";
-
+import { Button } from "@/components/ui/button"
+import { ArrowLeft } from "lucide-react";
+import Link from "next/link"
 const API = process.env.NEXT_PUBLIC_API_URL;
 
 export default function ArchivePage() {
@@ -31,8 +33,18 @@ export default function ArchivePage() {
   }
 
   return (
-    <div className="p-6 bg-[#1a1a1d] min-h-screen">
-      <h1 className="text-white text-xl mb-4">Archived Tasks</h1>
+    <div className="flex-1 bg-[#1a1a1d] p-6">
+      {/* Header */}
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-white text-xl font-semibold">Archived Tasks</h1>
+
+        <Button asChild className="bg-gray-700 hover:bg-gray-600 text-white flex-shrink-0">
+          <Link href="/">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Return to Home
+          </Link>
+        </Button>
+      </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {tasks.map((t) => (
           <TaskCard
@@ -44,7 +56,7 @@ export default function ArchivePage() {
             assignees={t.assignees}
             deadline={t.deadline}
             tags={Array.isArray(t.tags) ? t.tags : []}
-            onUnarchive={() => handleUnarchive(t.id)}  
+            onUnarchive={() => handleUnarchive(t.id)}
           />
         ))}
       </div>

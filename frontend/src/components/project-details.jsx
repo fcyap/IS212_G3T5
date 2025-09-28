@@ -43,7 +43,7 @@ export function ProjectDetails({ projectId, onBack }) {
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
   const [showEditProject, setShowEditProject] = useState(false)
 
-  const currentUserId = parseInt(process.env.NEXT_PUBLIC_DEFAULT_USER_ID || 1) // Allow override via env
+  const currentUserId = parseInt(process.env.NEXT_PUBLIC_CURRENT_USER_ID || 1) // Allow override via env
   const { updateProject } = useProjects()
 
   useEffect(() => {
@@ -71,10 +71,13 @@ export function ProjectDetails({ projectId, onBack }) {
           console.log('Members data received:', membersData);
           setMembers(membersData.members)
           // Check current user's role in this specific project
+          console.log('🔍 DEBUG: currentUserId =', currentUserId, 'type:', typeof currentUserId)
+          console.log('🔍 DEBUG: membersData.members =', membersData.members)
           const currentUserMember = membersData.members.find(m => m.user_id === currentUserId)
+          console.log('🔍 DEBUG: currentUserMember =', currentUserMember)
           const isCurrentUserCreator = currentUserMember?.role === 'creator'
           const isCurrentUserProjectManager = currentUserMember?.role === 'manager'
-          console.log('Current user member:', currentUserMember, 'is creator:', isCurrentUserCreator, 'is project manager:', isCurrentUserProjectManager)
+          console.log('🔍 DEBUG: Current user member:', currentUserMember, 'is creator:', isCurrentUserCreator, 'is project manager:', isCurrentUserProjectManager)
           setUserPermissions(prev => {
             const newPermissions = {
               ...prev,
@@ -115,9 +118,20 @@ export function ProjectDetails({ projectId, onBack }) {
   }, [projectId, currentUserId])
 
   const filteredUsers = (allUsers || []).filter(user => {
+    // Filter out existing members
     const isAlreadyMember = (members || []).some(member => member.user_id === user.id);
-    console.log(`User ${user.id} (${user.name}) - Already member: ${isAlreadyMember}`);
-    return !isAlreadyMember;
+    if (isAlreadyMember) return false;
+    
+    // Apply search term filter
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase().trim();
+      const nameMatch = (user.name || '').toLowerCase().includes(searchLower);
+      const emailMatch = (user.email || '').toLowerCase().includes(searchLower);
+      return nameMatch || emailMatch;
+    }
+    
+    // If no search term, show all non-members
+    return true;
   });
 
   console.log('All users:', allUsers.map(u => ({ id: u.id, name: u.name, email: u.email })));
@@ -370,14 +384,16 @@ export function ProjectDetails({ projectId, onBack }) {
     try {
       const updatedProject = await updateProject(projectId, {
         name: formData.name,
-        description: formData.description
+        description: formData.description,
+        status: formData.status
       })
 
       // Update local state with new project data
       setProject(prev => ({
         ...prev,
         name: formData.name,
-        description: formData.description
+        description: formData.description,
+        status: formData.status
       }))
 
       setShowEditProject(false)
@@ -452,7 +468,7 @@ export function ProjectDetails({ projectId, onBack }) {
             )}
           </div>
           <div className="flex items-center gap-2">
-            {userPermissions.canManageMembers && project.status !== 'archived' && (
+            {userPermissions.isCreator && project.status !== 'archived' && (
               <Button
                 onClick={() => setShowEditProject(true)}
                 variant="outline"
@@ -990,7 +1006,8 @@ export function ProjectDetails({ projectId, onBack }) {
 function EditProjectDialog({ project, open, onClose, onSave }) {
   const [formData, setFormData] = useState({
     name: project?.name || '',
-    description: project?.description || ''
+    description: project?.description || '',
+    status: project?.status || 'active'
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -999,7 +1016,8 @@ function EditProjectDialog({ project, open, onClose, onSave }) {
     if (open && project) {
       setFormData({
         name: project.name || '',
-        description: project.description || ''
+        description: project.description || '',
+        status: project.status || 'active'
       })
     }
   }, [open, project])
@@ -1062,6 +1080,46 @@ function EditProjectDialog({ project, open, onClose, onSave }) {
               className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 resize-none"
               rows={4}
             />
+          </div>
+
+          <div>
+            <label htmlFor="status" className="block text-sm font-medium mb-2">
+              Status
+            </label>
+            <Select
+              value={formData.status}
+              onValueChange={(value) => setFormData(prev => ({ ...prev, status: value }))}
+            >
+              <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent className="!bg-gray-800 !border-gray-600 !text-white">
+                <SelectItem 
+                  value="active" 
+                  className="!text-white !hover:bg-gray-600 !focus:bg-gray-600 !data-[highlighted]:bg-gray-600 hover:!bg-gray-600 focus:!bg-gray-600"
+                >
+                  Active
+                </SelectItem>
+                <SelectItem 
+                  value="hold" 
+                  className="!text-white !hover:bg-gray-600 !focus:bg-gray-600 !data-[highlighted]:bg-gray-600 hover:!bg-gray-600 focus:!bg-gray-600"
+                >
+                  Hold
+                </SelectItem>
+                <SelectItem 
+                  value="completed" 
+                  className="!text-white !hover:bg-gray-600 !focus:bg-gray-600 !data-[highlighted]:bg-gray-600 hover:!bg-gray-600 focus:!bg-gray-600"
+                >
+                  Completed
+                </SelectItem>
+                <SelectItem 
+                  value="archived" 
+                  className="!text-white !hover:bg-gray-600 !focus:bg-gray-600 !data-[highlighted]:bg-gray-600 hover:!bg-gray-600 focus:!bg-gray-600"
+                >
+                  Archived
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex gap-2 justify-end pt-4">
