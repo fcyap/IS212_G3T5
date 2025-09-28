@@ -115,9 +115,20 @@ export function ProjectDetails({ projectId, onBack }) {
   }, [projectId, currentUserId])
 
   const filteredUsers = (allUsers || []).filter(user => {
+    // Filter out existing members
     const isAlreadyMember = (members || []).some(member => member.user_id === user.id);
-    console.log(`User ${user.id} (${user.name}) - Already member: ${isAlreadyMember}`);
-    return !isAlreadyMember;
+    if (isAlreadyMember) return false;
+    
+    // Apply search term filter
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase().trim();
+      const nameMatch = (user.name || '').toLowerCase().includes(searchLower);
+      const emailMatch = (user.email || '').toLowerCase().includes(searchLower);
+      return nameMatch || emailMatch;
+    }
+    
+    // If no search term, show all non-members
+    return true;
   });
 
   console.log('All users:', allUsers.map(u => ({ id: u.id, name: u.name, email: u.email })));
