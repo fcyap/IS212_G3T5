@@ -354,6 +354,9 @@ export function KanbanBoard() {
 
 
 function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
+    const canEdit =
+    Array.isArray(task.assignees) &&
+    task.assignees.some((a) => a.id === CurrentUser.id);
   const [title, setTitle] = useState(task.title || "");
   const [description, setDescription] = useState(task.description || "");
   const [priority, setPriority] = useState(task.priority || "Low");
@@ -371,6 +374,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
   const [userSearchDebounce, setUserSearchDebounce] = useState(null);
 
   function handleUserSearchInput(e) {
+       if (!canEdit) return;
     const value = e.target.value;
     console.log('[AssigneeSearch] (input onChange) value:', value);
     setUserSearch(value);
@@ -397,7 +401,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
     setUserSearchDebounce(timer);
   }
 
-  const canSave = title.trim().length > 0 && priority;
+const canSave = canEdit && title.trim().length > 0 && priority;
   function addTagFromInput() {
     const t = tagInput.trim();
     if (!t) return;
@@ -410,6 +414,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
   }
 
   function addAssignee(user) {
+    if (!canEdit) return;
     if (!assignees.some((a) => a.id === user.id)) {
       setAssignees((prev) => [...prev, user]);
     }
@@ -418,6 +423,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
   }
 
   function removeAssignee(userId) {
+    if (!canEdit) return;
     setAssignees((prev) => prev.filter((a) => a.id !== userId));
   }
 
@@ -458,6 +464,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="bg-transparent text-gray-100 border-gray-700"
+               disabled={!canEdit}
             />
           </div>
 
@@ -469,13 +476,14 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
               onChange={(e) => setDescription(e.target.value)}
               rows={4}
               className="bg-transparent text-gray-100 border-gray-700"
+               disabled={!canEdit}
             />
           </div>
 
           {/* Priority */}
           <div>
             <label className="block text-xs text-gray-400 mb-1">Priority</label>
-            <Select value={priority} onValueChange={setPriority}>
+            <Select value={priority} onValueChange={setPriority} disabled={!canEdit}>
               <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
                 <SelectValue placeholder="Select priority" />
               </SelectTrigger>
@@ -501,13 +509,14 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
                   >
                     {t}
                     <button
-                      type="button"
-                      className="ml-1 text-gray-300 hover:text-white"
-                      onClick={() => removeTagAt(i)}
-                      aria-label={`Remove ${t}`}
-                    >
-                      ×
-                    </button>
+  type="button"
+  className="ml-1 text-gray-300 hover:text-white disabled:opacity-50"
+  onClick={() => canEdit && removeTagAt(i)}
+  disabled={!canEdit}
+  aria-label={`Remove ${t}`}
+>
+  ×
+</button>
                   </span>
                 ))}
               </div>
@@ -527,6 +536,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
                   removeTagAt(tags.length - 1)
                 }
               }}
+               disabled={!canEdit}
               placeholder="Type a tag and press Enter (or comma)"
             />
           </div>
@@ -534,7 +544,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
           {/* Status */}
           <div>
             <label className="block text-xs text-gray-400 mb-1">Status</label>
-            <Select value={status} onValueChange={setStatus}>
+            <Select value={status} onValueChange={setStatus} disabled={!canEdit}>
               <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
@@ -558,8 +568,9 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
                 onChange={handleUserSearchInput}
                 aria-busy={loadingUsers ? 'true' : 'false'}
                 autoComplete="off"
+                disabled={!canEdit}
               />
-              {userSearchResults.length > 0 && (
+              {canEdit && userSearchResults.length > 0 && (
                 <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
                   {userSearchResults.map((u) => (
                     <div
@@ -607,6 +618,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
               value={deadline || ""}
               onChange={(e) => setDeadline(e.target.value)}
               className="bg-transparent text-gray-100 border-gray-700"
+              disabled={!canEdit}
             />
           </div>
         </div>
@@ -626,7 +638,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
           <Button
             onClick={handleDelete}
             className="bg-red-400 hover:bg-red-700 text-white ml-auto"
-            type="button">
+            type="button" disabled={!canEdit}>
             <Trash className="w-4 h-4 mr-1" /> Delete
           </Button>
         </div>
@@ -651,6 +663,7 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
 
 
   function addTagFromInput() {
+    if (!canEdit) return;
     const v = tagInput.trim();
     if (!v) return;
     if (!tags.includes(v)) setTags((prev) => [...prev, v]);
@@ -658,10 +671,12 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
   }
 
   function removeTag(index) {
+    if (!canEdit) return;
     setTags((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function handleDelete() {
+    if (!canEdit) return;
     if (!taskId) {
       onCancel?.()
       return
