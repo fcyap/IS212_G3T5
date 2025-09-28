@@ -43,7 +43,7 @@ export function ProjectDetails({ projectId, onBack }) {
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
   const [showEditProject, setShowEditProject] = useState(false)
 
-  const currentUserId = parseInt(process.env.NEXT_PUBLIC_DEFAULT_USER_ID || 1) // Allow override via env
+  const currentUserId = parseInt(process.env.NEXT_PUBLIC_CURRENT_USER_ID || 1) // Allow override via env
   const { updateProject } = useProjects()
 
   useEffect(() => {
@@ -71,10 +71,13 @@ export function ProjectDetails({ projectId, onBack }) {
           console.log('Members data received:', membersData);
           setMembers(membersData.members)
           // Check current user's role in this specific project
+          console.log('🔍 DEBUG: currentUserId =', currentUserId, 'type:', typeof currentUserId)
+          console.log('🔍 DEBUG: membersData.members =', membersData.members)
           const currentUserMember = membersData.members.find(m => m.user_id === currentUserId)
+          console.log('🔍 DEBUG: currentUserMember =', currentUserMember)
           const isCurrentUserCreator = currentUserMember?.role === 'creator'
           const isCurrentUserProjectManager = currentUserMember?.role === 'manager'
-          console.log('Current user member:', currentUserMember, 'is creator:', isCurrentUserCreator, 'is project manager:', isCurrentUserProjectManager)
+          console.log('🔍 DEBUG: Current user member:', currentUserMember, 'is creator:', isCurrentUserCreator, 'is project manager:', isCurrentUserProjectManager)
           setUserPermissions(prev => {
             const newPermissions = {
               ...prev,
@@ -465,7 +468,7 @@ export function ProjectDetails({ projectId, onBack }) {
             )}
           </div>
           <div className="flex items-center gap-2">
-            {userPermissions.canManageMembers && project.status !== 'archived' && (
+            {userPermissions.isCreator && project.status !== 'archived' && (
               <Button
                 onClick={() => setShowEditProject(true)}
                 variant="outline"
