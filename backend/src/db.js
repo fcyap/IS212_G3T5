@@ -9,12 +9,12 @@ if (!process.env.DATABASE_URL) {
 const sql = postgres(process.env.DATABASE_URL, {
   ssl: 'require',
   max: 10,
-  hostname: 'db.skitbnwrifrpzlgjmqml.supabase.co',
-  // Add this line:
-  fetch_types: false, // optional optimization
-  host: 'db.skitbnwrifrpzlgjmqml.supabase.co',
-  // Force Node DNS to prefer IPv4
-  connection: { family: 4 }
+  fetch_types: false,
+  connect_timeout: 30, // 30 seconds timeout
+  idle_timeout: 0,
+  transform: {
+    undefined: null
+  }
 });
 
 module.exports = { sql };

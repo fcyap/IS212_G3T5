@@ -1,28 +1,35 @@
 /*path: backend/src/auth.roles*/
 const getEffectiveRole = async (sql, userId) => {
-  const [{ exists: isAdmin }] = await sql/*sql*/`
-    select exists(
-      select 1 from system_roles_legacy
-      where user_id = ${userId} and role = 'hr_admin'
-    ) as exists
-  `;
+  try {
+    // Get user role from the users table directly
+    const users = await sql/*sql*/`
+      select role from public.users
+      where id = ${userId}
+      limit 1
+    `;
+    
+    const user = users[0];
+    if (!user) {
+      return { label: 'Staff', level: 1 };
+    }
 
-  if (isAdmin) return { label: 'HR/Admin', level: 3 };
-
-  const [{ count: mgrCount }] = await sql/*sql*/`
-    select count(*)::int from department_roles_legacy
-    where user_id = ${userId} and role = 'manager'
-  `;
-  if (mgrCount > 0) return { label: 'Manager', level: 2 };
-
-  const [{ count: staffCount }] = await sql/*sql*/`
-    select count(*)::int from department_roles_legacy
-    where user_id = ${userId} and role = 'staff'
-  `;
-  if (staffCount > 0) return { label: 'Staff', level: 1 };
-
-  // Fallback: user exists but has no explicit dept role (still can see own tasks via task_members_legacy)
-  return { label: 'Staff', level: 1 };
+    const role = user.role || 'staff';
+    
+    // Map database roles to display roles
+    switch (role.toLowerCase()) {
+      case 'admin':
+        return { label: 'Admin', level: 3 };
+      case 'manager':
+        return { label: 'Manager', level: 2 };
+      case 'staff':
+      default:
+        return { label: 'Staff', level: 1 };
+    }
+  } catch (error) {
+    console.error('Error getting user role:', error);
+    // Fallback to staff role if there's an error
+    return { label: 'Staff', level: 1 };
+  }
 };
 
 module.exports = { getEffectiveRole };
