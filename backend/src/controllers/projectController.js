@@ -5,6 +5,33 @@ const projectService = require('../services/projectService');
  * This layer only deals with request validation and response formatting
  */
 
+/**
+ * Create a new project
+ */
+const createProject = async (req, res) => {
+  try {
+    const { name, description, user_ids, creator_id } = req.body;
+
+    const projectData = {
+      name,
+      description,
+      user_ids: user_ids || [],
+      creator_id
+    };
+
+    const result = await projectService.createProject(projectData);
+
+    if (result.success) {
+      res.status(201).json(result);
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (err) {
+    console.error('Error in createProject:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 const getAllProjects = async (req, res) => {
   try {
     // Input validation
@@ -168,10 +195,49 @@ const removeProjectMember = async (req, res) => {
   }
 };
 
+const archiveProject = async (req, res) => {
+  try {
+    // Input validation
+    const { projectId } = req.params;
+    const requestingUserId = req.user?.id || 1;
+
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ success: false, message: 'Valid project ID is required' });
+    }
+
+    if (!requestingUserId) {
+      return res.status(400).json({ success: false, message: 'Requesting user ID is required' });
+    }
+
+    // Call service layer
+    const archivedProject = await projectService.archiveProject(
+      parseInt(projectId),
+      requestingUserId
+    );
+
+    // Format response
+    res.json({
+      success: true,
+      project: archivedProject,
+      message: 'Project and all its tasks have been archived successfully'
+    });
+  } catch (err) {
+    console.error('Error in archiveProject:', err);
+    if (err.message.includes('Only managers') || err.message.includes('not found')) {
+      const statusCode = err.message.includes('not found') ? 404 : 403;
+      res.status(statusCode).json({ success: false, message: err.message });
+    } else {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+};
+
 module.exports = {
+  createProject,
   getAllProjects,
   getProjectById,
   getProjectMembers,
   addProjectMembers,
-  removeProjectMember
+  removeProjectMember,
+  archiveProject
 };

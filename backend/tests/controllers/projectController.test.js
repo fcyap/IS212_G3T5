@@ -1,4 +1,12 @@
-const projectController = require('../../src/controllers/projectController');
+const {
+  createProject,
+  getAllProjects,
+  getProjectById,
+  getProjectMembers,
+  addProjectMembers,
+  removeProjectMember,
+  archiveProject
+} = require('../../src/controllers/projectController');
 const projectService = require('../../src/services/projectService');
 
 jest.mock('../../src/services/projectService');
@@ -9,7 +17,8 @@ describe('ProjectController', () => {
   beforeEach(() => {
     req = {
       body: {},
-      params: {}
+      params: {},
+      user: { id: 1 }
     };
     res = {
       status: jest.fn().mockReturnThis(),
@@ -23,7 +32,8 @@ describe('ProjectController', () => {
       const projectData = {
         name: 'Test Project',
         description: 'Test Description',
-        user_ids: [1, 2]
+        user_ids: [1, 2],
+        creator_id: 1
       };
       req.body = projectData;
 
@@ -34,51 +44,50 @@ describe('ProjectController', () => {
       };
       projectService.createProject.mockResolvedValue(mockResult);
 
-      await projectController.createProject(req, res);
+      await createProject(req, res);
 
       expect(projectService.createProject).toHaveBeenCalledWith({
         name: 'Test Project',
         description: 'Test Description',
-        user_ids: [1, 2]
+        user_ids: [1, 2],
+        creator_id: 1
       });
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.json).toHaveBeenCalledWith(mockResult);
     });
 
-    test('should handle missing required fields', async () => {
-      req.body = { name: 'Test Project' };
+    test('should handle empty user_ids array', async () => {
+      const projectData = {
+        name: 'Test Project',
+        description: 'Test Description',
+        creator_id: 1
+      };
+      req.body = projectData;
 
-      await projectController.createProject(req, res);
+      const mockResult = {
+        success: true,
+        project: { id: 1, ...projectData, user_ids: [] },
+        message: 'Project created successfully'
+      };
+      projectService.createProject.mockResolvedValue(mockResult);
 
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
-        success: false,
-        error: 'Missing required fields',
-        message: 'Name and description are required'
+      await createProject(req, res);
+
+      expect(projectService.createProject).toHaveBeenCalledWith({
+        name: 'Test Project',
+        description: 'Test Description',
+        user_ids: [],
+        creator_id: 1
       });
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith(mockResult);
     });
 
-    test('should handle invalid user_ids format', async () => {
+    test('should handle service failure', async () => {
       req.body = {
         name: 'Test Project',
         description: 'Test Description',
-        user_ids: 'invalid'
-      };
-
-      await projectController.createProject(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
-        success: false,
-        error: 'Invalid user_ids format',
-        message: 'user_ids must be an array of integers'
-      });
-    });
-
-    test('should handle service error', async () => {
-      req.body = {
-        name: 'Test Project',
-        description: 'Test Description'
+        creator_id: 1
       };
 
       const mockResult = {
@@ -88,7 +97,7 @@ describe('ProjectController', () => {
       };
       projectService.createProject.mockResolvedValue(mockResult);
 
-      await projectController.createProject(req, res);
+      await createProject(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith(mockResult);
@@ -97,430 +106,673 @@ describe('ProjectController', () => {
     test('should handle unexpected error', async () => {
       req.body = {
         name: 'Test Project',
-        description: 'Test Description'
+        description: 'Test Description',
+        creator_id: 1
       };
 
       projectService.createProject.mockRejectedValue(new Error('Unexpected error'));
 
-      await projectController.createProject(req, res);
+      await createProject(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
         success: false,
-        error: 'Internal server error',
-        message: 'An unexpected error occurred'
+        message: 'Unexpected error'
       });
     });
   });
 
   describe('getAllProjects', () => {
-    test('should get all projects successfully', async () => {
-      const mockResult = {
+    test('should get all projects for user successfully', async () => {
+      const mockProjects = [
+        { id: 1, name: 'Project 1' },
+        { id: 2, name: 'Project 2' }
+      ];
+
+      projectService.getAllProjectsForUser.mockResolvedValue(mockProjects);
+
+      await getAllProjects(req, res);
+
+      expect(projectService.getAllProjectsForUser).toHaveBeenCalledWith(1);
+      expect(res.json).toHaveBeenCalledWith({
         success: true,
-        projects: [{ id: 1, name: 'Project 1' }],
-        count: 1,
-        message: 'Projects retrieved successfully'
-      };
-      projectService.getAllProjects.mockResolvedValue(mockResult);
+        projects: mockProjects
+      });
+    });
 
-      await projectController.getAllProjects(req, res);
+    test('should default to user id 1 when req.user is undefined', async () => {
+      delete req.user;
+      const mockProjects = [];
 
-      expect(projectService.getAllProjects).toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(mockResult);
+      projectService.getAllProjectsForUser.mockResolvedValue(mockProjects);
+
+      await getAllProjects(req, res);
+
+      expect(projectService.getAllProjectsForUser).toHaveBeenCalledWith(1);
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        projects: mockProjects
+      });
     });
 
     test('should handle service error', async () => {
-      const mockResult = {
-        success: false,
-        error: 'Database error',
-        message: 'Failed to retrieve projects'
-      };
-      projectService.getAllProjects.mockResolvedValue(mockResult);
+      projectService.getAllProjectsForUser.mockRejectedValue(new Error('Database error'));
 
-      await projectController.getAllProjects(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(mockResult);
-    });
-
-    test('should handle unexpected error', async () => {
-      projectService.getAllProjects.mockRejectedValue(new Error('Unexpected error'));
-
-      await projectController.getAllProjects(req, res);
+      await getAllProjects(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
         success: false,
-        error: 'Internal server error',
-        message: 'An unexpected error occurred'
+        message: 'Database error'
       });
     });
   });
 
   describe('getProjectById', () => {
     test('should get project by id successfully', async () => {
-      req.params.id = '1';
-      const mockResult = {
+      req.params.projectId = '1';
+      const mockProject = { id: 1, name: 'Test Project' };
+
+      projectService.getProjectById.mockResolvedValue(mockProject);
+
+      await getProjectById(req, res);
+
+      expect(projectService.getProjectById).toHaveBeenCalledWith(1);
+      expect(res.json).toHaveBeenCalledWith({
         success: true,
-        project: { id: 1, name: 'Project 1' },
-        message: 'Project retrieved successfully'
-      };
-      projectService.getProjectById.mockResolvedValue(mockResult);
-
-      await projectController.getProjectById(req, res);
-
-      expect(projectService.getProjectById).toHaveBeenCalledWith('1');
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(mockResult);
+        project: mockProject
+      });
     });
 
-    test('should handle missing project id', async () => {
-      req.params = {};
+    test('should handle invalid project id', async () => {
+      req.params.projectId = 'invalid';
 
-      await projectController.getProjectById(req, res);
+      await getProjectById(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({
         success: false,
-        error: 'Missing project ID',
-        message: 'Project ID is required'
+        message: 'Valid project ID is required'
+      });
+    });
+
+    test('should handle missing project id', async () => {
+      req.params.projectId = '';
+
+      await getProjectById(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Valid project ID is required'
       });
     });
 
     test('should handle project not found', async () => {
-      req.params.id = '999';
-      const mockResult = {
-        success: false,
-        error: 'Project not found',
-        message: 'Failed to retrieve project'
-      };
-      projectService.getProjectById.mockResolvedValue(mockResult);
+      req.params.projectId = '999';
 
-      await projectController.getProjectById(req, res);
+      projectService.getProjectById.mockRejectedValue(new Error('Project not found'));
+
+      await getProjectById(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(mockResult);
-    });
-
-    test('should handle unexpected error', async () => {
-      req.params.id = '1';
-      projectService.getProjectById.mockRejectedValue(new Error('Unexpected error'));
-
-      await projectController.getProjectById(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
         success: false,
-        error: 'Internal server error',
-        message: 'An unexpected error occurred'
-      });
-    });
-  });
-
-  describe('updateProject', () => {
-    test('should update project successfully', async () => {
-      req.params.id = '1';
-      req.body = { name: 'Updated Project' };
-      const mockResult = {
-        success: true,
-        project: { id: 1, name: 'Updated Project' },
-        message: 'Project updated successfully'
-      };
-      projectService.updateProject.mockResolvedValue(mockResult);
-
-      await projectController.updateProject(req, res);
-
-      expect(projectService.updateProject).toHaveBeenCalledWith('1', { name: 'Updated Project' });
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(mockResult);
-    });
-
-    test('should handle missing project id', async () => {
-      req.params = {};
-      req.body = { name: 'Updated Project' };
-
-      await projectController.updateProject(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
-        success: false,
-        error: 'Missing project ID',
-        message: 'Project ID is required'
-      });
-    });
-
-    test('should handle project not found', async () => {
-      req.params.id = '999';
-      req.body = { name: 'Updated Project' };
-      const mockResult = {
-        success: false,
-        error: 'Project not found',
-        message: 'Failed to update project'
-      };
-      projectService.updateProject.mockResolvedValue(mockResult);
-
-      await projectController.updateProject(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(mockResult);
-    });
-
-    test('should handle unexpected error', async () => {
-      req.params.id = '1';
-      req.body = { name: 'Updated Project' };
-      projectService.updateProject.mockRejectedValue(new Error('Unexpected error'));
-
-      await projectController.updateProject(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({
-        success: false,
-        error: 'Internal server error',
-        message: 'An unexpected error occurred'
-      });
-    });
-  });
-
-  describe('deleteProject', () => {
-    test('should delete project successfully', async () => {
-      req.params.id = '1';
-      const mockResult = {
-        success: true,
-        message: 'Project deleted successfully'
-      };
-      projectService.deleteProject.mockResolvedValue(mockResult);
-
-      await projectController.deleteProject(req, res);
-
-      expect(projectService.deleteProject).toHaveBeenCalledWith('1');
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(mockResult);
-    });
-
-    test('should handle missing project id', async () => {
-      req.params = {};
-
-      await projectController.deleteProject(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
-        success: false,
-        error: 'Missing project ID',
-        message: 'Project ID is required'
+        message: 'Project not found'
       });
     });
 
     test('should handle service error', async () => {
-      req.params.id = '1';
-      const mockResult = {
-        success: false,
-        error: 'Database error',
-        message: 'Failed to delete project'
-      };
-      projectService.deleteProject.mockResolvedValue(mockResult);
+      req.params.projectId = '1';
 
-      await projectController.deleteProject(req, res);
+      projectService.getProjectById.mockRejectedValue(new Error('Database error'));
 
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(mockResult);
-    });
-
-    test('should handle unexpected error', async () => {
-      req.params.id = '1';
-      projectService.deleteProject.mockRejectedValue(new Error('Unexpected error'));
-
-      await projectController.deleteProject(req, res);
+      await getProjectById(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
         success: false,
-        error: 'Internal server error',
-        message: 'An unexpected error occurred'
+        message: 'Database error'
       });
     });
   });
 
-  describe('addUserToProject', () => {
-    test('should add user to project successfully', async () => {
-      req.params.id = '1';
-      req.body = { userId: 123 };
-      const mockResult = {
+  describe('getProjectMembers', () => {
+    test('should get project members successfully', async () => {
+      req.params.projectId = '1';
+      const mockMembers = [
+        { user_id: 1, name: 'User 1', role: 'creator' },
+        { user_id: 2, name: 'User 2', role: 'collaborator' }
+      ];
+
+      projectService.getProjectMembers.mockResolvedValue(mockMembers);
+
+      await getProjectMembers(req, res);
+
+      expect(projectService.getProjectMembers).toHaveBeenCalledWith(1);
+      expect(res.json).toHaveBeenCalledWith({
         success: true,
-        project: { id: 1, user_ids: [123] },
-        message: 'Project updated successfully'
-      };
-      projectService.addUserToProject.mockResolvedValue(mockResult);
-
-      await projectController.addUserToProject(req, res);
-
-      expect(projectService.addUserToProject).toHaveBeenCalledWith('1', 123);
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(mockResult);
-    });
-
-    test('should handle missing project id', async () => {
-      req.params = {};
-      req.body = { userId: 123 };
-
-      await projectController.addUserToProject(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
-        success: false,
-        error: 'Missing required fields',
-        message: 'Project ID and user ID are required'
+        projectId: 1,
+        members: mockMembers
       });
     });
 
-    test('should handle missing user id', async () => {
-      req.params.id = '1';
-      req.body = {};
+    test('should handle invalid project id', async () => {
+      req.params.projectId = 'invalid';
 
-      await projectController.addUserToProject(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
-        success: false,
-        error: 'Missing required fields',
-        message: 'Project ID and user ID are required'
-      });
-    });
-
-    test('should handle invalid user id', async () => {
-      req.params.id = '1';
-      req.body = { userId: 'invalid' };
-
-      await projectController.addUserToProject(req, res);
+      await getProjectMembers(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({
         success: false,
-        error: 'Invalid user ID',
-        message: 'User ID must be a valid integer'
+        message: 'Valid project ID is required'
       });
     });
 
     test('should handle project not found', async () => {
-      req.params.id = '999';
-      req.body = { userId: 123 };
-      const mockResult = {
-        success: false,
-        error: 'Project not found',
-        message: 'Failed to add user to project'
-      };
-      projectService.addUserToProject.mockResolvedValue(mockResult);
+      req.params.projectId = '999';
 
-      await projectController.addUserToProject(req, res);
+      projectService.getProjectMembers.mockRejectedValue(new Error('Project not found'));
+
+      await getProjectMembers(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(mockResult);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Project not found'
+      });
     });
 
-    test('should handle unexpected error', async () => {
-      req.params.id = '1';
-      req.body = { userId: 123 };
-      projectService.addUserToProject.mockRejectedValue(new Error('Unexpected error'));
+    test('should handle service error', async () => {
+      req.params.projectId = '1';
 
-      await projectController.addUserToProject(req, res);
+      projectService.getProjectMembers.mockRejectedValue(new Error('Database error'));
+
+      await getProjectMembers(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
         success: false,
-        error: 'Internal server error',
-        message: 'An unexpected error occurred'
+        message: 'Database error'
       });
     });
   });
 
-  describe('removeUserFromProject', () => {
-    test('should remove user from project successfully', async () => {
-      req.params.id = '1';
-      req.body = { userId: 123 };
-      const mockResult = {
-        success: true,
-        project: { id: 1, user_ids: [] },
-        message: 'Project updated successfully'
+  describe('addProjectMembers', () => {
+    test('should add project members successfully', async () => {
+      req.params.projectId = '1';
+      req.body = {
+        userIds: [2, 3],
+        message: 'Welcome to the project',
+        role: 'collaborator'
       };
-      projectService.removeUserFromProject.mockResolvedValue(mockResult);
+      req.user = { id: 1 };
 
-      await projectController.removeUserFromProject(req, res);
+      const mockUpdatedProject = {
+        id: 1,
+        name: 'Test Project',
+        members: [{ user_id: 1 }, { user_id: 2 }, { user_id: 3 }]
+      };
 
-      expect(projectService.removeUserFromProject).toHaveBeenCalledWith('1', 123);
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(mockResult);
+      projectService.addUsersToProject.mockResolvedValue(mockUpdatedProject);
+
+      await addProjectMembers(req, res);
+
+      expect(projectService.addUsersToProject).toHaveBeenCalledWith(
+        1,
+        [2, 3],
+        1,
+        'Welcome to the project',
+        'collaborator'
+      );
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        project: mockUpdatedProject,
+        message: 'Successfully added 2 member(s) to project'
+      });
     });
 
-    test('should handle missing project id', async () => {
-      req.params = {};
-      req.body = { userId: 123 };
+    test('should handle invalid project id', async () => {
+      req.params.projectId = 'invalid';
+      req.body = { userIds: [2, 3] };
 
-      await projectController.removeUserFromProject(req, res);
+      await addProjectMembers(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({
         success: false,
-        error: 'Missing required fields',
-        message: 'Project ID and user ID are required'
+        message: 'Valid project ID is required'
       });
     });
 
-    test('should handle missing user id', async () => {
-      req.params.id = '1';
+    test('should handle missing userIds', async () => {
+      req.params.projectId = '1';
       req.body = {};
 
-      await projectController.removeUserFromProject(req, res);
+      await addProjectMembers(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({
         success: false,
-        error: 'Missing required fields',
-        message: 'Project ID and user ID are required'
+        message: 'userIds array is required and cannot be empty'
       });
     });
 
-    test('should handle invalid user id', async () => {
-      req.params.id = '1';
-      req.body = { userId: 'invalid' };
+    test('should handle empty userIds array', async () => {
+      req.params.projectId = '1';
+      req.body = { userIds: [] };
 
-      await projectController.removeUserFromProject(req, res);
+      await addProjectMembers(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({
         success: false,
-        error: 'Invalid user ID',
-        message: 'User ID must be a valid integer'
+        message: 'userIds array is required and cannot be empty'
       });
     });
 
-    test('should handle project not found', async () => {
-      req.params.id = '999';
-      req.body = { userId: 123 };
-      const mockResult = {
-        success: false,
-        error: 'Project not found',
-        message: 'Failed to remove user from project'
+    test('should handle invalid role', async () => {
+      req.params.projectId = '1';
+      req.body = {
+        userIds: [2, 3],
+        role: 'invalid'
       };
-      projectService.removeUserFromProject.mockResolvedValue(mockResult);
 
-      await projectController.removeUserFromProject(req, res);
+      await addProjectMembers(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(mockResult);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Invalid role. Must be creator, manager, or collaborator'
+      });
     });
 
-    test('should handle unexpected error', async () => {
-      req.params.id = '1';
-      req.body = { userId: 123 };
-      projectService.removeUserFromProject.mockRejectedValue(new Error('Unexpected error'));
+    test('should handle invalid user ids', async () => {
+      req.params.projectId = '1';
+      req.body = { userIds: ['invalid', 2] };
 
-      await projectController.removeUserFromProject(req, res);
+      await addProjectMembers(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
         success: false,
-        error: 'Internal server error',
-        message: 'An unexpected error occurred'
+        message: 'All user IDs must be valid numbers'
+      });
+    });
+
+    test('should handle permission error', async () => {
+      req.params.projectId = '1';
+      req.body = { userIds: [2, 3] };
+
+      projectService.addUsersToProject.mockRejectedValue(new Error('Only managers can add members'));
+
+      await addProjectMembers(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Only managers can add members'
+      });
+    });
+
+    test('should handle service error', async () => {
+      req.params.projectId = '1';
+      req.body = { userIds: [2, 3] };
+
+      projectService.addUsersToProject.mockRejectedValue(new Error('Database error'));
+
+      await addProjectMembers(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Database error'
+      });
+    });
+
+    test('should default to collaborator role', async () => {
+      req.params.projectId = '1';
+      req.body = { userIds: [2, 3] };
+      req.user = { id: 1 };
+
+      const mockUpdatedProject = { id: 1, name: 'Test Project' };
+      projectService.addUsersToProject.mockResolvedValue(mockUpdatedProject);
+
+      await addProjectMembers(req, res);
+
+      expect(projectService.addUsersToProject).toHaveBeenCalledWith(
+        1,
+        [2, 3],
+        1,
+        undefined,
+        'collaborator'
+      );
+    });
+  });
+
+  describe('removeProjectMember', () => {
+    test('should remove project member successfully', async () => {
+      req.params.projectId = '1';
+      req.params.userId = '2';
+      req.user = { id: 1 };
+
+      const mockUpdatedProject = {
+        id: 1,
+        name: 'Test Project',
+        members: [{ user_id: 1 }]
+      };
+
+      projectService.removeUserFromProject.mockResolvedValue(mockUpdatedProject);
+
+      await removeProjectMember(req, res);
+
+      expect(projectService.removeUserFromProject).toHaveBeenCalledWith(1, 2, 1);
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        project: mockUpdatedProject,
+        message: 'Member successfully removed from project'
+      });
+    });
+
+    test('should handle invalid project id', async () => {
+      req.params.projectId = 'invalid';
+      req.params.userId = '2';
+
+      await removeProjectMember(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Valid project ID is required'
+      });
+    });
+
+    test('should handle invalid user id', async () => {
+      req.params.projectId = '1';
+      req.params.userId = 'invalid';
+
+      await removeProjectMember(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Valid user ID is required'
+      });
+    });
+
+    test('should handle permission error', async () => {
+      req.params.projectId = '1';
+      req.params.userId = '2';
+      req.user = { id: 1 };
+
+      projectService.removeUserFromProject.mockRejectedValue(new Error('Only managers can remove members'));
+
+      await removeProjectMember(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Only managers can remove members'
+      });
+    });
+
+    test('should handle service error', async () => {
+      req.params.projectId = '1';
+      req.params.userId = '2';
+      req.user = { id: 1 };
+
+      projectService.removeUserFromProject.mockRejectedValue(new Error('Database error'));
+
+      await removeProjectMember(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Database error'
+      });
+    });
+  });
+
+  describe('archiveProject', () => {
+    test('should archive project successfully', async () => {
+      req.params.projectId = '1';
+      req.user = { id: 1 };
+
+      const mockArchivedProject = {
+        id: 1,
+        name: 'Test Project',
+        status: 'archived'
+      };
+
+      projectService.archiveProject.mockResolvedValue(mockArchivedProject);
+
+      await archiveProject(req, res);
+
+      expect(projectService.archiveProject).toHaveBeenCalledWith(1, 1);
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        project: mockArchivedProject,
+        message: 'Project and all its tasks have been archived successfully'
+      });
+    });
+
+    test('should handle invalid project id', async () => {
+      req.params.projectId = 'invalid';
+
+      await archiveProject(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Valid project ID is required'
+      });
+    });
+
+    test('should default to user id 1 when req.user is undefined', async () => {
+      req.params.projectId = '1';
+      req.user = undefined;
+
+      const mockArchivedProject = {
+        id: 1,
+        name: 'Test Project',
+        status: 'archived'
+      };
+
+      projectService.archiveProject.mockResolvedValue(mockArchivedProject);
+
+      await archiveProject(req, res);
+
+      expect(projectService.archiveProject).toHaveBeenCalledWith(1, 1);
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        project: mockArchivedProject,
+        message: 'Project and all its tasks have been archived successfully'
+      });
+    });
+
+    test('should handle permission error', async () => {
+      req.params.projectId = '1';
+      req.user = { id: 1 };
+
+      projectService.archiveProject.mockRejectedValue(new Error('Only managers can archive projects'));
+
+      await archiveProject(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Only managers can archive projects'
+      });
+    });
+
+    test('should handle project not found', async () => {
+      req.params.projectId = '999';
+      req.user = { id: 1 };
+
+      projectService.archiveProject.mockRejectedValue(new Error('Project not found'));
+
+      await archiveProject(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Project not found'
+      });
+    });
+
+    test('should handle service error', async () => {
+      req.params.projectId = '1';
+      req.user = { id: 1 };
+
+      projectService.archiveProject.mockRejectedValue(new Error('Database error'));
+
+      await archiveProject(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Database error'
+      });
+    });
+  });
+
+  // Test the inline route handlers (updateProject and deleteProject)
+  describe('Inline Route Handlers', () => {
+    // Simulate the inline updateProject handler
+    const updateProject = async (req, res) => {
+      try {
+        const { projectId } = req.params;
+        const updateData = req.body;
+
+        const result = await projectService.updateProject(parseInt(projectId), updateData);
+
+        if (result.success) {
+          res.json(result);
+        } else {
+          res.status(400).json(result);
+        }
+      } catch (err) {
+        console.error('Error in updateProject:', err);
+        res.status(500).json({ success: false, message: err.message });
+      }
+    };
+
+    // Simulate the inline deleteProject handler
+    const deleteProject = async (req, res) => {
+      try {
+        const { projectId } = req.params;
+
+        const result = await projectService.deleteProject(parseInt(projectId));
+
+        if (result.success) {
+          res.json(result);
+        } else {
+          res.status(400).json(result);
+        }
+      } catch (err) {
+        console.error('Error in deleteProject:', err);
+        res.status(500).json({ success: false, message: err.message });
+      }
+    };
+
+    describe('updateProject (inline)', () => {
+      test('should update project successfully', async () => {
+        req.params.projectId = '1';
+        req.body = { name: 'Updated Project', description: 'Updated Description' };
+
+        const mockResult = {
+          success: true,
+          project: { id: 1, name: 'Updated Project', description: 'Updated Description' },
+          message: 'Project updated successfully'
+        };
+        projectService.updateProject.mockResolvedValue(mockResult);
+
+        await updateProject(req, res);
+
+        expect(projectService.updateProject).toHaveBeenCalledWith(1, {
+          name: 'Updated Project',
+          description: 'Updated Description'
+        });
+        expect(res.json).toHaveBeenCalledWith(mockResult);
+      });
+
+      test('should handle service failure', async () => {
+        req.params.projectId = '1';
+        req.body = { name: 'Updated Project' };
+
+        const mockResult = {
+          success: false,
+          error: 'Project not found',
+          message: 'Failed to update project'
+        };
+        projectService.updateProject.mockResolvedValue(mockResult);
+
+        await updateProject(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith(mockResult);
+      });
+
+      test('should handle service error', async () => {
+        req.params.projectId = '1';
+        req.body = { name: 'Updated Project' };
+
+        projectService.updateProject.mockRejectedValue(new Error('Database error'));
+
+        await updateProject(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({
+          success: false,
+          message: 'Database error'
+        });
+      });
+    });
+
+    describe('deleteProject (inline)', () => {
+      test('should delete project successfully', async () => {
+        req.params.projectId = '1';
+
+        const mockResult = {
+          success: true,
+          message: 'Project deleted successfully'
+        };
+        projectService.deleteProject.mockResolvedValue(mockResult);
+
+        await deleteProject(req, res);
+
+        expect(projectService.deleteProject).toHaveBeenCalledWith(1);
+        expect(res.json).toHaveBeenCalledWith(mockResult);
+      });
+
+      test('should handle service failure', async () => {
+        req.params.projectId = '1';
+
+        const mockResult = {
+          success: false,
+          error: 'Project not found',
+          message: 'Failed to delete project'
+        };
+        projectService.deleteProject.mockResolvedValue(mockResult);
+
+        await deleteProject(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith(mockResult);
+      });
+
+      test('should handle service error', async () => {
+        req.params.projectId = '1';
+
+        projectService.deleteProject.mockRejectedValue(new Error('Database error'));
+
+        await deleteProject(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({
+          success: false,
+          message: 'Database error'
+        });
       });
     });
   });

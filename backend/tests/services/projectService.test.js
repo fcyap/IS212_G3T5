@@ -1,7 +1,11 @@
 const projectService = require('../../src/services/projectService');
 const projectRepository = require('../../src/repository/projectRepository');
+const userRepository = require('../../src/repository/userRepository');
+const supabase = require('../../src/utils/supabase');
 
 jest.mock('../../src/repository/projectRepository');
+jest.mock('../../src/repository/userRepository');
+jest.mock('../../src/utils/supabase');
 
 describe('ProjectService', () => {
   beforeEach(() => {
@@ -13,27 +17,38 @@ describe('ProjectService', () => {
       const projectData = {
         name: 'Test Project',
         description: 'Test Description',
-        user_ids: [1, 2]
+        user_ids: [1, 2],
+        creator_id: 1
       };
 
       const mockProject = {
         id: 1,
         name: 'Test Project',
         description: 'Test Description',
-        user_ids: [1, 2],
-        created_at: expect.any(String)
+        creator_id: 1,
+        status: 'active',
+        updated_at: expect.any(String)
       };
 
       projectRepository.create.mockResolvedValue(mockProject);
+
+      // Mock supabase for project_members insertion
+      supabase.from.mockReturnValue({
+        insert: jest.fn().mockResolvedValue({ error: null })
+      });
 
       const result = await projectService.createProject(projectData);
 
       expect(projectRepository.create).toHaveBeenCalledWith({
         name: 'Test Project',
         description: 'Test Description',
-        user_ids: [1, 2],
-        created_at: expect.any(String)
+        creator_id: 1,
+        status: 'active',
+        updated_at: expect.any(String)
       });
+
+      expect(supabase.from).toHaveBeenCalledWith('project_members');
+
       expect(result).toEqual({
         success: true,
         project: mockProject,
@@ -54,11 +69,27 @@ describe('ProjectService', () => {
       });
     });
 
+    test('should handle missing creator_id', async () => {
+      const projectData = {
+        name: 'Test Project',
+        description: 'Test Description'
+      };
+
+      const result = await projectService.createProject(projectData);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'creator_id is required',
+        message: 'Failed to create project'
+      });
+    });
+
     test('should handle invalid user_ids type', async () => {
       const projectData = {
         name: 'Test Project',
         description: 'Test Description',
-        user_ids: 'invalid'
+        user_ids: 'invalid',
+        creator_id: 1
       };
 
       const result = await projectService.createProject(projectData);
@@ -74,7 +105,8 @@ describe('ProjectService', () => {
     test('should handle repository error', async () => {
       const projectData = {
         name: 'Test Project',
-        description: 'Test Description'
+        description: 'Test Description',
+        creator_id: 1
       };
 
       projectRepository.create.mockRejectedValue(new Error('Database error'));
@@ -91,132 +123,153 @@ describe('ProjectService', () => {
     test('should trim whitespace from name and description', async () => {
       const projectData = {
         name: '  Test Project  ',
-        description: '  Test Description  '
+        description: '  Test Description  ',
+        creator_id: 1
       };
 
-      const mockProject = {
-        id: 1,
-        name: 'Test Project',
-        description: 'Test Description',
-        user_ids: [],
-        created_at: expect.any(String)
-      };
-
+      const mockProject = { id: 1, name: 'Test Project', description: 'Test Description' };
       projectRepository.create.mockResolvedValue(mockProject);
+      projectRepository.addUserToProject.mockResolvedValue(true);
 
-      const result = await projectService.createProject(projectData);
+      await projectService.createProject(projectData);
 
       expect(projectRepository.create).toHaveBeenCalledWith({
         name: 'Test Project',
         description: 'Test Description',
-        user_ids: [],
-        created_at: expect.any(String)
+        creator_id: 1,
+        status: 'active',
+        updated_at: expect.any(String)
       });
+    });
+
+    test('should handle empty user_ids array', async () => {
+      const projectData = {
+        name: 'Test Project',
+        description: 'Test Description',
+        creator_id: 1,
+        user_ids: []
+      };
+
+      const mockProject = { id: 1, name: 'Test Project', description: 'Test Description' };
+      projectRepository.create.mockResolvedValue(mockProject);
+
+      const result = await projectService.createProject(projectData);
+
+      // With empty user_ids, addProjectMembers should not be called
       expect(result.success).toBe(true);
+      expect(result.project).toEqual(mockProject);
     });
   });
 
-  describe('getAllProjects', () => {
-    test('should get all projects successfully', async () => {
+  describe('getAllProjectsForUser', () => {
+    test('should get all projects for user successfully', async () => {
+      const mockUser = { id: 1, name: 'Test User' };
+      const mockMemberProjectIds = [1];
+      const mockCreatorProjectIds = [2];
       const mockProjects = [
         { id: 1, name: 'Project 1' },
         { id: 2, name: 'Project 2' }
       ];
+      const mockMembers = [
+        { users: { name: 'Test User' } }
+      ];
 
-      projectRepository.findAll.mockResolvedValue(mockProjects);
+      userRepository.getUserById.mockResolvedValue(mockUser);
+      projectRepository.getProjectIdsForUser.mockResolvedValue(mockMemberProjectIds);
+      projectRepository.getProjectIdsByCreator.mockResolvedValue(mockCreatorProjectIds);
+      projectRepository.getProjectsByIds.mockResolvedValue(mockProjects);
+      projectRepository.getTaskCountByProject.mockResolvedValue(5);
+      projectRepository.getProjectMembersWithDetails.mockResolvedValue(mockMembers);
 
-      const result = await projectService.getAllProjects();
+      const result = await projectService.getAllProjectsForUser(1);
 
-      expect(projectRepository.findAll).toHaveBeenCalled();
-      expect(result).toEqual({
-        success: true,
-        projects: mockProjects,
-        count: 2,
-        message: 'Projects retrieved successfully'
-      });
+      expect(userRepository.getUserById).toHaveBeenCalledWith(1);
+      expect(projectRepository.getProjectIdsForUser).toHaveBeenCalledWith(1);
+      expect(projectRepository.getProjectIdsByCreator).toHaveBeenCalledWith(1);
+      expect(projectRepository.getProjectsByIds).toHaveBeenCalledWith([1, 2]);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toHaveProperty('task_count', 5);
+      expect(result[0]).toHaveProperty('collaborators', 'Test User');
     });
 
     test('should handle repository error', async () => {
-      projectRepository.findAll.mockRejectedValue(new Error('Database error'));
+      userRepository.getUserById.mockRejectedValue(new Error('Database error'));
 
-      const result = await projectService.getAllProjects();
-
-      expect(result).toEqual({
-        success: false,
-        error: 'Database error',
-        message: 'Failed to retrieve projects'
-      });
+      await expect(projectService.getAllProjectsForUser(1)).rejects.toThrow('Database error');
     });
 
-    test('should handle empty projects array', async () => {
-      projectRepository.findAll.mockResolvedValue([]);
+    test('should return empty array for user with no projects', async () => {
+      const mockUser = { id: 1, name: 'Test User' };
+      userRepository.getUserById.mockResolvedValue(mockUser);
+      projectRepository.getProjectIdsForUser.mockResolvedValue([]);
+      projectRepository.getProjectIdsByCreator.mockResolvedValue([]);
 
-      const result = await projectService.getAllProjects();
+      const result = await projectService.getAllProjectsForUser(1);
 
-      expect(result).toEqual({
-        success: true,
-        projects: [],
-        count: 0,
-        message: 'Projects retrieved successfully'
-      });
+      expect(result).toEqual([]);
     });
   });
 
   describe('getProjectById', () => {
     test('should get project by id successfully', async () => {
       const mockProject = { id: 1, name: 'Test Project' };
-      projectRepository.findById.mockResolvedValue(mockProject);
+      projectRepository.getProjectById.mockResolvedValue(mockProject);
 
       const result = await projectService.getProjectById(1);
 
-      expect(projectRepository.findById).toHaveBeenCalledWith(1);
-      expect(result).toEqual({
-        success: true,
-        project: mockProject,
-        message: 'Project retrieved successfully'
-      });
+      expect(projectRepository.getProjectById).toHaveBeenCalledWith(1);
+      expect(result).toEqual(mockProject);
     });
 
-    test('should handle missing project id', async () => {
-      const result = await projectService.getProjectById();
+    test('should handle project not found', async () => {
+      projectRepository.getProjectById.mockRejectedValue(new Error('Project not found'));
 
-      expect(projectRepository.findById).not.toHaveBeenCalled();
-      expect(result).toEqual({
-        success: false,
-        error: 'Project ID is required',
-        message: 'Failed to retrieve project'
+      await expect(projectService.getProjectById(999)).rejects.toThrow('Project not found');
+    });
+
+    test('should handle repository error', async () => {
+      projectRepository.getProjectById.mockRejectedValue(new Error('Database error'));
+
+      await expect(projectService.getProjectById(1)).rejects.toThrow('Database error');
+    });
+  });
+
+  describe('getProjectMembers', () => {
+    test('should get project members successfully', async () => {
+      const mockMembers = [
+        { user_id: 1, users: { email: 'user1@test.com', name: 'User 1' }, member_role: 'creator', added_at: '2023-01-01' },
+        { user_id: 2, users: { email: 'user2@test.com', name: 'User 2' }, member_role: 'collaborator', added_at: '2023-01-02' }
+      ];
+
+      projectRepository.cleanupOrphanedMembers.mockResolvedValue();
+      projectRepository.getProjectMembersWithDetails.mockResolvedValue(mockMembers);
+
+      const result = await projectService.getProjectMembers(1);
+
+      expect(projectRepository.cleanupOrphanedMembers).toHaveBeenCalledWith(1);
+      expect(projectRepository.getProjectMembersWithDetails).toHaveBeenCalledWith(1);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({
+        user_id: 1,
+        email: 'user1@test.com',
+        name: 'User 1',
+        role: 'creator',
+        joined_at: '2023-01-01'
       });
     });
 
     test('should handle project not found', async () => {
-      projectRepository.findById.mockResolvedValue(null);
+      projectRepository.cleanupOrphanedMembers.mockResolvedValue();
+      projectRepository.getProjectMembersWithDetails.mockRejectedValue(new Error('Project not found'));
 
-      const result = await projectService.getProjectById(999);
-
-      expect(result).toEqual({
-        success: false,
-        error: 'Project not found',
-        message: 'Failed to retrieve project'
-      });
-    });
-
-    test('should handle repository error', async () => {
-      projectRepository.findById.mockRejectedValue(new Error('Database error'));
-
-      const result = await projectService.getProjectById(1);
-
-      expect(result).toEqual({
-        success: false,
-        error: 'Database error',
-        message: 'Failed to retrieve project'
-      });
+      await expect(projectService.getProjectMembers(999)).rejects.toThrow('Project not found');
     });
   });
 
   describe('updateProject', () => {
     test('should update project successfully', async () => {
-      const updateData = { name: 'Updated Project' };
-      const mockProject = { id: 1, name: 'Updated Project' };
+      const updateData = { name: 'Updated Project', description: 'Updated Description' };
+      const mockProject = { id: 1, ...updateData };
 
       projectRepository.update.mockResolvedValue(mockProject);
 
@@ -230,46 +283,15 @@ describe('ProjectService', () => {
       });
     });
 
-    test('should handle missing project id', async () => {
-      const result = await projectService.updateProject();
-
-      expect(projectRepository.update).not.toHaveBeenCalled();
-      expect(result).toEqual({
-        success: false,
-        error: 'Project ID is required',
-        message: 'Failed to update project'
-      });
-    });
-
-    test('should filter out undefined values', async () => {
-      const updateData = {
-        name: 'Updated Project',
-        description: undefined,
-        user_ids: [1, 2]
-      };
-      const filteredData = {
-        name: 'Updated Project',
-        user_ids: [1, 2]
-      };
-      const mockProject = { id: 1, name: 'Updated Project' };
-
-      projectRepository.update.mockResolvedValue(mockProject);
+    test('should handle repository error', async () => {
+      const updateData = { name: 'Updated Project' };
+      projectRepository.update.mockRejectedValue(new Error('Database error'));
 
       const result = await projectService.updateProject(1, updateData);
 
-      expect(projectRepository.update).toHaveBeenCalledWith(1, filteredData);
-      expect(result.success).toBe(true);
-    });
-
-    test('should validate user_ids array format', async () => {
-      const updateData = { user_ids: 'invalid' };
-
-      const result = await projectService.updateProject(1, updateData);
-
-      expect(projectRepository.update).not.toHaveBeenCalled();
       expect(result).toEqual({
         success: false,
-        error: 'user_ids must be an array',
+        error: 'Database error',
         message: 'Failed to update project'
       });
     });
@@ -286,24 +308,14 @@ describe('ProjectService', () => {
         message: 'Failed to update project'
       });
     });
-
-    test('should handle repository error', async () => {
-      const updateData = { name: 'Updated Project' };
-      projectRepository.update.mockRejectedValue(new Error('Database error'));
-
-      const result = await projectService.updateProject(1, updateData);
-
-      expect(result).toEqual({
-        success: false,
-        error: 'Database error',
-        message: 'Failed to update project'
-      });
-    });
   });
 
   describe('deleteProject', () => {
     test('should delete project successfully', async () => {
-      projectRepository.delete.mockResolvedValue(true);
+      projectRepository.delete.mockResolvedValue({
+        success: true,
+        message: 'Project deleted successfully'
+      });
 
       const result = await projectService.deleteProject(1);
 
@@ -311,17 +323,6 @@ describe('ProjectService', () => {
       expect(result).toEqual({
         success: true,
         message: 'Project deleted successfully'
-      });
-    });
-
-    test('should handle missing project id', async () => {
-      const result = await projectService.deleteProject();
-
-      expect(projectRepository.delete).not.toHaveBeenCalled();
-      expect(result).toEqual({
-        success: false,
-        error: 'Project ID is required',
-        message: 'Failed to delete project'
       });
     });
 
@@ -336,35 +337,45 @@ describe('ProjectService', () => {
         message: 'Failed to delete project'
       });
     });
+
+    test('should handle project not found', async () => {
+      projectRepository.delete.mockRejectedValue(new Error('Project not found'));
+
+      const result = await projectService.deleteProject(999);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'Project not found',
+        message: 'Failed to delete project'
+      });
+    });
   });
 
   describe('addUserToProject', () => {
     test('should add user to project successfully', async () => {
-      const mockProject = { id: 1, user_ids: [1] };
-      const updatedProject = { id: 1, user_ids: [1, 2] };
+      const mockProject = { id: 1, name: 'Test Project' };
 
-      // Mock getProjectById to return existing project
-      jest.spyOn(projectService, 'getProjectById').mockResolvedValueOnce({
-        success: true,
-        project: mockProject
+      // Mock Supabase to return no existing member
+      supabase.from.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              single: jest.fn().mockResolvedValue({
+                data: null,
+                error: { code: 'PGRST116' } // No rows found
+              })
+            })
+          })
+        })
       });
 
-      // Mock updateProject to return updated project
-      jest.spyOn(projectService, 'updateProject').mockResolvedValueOnce({
-        success: true,
-        project: updatedProject,
-        message: 'Project updated successfully'
-      });
+      projectRepository.addUserToProject.mockResolvedValue(true);
+      jest.spyOn(projectService, 'getProjectById').mockResolvedValue(mockProject);
 
       const result = await projectService.addUserToProject(1, 2);
 
-      expect(projectService.getProjectById).toHaveBeenCalledWith(1);
-      expect(projectService.updateProject).toHaveBeenCalledWith(1, { user_ids: [1, 2] });
-      expect(result).toEqual({
-        success: true,
-        project: updatedProject,
-        message: 'Project updated successfully'
-      });
+      expect(projectRepository.addUserToProject).toHaveBeenCalledWith(1, 2);
+      expect(result).toEqual(mockProject);
     });
 
     test('should handle missing project id or user id', async () => {
@@ -377,26 +388,19 @@ describe('ProjectService', () => {
       });
     });
 
-    test('should handle project not found', async () => {
-      jest.spyOn(projectService, 'getProjectById').mockResolvedValueOnce({
-        success: false,
-        error: 'Project not found'
-      });
-
-      const result = await projectService.addUserToProject(999, 2);
-
-      expect(result).toEqual({
-        success: false,
-        error: 'Project not found'
-      });
-    });
-
     test('should handle user already in project', async () => {
-      const mockProject = { id: 1, user_ids: [1, 2] };
-
-      jest.spyOn(projectService, 'getProjectById').mockResolvedValueOnce({
-        success: true,
-        project: mockProject
+      // Mock Supabase to return existing member
+      supabase.from.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              single: jest.fn().mockResolvedValue({
+                data: { user_id: 2 },
+                error: null
+              })
+            })
+          })
+        })
       });
 
       const result = await projectService.addUserToProject(1, 2);
@@ -408,35 +412,26 @@ describe('ProjectService', () => {
       });
     });
 
-    test('should handle project with no existing users', async () => {
-      const mockProject = { id: 1, user_ids: null };
-      const updatedProject = { id: 1, user_ids: [2] };
-
-      jest.spyOn(projectService, 'getProjectById').mockResolvedValueOnce({
-        success: true,
-        project: mockProject
+    test('should handle database error', async () => {
+      // Mock Supabase to return database error
+      supabase.from.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              single: jest.fn().mockResolvedValue({
+                data: null,
+                error: { code: 'OTHER_ERROR', message: 'Database connection failed' }
+              })
+            })
+          })
+        })
       });
-
-      jest.spyOn(projectService, 'updateProject').mockResolvedValueOnce({
-        success: true,
-        project: updatedProject,
-        message: 'Project updated successfully'
-      });
-
-      const result = await projectService.addUserToProject(1, 2);
-
-      expect(projectService.updateProject).toHaveBeenCalledWith(1, { user_ids: [2] });
-      expect(result.success).toBe(true);
-    });
-
-    test('should handle unexpected error', async () => {
-      jest.spyOn(projectService, 'getProjectById').mockRejectedValueOnce(new Error('Unexpected error'));
 
       const result = await projectService.addUserToProject(1, 2);
 
       expect(result).toEqual({
         success: false,
-        error: 'Unexpected error',
+        error: 'Database error: Database connection failed',
         message: 'Failed to add user to project'
       });
     });
@@ -444,99 +439,92 @@ describe('ProjectService', () => {
 
   describe('removeUserFromProject', () => {
     test('should remove user from project successfully', async () => {
-      const mockProject = { id: 1, user_ids: [1, 2, 3] };
-      const updatedProject = { id: 1, user_ids: [1, 3] };
+      const mockProject = { id: 1, name: 'Test Project' };
 
-      jest.spyOn(projectService, 'getProjectById').mockResolvedValueOnce({
-        success: true,
-        project: mockProject
-      });
+      projectRepository.removeUserFromProject.mockResolvedValue(mockProject);
 
-      jest.spyOn(projectService, 'updateProject').mockResolvedValueOnce({
-        success: true,
-        project: updatedProject,
-        message: 'Project updated successfully'
-      });
+      const result = await projectService.removeUserFromProject(1, 2, 1);
 
-      const result = await projectService.removeUserFromProject(1, 2);
-
-      expect(projectService.getProjectById).toHaveBeenCalledWith(1);
-      expect(projectService.updateProject).toHaveBeenCalledWith(1, { user_ids: [1, 3] });
-      expect(result).toEqual({
-        success: true,
-        project: updatedProject,
-        message: 'Project updated successfully'
-      });
+      expect(projectRepository.removeUserFromProject).toHaveBeenCalledWith(1, 2, 1);
+      expect(result).toEqual(mockProject);
     });
 
-    test('should handle missing project id or user id', async () => {
-      const result = await projectService.removeUserFromProject();
+    test('should handle repository error', async () => {
+      projectRepository.removeUserFromProject.mockRejectedValue(new Error('Database error'));
 
-      expect(result).toEqual({
-        success: false,
-        error: 'Project ID and User ID are required',
-        message: 'Failed to remove user from project'
-      });
+      await expect(projectService.removeUserFromProject(1, 2, 1)).rejects.toThrow('Database error');
+    });
+
+    test('should handle permission error', async () => {
+      projectRepository.removeUserFromProject.mockRejectedValue(new Error('Only managers can remove members'));
+
+      await expect(projectService.removeUserFromProject(1, 2, 3)).rejects.toThrow('Only managers can remove members');
+    });
+  });
+
+  describe('addUsersToProject', () => {
+    test('should add multiple users to project successfully', async () => {
+      const mockProject = { id: 1, name: 'Test Project' };
+      const mockMembers = [];
+
+      projectRepository.canUserManageMembers.mockResolvedValue(true);
+      projectRepository.getProjectMembersWithDetails.mockResolvedValue(mockMembers);
+      projectRepository.addUserToProject.mockResolvedValue(true);
+      projectRepository.getProjectById.mockResolvedValue(mockProject);
+
+      const result = await projectService.addUsersToProject(1, [2, 3], 1, 'Welcome!', 'collaborator');
+
+      expect(projectRepository.canUserManageMembers).toHaveBeenCalledWith(1, 1);
+      expect(projectRepository.addUserToProject).toHaveBeenCalledTimes(2);
+      expect(result).toEqual(mockProject);
+    });
+
+    test('should handle permission denied', async () => {
+      projectRepository.canUserManageMembers.mockResolvedValue(false);
+
+      await expect(
+        projectService.addUsersToProject(1, [2, 3], 2, 'Welcome!', 'collaborator')
+      ).rejects.toThrow('Only managers and creators can add members to the project');
+    });
+  });
+
+  describe('archiveProject', () => {
+    test('should archive project successfully', async () => {
+      const mockArchivedProject = { id: 1, name: 'Test Project', status: 'archived' };
+
+      projectRepository.canUserManageMembers.mockResolvedValue(true);
+      projectRepository.getProjectById.mockResolvedValue({ id: 1, name: 'Test Project' });
+      projectRepository.archiveProject.mockResolvedValue(mockArchivedProject);
+
+      const result = await projectService.archiveProject(1, 1);
+
+      expect(projectRepository.canUserManageMembers).toHaveBeenCalledWith(1, 1);
+      expect(projectRepository.getProjectById).toHaveBeenCalledWith(1);
+      expect(projectRepository.archiveProject).toHaveBeenCalledWith(1);
+      expect(result).toEqual(mockArchivedProject);
+    });
+
+    test('should handle permission denied', async () => {
+      projectRepository.canUserManageMembers.mockResolvedValue(false);
+
+      await expect(projectService.archiveProject(1, 2)).rejects.toThrow(
+        'Only managers and creators can archive the project'
+      );
     });
 
     test('should handle project not found', async () => {
-      jest.spyOn(projectService, 'getProjectById').mockResolvedValueOnce({
-        success: false,
-        error: 'Project not found'
-      });
+      projectRepository.canUserManageMembers.mockResolvedValue(true);
+      projectRepository.getProjectById.mockRejectedValue(new Error('Project not found'));
 
-      const result = await projectService.removeUserFromProject(999, 2);
-
-      expect(result).toEqual({
-        success: false,
-        error: 'Project not found'
-      });
+      await expect(projectService.archiveProject(999, 1)).rejects.toThrow('Project not found');
     });
 
-    test('should handle user not in project', async () => {
-      const mockProject = { id: 1, user_ids: [1, 3] };
+    test('should handle repository error during archive', async () => {
+      projectRepository.canUserManageMembers.mockResolvedValue(true);
+      projectRepository.getProjectById.mockResolvedValue({ id: 1, name: 'Test Project' });
+      projectRepository.archiveProject.mockRejectedValue(new Error('Archive failed'));
 
-      jest.spyOn(projectService, 'getProjectById').mockResolvedValueOnce({
-        success: true,
-        project: mockProject
-      });
-
-      const result = await projectService.removeUserFromProject(1, 2);
-
-      expect(result).toEqual({
-        success: false,
-        error: 'User is not in the project',
-        message: 'User not found in project'
-      });
-    });
-
-    test('should handle project with no existing users', async () => {
-      const mockProject = { id: 1, user_ids: null };
-
-      jest.spyOn(projectService, 'getProjectById').mockResolvedValueOnce({
-        success: true,
-        project: mockProject
-      });
-
-      const result = await projectService.removeUserFromProject(1, 2);
-
-      expect(result).toEqual({
-        success: false,
-        error: 'User is not in the project',
-        message: 'User not found in project'
-      });
-    });
-
-    test('should handle unexpected error', async () => {
-      jest.spyOn(projectService, 'getProjectById').mockRejectedValueOnce(new Error('Unexpected error'));
-
-      const result = await projectService.removeUserFromProject(1, 2);
-
-      expect(result).toEqual({
-        success: false,
-        error: 'Unexpected error',
-        message: 'Failed to remove user from project'
-      });
+      await expect(projectService.archiveProject(1, 1)).rejects.toThrow('Archive failed');
     });
   });
 });

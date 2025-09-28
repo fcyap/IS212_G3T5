@@ -1,17 +1,18 @@
-﻿const supabase = require('../utils/supabase');
-
+const supabase = require('../utils/supabase');
 /**
  * User Repository - Handles all database operations for users
  * This layer only deals with CRUD operations and database queries
  */
 class UserRepository {
-  
+
+
   /**
    * Get all users
    */
   async getAllUsers(filters = {}) {
     console.log('UserRepository.getAllUsers called with filters:', filters);
-    
+
+
     try {
       // Simple test query first
       console.log('Testing Supabase connection...');
@@ -58,6 +59,52 @@ class UserRepository {
     } catch (error) {
       console.error('Unexpected error in getAllUsers:', error);
       return this.getFallbackUsers();
+    }
+  }
+
+  /**
+   * Find user by ID (jiaxin branch compatibility)
+   * @param {number} userId - User ID
+   * @returns {Object} User object
+   */
+  async findById(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        throw new Error(`Database error: ${error.message}`);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Repository error finding user by ID:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Find all users (jiaxin branch compatibility)
+   * @returns {Array} Array of users
+   */
+  async findAll() {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('id', { ascending: true });
+
+      if (error) {
+        throw new Error(`Database error: ${error.message}`);
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Repository error finding all users:', error);
+      throw error;
     }
   }
 
@@ -211,6 +258,27 @@ class UserRepository {
     } catch (error) {
       return false;
     }
+  }
+  /**
+ * Search users by name or email (case-insensitive, partial match)
+ */
+  async searchUsers(query, limit = 8) {
+    if (!query || typeof query !== 'string' || !query.trim()) {
+      return [];
+    }
+    const search = query.trim().toLowerCase();
+    // Supabase ilike for case-insensitive partial match
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .or(`name.ilike.%${search}%,email.ilike.%${search}%`)
+      .limit(limit)
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('Error searching users:', error);
+      return [];
+    }
+    return data || [];
   }
 }
 
