@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
+const jwt = require('jsonwebtoken');
 
 // Import routes and middleware
 const apiRoutes = require('./routes');
@@ -13,33 +15,130 @@ const projectRoutes = require('./routes/projects');
 const userRoutes = require('./routes/users');
 const { createLoggerMiddleware, logError } = require('./middleware/logger');
 
+// -------------------- Session helpers (backend-only) --------------------
+const COOKIE = 'sid';
+const ACCESS_TTL = 15 * 60; // 15min autologout
+
+function signAccess(payload, { maxAge = ACCESS_TTL } = {}) {
+  const now = Math.floor(Date.now() / 1000);
+  return jwt.sign(
+    { iat: now, nbf: now, exp: now + maxAge, ...payload },
+    process.env.JWT_SECRET || 'dev_only_change_me',
+    {
+      issuer: process.env.JWT_ISSUER || 'kanban',
+      audience: process.env.JWT_AUDIENCE || 'kanban-web',
+      algorithm: 'HS256',
+    }
+  );
+}
+
+function setSessionCookie(res, token, { maxAge = ACCESS_TTL } = {}) {
+  res.cookie(COOKIE, token, {
+    httpOnly: true,
+    secure: false,      // set true behind HTTPS
+    sameSite: 'Lax',
+    maxAge: maxAge * 1000,
+    path: '/',
+  });
+}
+
+function clearSessionCookie(res) {
+  res.clearCookie(COOKIE, { path: '/' });
+}
+
+function extractToken(req) {
+  const c = req.cookies?.[COOKIE];
+  if (c) return c;
+  const h = req.headers.authorization || '';
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  return m ? m[1] : null;
+}
+
+function requireSession(req, res, next) {
+  const token = extractToken(req);
+  if (!token) return res.status(401).json({ error: 'Unauthenticated' });
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_only_change_me', {
+      issuer: process.env.JWT_ISSUER || 'kanban',
+      audience: process.env.JWT_AUDIENCE || 'kanban-web',
+      algorithms: ['HS256'],
+    });
+    req.user = { id: payload.sub, role: payload.role, email: payload.email };
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'Invalid/expired session' });
+  }
+}
+
+// Soft attach – if token exists attach req.user, else continue
+function attachSessionIfAny(req, res, next) {
+  const token = extractToken(req);
+  if (!token) return next();
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_only_change_me', {
+      issuer: process.env.JWT_ISSUER || 'kanban',
+      audience: process.env.JWT_AUDIENCE || 'kanban-web',
+      algorithms: ['HS256'],
+    });
+    req.user = { id: payload.sub, role: payload.role, email: payload.email };
+  } catch {}
+  next();
+}
+// -----------------------------------------------------------------------
+
+const devBypass = require('./middleware/devAuthBypass'); // your bypass helper
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Initialize logger middleware asynchronously
 async function initializeApp() {
   const loggerMiddleware = await createLoggerMiddleware();
   app.use(loggerMiddleware);
 
-  // Middleware
+  // Core middleware
   app.use(
     cors({
-      origin: true, // Allow all origins in development
-      credentials: true,
+      origin: true,      // echoes request Origin; OK for dev
+      credentials: true, // allow cookies/credentials
     })
   );
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
-  app.use(morgan("dev"));
+  app.use(cookieParser());
+  app.use(morgan('dev'));
 
-  // Routes
-  app.use('/api', apiRoutes);
-  app.use('/users', teamMembersRoutes);
-  app.use('/api/tasks', taskCommentRoutes);
-  app.use('/api/projects', projectTasksRoutes);
-  app.use('/api/projects', projectRoutes);
-  app.use('/api/users', userRoutes);
-  app.use('/tasks', tasksRouter);
+  // Build a single auth middleware that either enforces session
+  // or (when AUTH_BYPASS=true) fakes req.user if no session.
+  const authMw = devBypass(requireSession);
+
+  // -------------------- Dev session routes --------------------
+  app.post('/dev/session/start', (req, res) => {
+    const { userId, email, role = 'dev' } = req.body || {};
+    if (!userId && !email) return res.status(400).json({ error: 'userId or email required' });
+    const token = signAccess({ sub: userId || email, email, role });
+    setSessionCookie(res, token);
+    res.status(200).json({ ok: true, token });
+  });
+
+  app.post('/session/end', (req, res) => {
+    clearSessionCookie(res);
+    res.status(200).json({ ok: true });
+  });
+
+  app.get('/me', requireSession, (req, res) => {
+    res.json({ user: req.user });
+  });
+  // ------------------------------------------------------------
+
+  // Routes (flip attachSessionIfAny -> requireSession later if you want)
+  app.use('/api', attachSessionIfAny, apiRoutes);
+  app.use('/users', attachSessionIfAny, teamMembersRoutes);
+
+  // Data APIs using the bypass wrapper during dev
+  app.use('/api/tasks', authMw, taskCommentRoutes);
+  app.use('/api/projects', authMw, projectTasksRoutes);
+  app.use('/api/projects', authMw, projectRoutes);
+  app.use('/api/users', authMw, userRoutes);
+  app.use('/tasks', authMw, tasksRouter);
 
   app.get('/', (req, res) => {
     res.json({
@@ -48,8 +147,8 @@ async function initializeApp() {
       endpoints: {
         projects: '/api/projects',
         users: '/api/users',
-        tasks: '/api/tasks'
-      }
+        tasks: '/api/tasks',
+      },
     });
   });
 

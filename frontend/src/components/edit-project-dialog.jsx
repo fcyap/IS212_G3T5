@@ -82,7 +82,7 @@ export function EditProjectDialog({ project, isOpen, onClose }) {
                 <div className="text-center">
                   <Lock className="h-8 w-8 text-gray-400 mx-auto mb-2" />
                   <p className="text-gray-300 text-sm">
-                    You don't have permission to edit this project.
+                    You don&apos;t have permission to edit this project.
                   </p>
                   <p className="text-gray-400 text-xs mt-1">
                     Only the project creator can edit project details.
