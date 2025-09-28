@@ -189,6 +189,14 @@ class ProjectService {
         throw new Error('Project ID is required');
       }
 
+      // Validate status if provided
+      if (updateData.status) {
+        const validStatuses = ['active', 'hold', 'completed', 'archived'];
+        if (!validStatuses.includes(updateData.status)) {
+          throw new Error(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+        }
+      }
+
       // Extract user_ids from updateData as it needs special handling
       const { user_ids, ...projectUpdateData } = updateData;
 

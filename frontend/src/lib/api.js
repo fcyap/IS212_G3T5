@@ -56,11 +56,13 @@ class ProjectService {
       headers: {
         'Content-Type': 'application/json',
       },
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify(projectData),
     });
     
     if (!response.ok) {
-      throw new Error(`Failed to update project ${id}: ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({ error: response.statusText }));
+      throw new Error(errorData.error || `Failed to update project ${id}: ${response.statusText}`);
     }
     return response.json();
   }

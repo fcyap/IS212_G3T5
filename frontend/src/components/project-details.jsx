@@ -381,14 +381,16 @@ export function ProjectDetails({ projectId, onBack }) {
     try {
       const updatedProject = await updateProject(projectId, {
         name: formData.name,
-        description: formData.description
+        description: formData.description,
+        status: formData.status
       })
 
       // Update local state with new project data
       setProject(prev => ({
         ...prev,
         name: formData.name,
-        description: formData.description
+        description: formData.description,
+        status: formData.status
       }))
 
       setShowEditProject(false)
@@ -1001,7 +1003,8 @@ export function ProjectDetails({ projectId, onBack }) {
 function EditProjectDialog({ project, open, onClose, onSave }) {
   const [formData, setFormData] = useState({
     name: project?.name || '',
-    description: project?.description || ''
+    description: project?.description || '',
+    status: project?.status || 'active'
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -1010,7 +1013,8 @@ function EditProjectDialog({ project, open, onClose, onSave }) {
     if (open && project) {
       setFormData({
         name: project.name || '',
-        description: project.description || ''
+        description: project.description || '',
+        status: project.status || 'active'
       })
     }
   }, [open, project])
@@ -1073,6 +1077,46 @@ function EditProjectDialog({ project, open, onClose, onSave }) {
               className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 resize-none"
               rows={4}
             />
+          </div>
+
+          <div>
+            <label htmlFor="status" className="block text-sm font-medium mb-2">
+              Status
+            </label>
+            <Select
+              value={formData.status}
+              onValueChange={(value) => setFormData(prev => ({ ...prev, status: value }))}
+            >
+              <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent className="!bg-gray-800 !border-gray-600 !text-white">
+                <SelectItem 
+                  value="active" 
+                  className="!text-white !hover:bg-gray-600 !focus:bg-gray-600 !data-[highlighted]:bg-gray-600 hover:!bg-gray-600 focus:!bg-gray-600"
+                >
+                  Active
+                </SelectItem>
+                <SelectItem 
+                  value="hold" 
+                  className="!text-white !hover:bg-gray-600 !focus:bg-gray-600 !data-[highlighted]:bg-gray-600 hover:!bg-gray-600 focus:!bg-gray-600"
+                >
+                  Hold
+                </SelectItem>
+                <SelectItem 
+                  value="completed" 
+                  className="!text-white !hover:bg-gray-600 !focus:bg-gray-600 !data-[highlighted]:bg-gray-600 hover:!bg-gray-600 focus:!bg-gray-600"
+                >
+                  Completed
+                </SelectItem>
+                <SelectItem 
+                  value="archived" 
+                  className="!text-white !hover:bg-gray-600 !focus:bg-gray-600 !data-[highlighted]:bg-gray-600 hover:!bg-gray-600 focus:!bg-gray-600"
+                >
+                  Archived
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex gap-2 justify-end pt-4">

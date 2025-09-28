@@ -1,7 +1,7 @@
 // for testing of other routes before authentication is fully implemented
 // Dev-only auth bypass. NEVER enable in prod.
 module.exports = function devBypass(requireSession) {
-  const enabled = String(AUTH_BYPASS=true || '').toLowerCase() === 'true';
+  const enabled = String(process.env.AUTH_BYPASS || '').toLowerCase() === 'true';
 
   if (!enabled) return requireSession;
 
