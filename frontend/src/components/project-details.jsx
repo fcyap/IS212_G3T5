@@ -252,7 +252,6 @@ export function ProjectDetails({ projectId, onBack }) {
           status: 'pending',
           deadline: dueDate || null,
           project_id: projectId,
-          team_id: 1, // Default team_id - you may want to get this from project data
           assigned_to: [],
           tags: tags || [],
         })

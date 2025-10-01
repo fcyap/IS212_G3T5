@@ -54,7 +54,7 @@ export function KanbanBoard() {
           priority: (priority || "Low").toLowerCase(),
           status: editorLane,
           deadline: dueDate || null,
-          team_id: 1,
+          project_id: projectId,
           assigned_to: Array.isArray(assignees) && assignees.length > 0 ? assignees.map(a => a.id) : [CurrentUser.id],
           tags,
         }),

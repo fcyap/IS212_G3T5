@@ -195,7 +195,6 @@ describe('TaskService', () => {
         priority: 'medium',
         tags: [],
         deadline: null,
-        team_id: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
