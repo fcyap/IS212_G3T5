@@ -639,6 +639,68 @@ class ProjectRepository {
     return true;
   }
 
+  /**
+   * Get projects created by users in the same division with lower hierarchy
+   * Used for manager view of subordinate projects
+   */
+  async getProjectsByDivisionAndHierarchy(division, managerHierarchy) {
+    console.log('🔍 [ProjectRepository] Getting projects by division and hierarchy:', { division, managerHierarchy });
+    
+    const { data, error } = await supabase
+      .from('projects')
+      .select(`
+        *,
+        users!projects_creator_id_fkey (
+          id,
+          name,
+          role,
+          hierarchy,
+          division
+        )
+      `)
+      .eq('users.division', division)
+      .lt('users.hierarchy', managerHierarchy)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ [ProjectRepository] Error getting projects by division/hierarchy:', error);
+      throw new Error(error.message);
+    }
+
+    console.log('✅ [ProjectRepository] Found projects by division/hierarchy:', data?.length || 0);
+    return data || [];
+  }
+
+  /**
+   * Get all projects (for admin users)
+   */
+  async getAllProjectsEnhanced() {
+    console.log('🔍 [ProjectRepository] Getting all projects with user details');
+    
+    const { data, error } = await supabase
+      .from('projects')
+      .select(`
+        *,
+        users!projects_creator_id_fkey (
+          id,
+          name,
+          email,
+          role,
+          hierarchy,
+          division
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ [ProjectRepository] Error getting all projects:', error);
+      throw new Error(error.message);
+    }
+
+    console.log('✅ [ProjectRepository] Found all projects:', data?.length || 0);
+    return data || [];
+  }
+
 }
 
 module.exports = new ProjectRepository();

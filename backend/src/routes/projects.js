@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { sql } = require('../db');
 const {
   createProject,
   getAllProjects,
@@ -9,6 +10,14 @@ const {
   removeProjectMember,
   archiveProject
 } = require('../controllers/projectController');
+
+// Import RBAC middleware
+const {
+  requireProjectCreation,
+  requireProjectEdit,
+  requireAddProjectMembers,
+  filterVisibleProjects
+} = require('../middleware/rbac');
 
 // We need to add updateProject and deleteProject controllers
 const projectService = require('../services/projectService');
@@ -48,14 +57,14 @@ const deleteProject = async (req, res) => {
   }
 };
 
-router.post('/', createProject);
-router.get('/', getAllProjects);
+router.post('/', requireProjectCreation, createProject);
+router.get('/', filterVisibleProjects(sql), getAllProjects);
 router.get('/:projectId', getProjectById);
-router.put('/:projectId', updateProject);
-router.delete('/:projectId', deleteProject);
+router.put('/:projectId', requireProjectEdit(sql), updateProject);
+router.delete('/:projectId', requireProjectEdit(sql), deleteProject);
 router.get('/:projectId/members', getProjectMembers);
-router.post('/:projectId/members', addProjectMembers);
-router.delete('/:projectId/members/:userId', removeProjectMember);
-router.patch('/:projectId/archive', archiveProject);
+router.post('/:projectId/members', requireAddProjectMembers(sql), addProjectMembers);
+router.delete('/:projectId/members/:userId', requireProjectEdit(sql), removeProjectMember);
+router.patch('/:projectId/archive', requireProjectEdit(sql), archiveProject);
 
 module.exports = router;

@@ -11,22 +11,27 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { useProjects } from "@/contexts/project-context"
-import { useAuth } from "@/hooks/useAuth"
+import { useSession } from "@/components/session-provider"
 import { Plus, Lock } from "lucide-react"
 import toast from "react-hot-toast"
 
 export function CreateProjectDialog({ children, variant = "default", isCollapsed = false }) {
-  const { user, currentUserId, canCreateProject, loading } = useAuth()
+  const { user, role, loading } = useSession()
   const [isOpen, setIsOpen] = useState(false)
   const [formData, setFormData] = useState({
     project_name: "",
     description: "",
-    user_ids: [currentUserId], // Include current user
-    creator_id: currentUserId // Add creator ID
+    user_ids: [user?.id], // Include current user
+    creator_id: user?.id // Add creator ID
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   
   const { createProject, error } = useProjects()
+
+  // Check if user can create projects (only managers and admins)
+  const canCreateProject = () => {
+    return user?.role === 'manager' || user?.role === 'admin'
+  }
 
   // Show loading state while checking auth
   if (loading) {
@@ -51,7 +56,7 @@ export function CreateProjectDialog({ children, variant = "default", isCollapsed
           )}
         </Button>
         <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-gray-800 text-white text-sm px-2 py-1 rounded whitespace-nowrap z-10">
-          Only managers can create projects. Your role: {user?.role || 'Unknown'}
+          Only managers and admins can create projects. Your role: {user?.role || 'Unknown'}
         </div>
       </div>
     )
@@ -67,8 +72,8 @@ export function CreateProjectDialog({ children, variant = "default", isCollapsed
       setFormData({
         project_name: "",
         description: "",
-        user_ids: [currentUserId],
-        creator_id: currentUserId
+        user_ids: [user?.id],
+        creator_id: user?.id
       })
       setIsOpen(false)
       toast.success("Project created successfully!")

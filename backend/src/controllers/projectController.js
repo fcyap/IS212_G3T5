@@ -34,18 +34,33 @@ const createProject = async (req, res) => {
 
 const getAllProjects = async (req, res) => {
   try {
-    // Input validation
-    const userId = req.user?.id || 1;
-
-    if (!userId) {
-      return res.status(400).json({ success: false, message: 'User ID is required' });
+    // Get current user from session or auth middleware
+    const session = res.locals.session;
+    if (!session) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
-    // Call service layer
-    const projects = await projectService.getAllProjectsForUser(userId);
+    // Get complete user information including hierarchy and division
+    const { sql } = require('../db');
+    const users = await sql/*sql*/`
+      select id, name, email, role, hierarchy, division, department
+      from public.users
+      where id = ${session.user_id}
+      limit 1
+    `;
+
+    if (!users.length) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const currentUser = users[0];
+    console.log('🔍 [ProjectController] Getting projects for user:', currentUser.name);
+
+    // Call service layer with RBAC
+    const projects = await projectService.getProjectsWithRBAC(currentUser);
 
     // Format response
-    res.json({ success: true, projects });
+    res.json({ success: true, projects, userRole: currentUser.role });
   } catch (err) {
     console.error('Error in getAllProjects:', err);
     res.status(500).json({ success: false, message: err.message });

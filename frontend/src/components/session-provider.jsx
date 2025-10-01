@@ -9,8 +9,8 @@ export function SessionProvider({ children }) {
   const router = useRouter();
   const [state, setState] = useState({ loading: true, user: null, role: null });
 
-  // Development mode - set to true to bypass backend authentication
-  const DEV_MODE = true;
+  // Development mode - set to false to use real backend authentication
+  const DEV_MODE = false;
 
   const load = async () => {
     if (DEV_MODE) {

@@ -21,7 +21,7 @@ function authRoutes(sql) {
 
     console.log('Querying database for user...');
     const users = await sql/*sql*/`
-      select id, email, password_hash
+      select id, email, password_hash, name, role, hierarchy, division, department
       from public.users
       where lower(email) = lower(${email})
       limit 1
@@ -55,7 +55,19 @@ function authRoutes(sql) {
     console.log('Getting user role...');
     const role = await getEffectiveRole(sql, user.id);
     console.log('Login successful for user:', user.id);
-    return res.json({ user: { id: user.id, email: user.email }, role, expiresAt });
+    return res.json({ 
+      user: { 
+        id: user.id, 
+        email: user.email, 
+        name: user.name,
+        role: user.role,
+        hierarchy: user.hierarchy,
+        division: user.division,
+        department: user.department
+      }, 
+      role, 
+      expiresAt 
+    });
   } catch (e) {
     console.error('POST /auth/login error:', e);  // <-- log root cause
     console.error('Error stack:', e.stack);
@@ -158,7 +170,7 @@ function authRoutes(sql) {
       // Query user using Supabase client
       const { data: users, error: userError } = await supabase
         .from('users')
-        .select('id, email, password_hash, role')
+        .select('id, email, password_hash, name, role, hierarchy, division, department')
         .eq('email', email.toLowerCase())
         .single();
       
@@ -210,7 +222,15 @@ function authRoutes(sql) {
       
       console.log('SUPABASE: Login successful for user:', users.id);
       return res.json({ 
-        user: { id: users.id, email: users.email },
+        user: { 
+          id: users.id, 
+          email: users.email,
+          name: users.name,
+          role: users.role,
+          hierarchy: users.hierarchy,
+          division: users.division,
+          department: users.department
+        },
         role: { label: users.role || 'Staff', level: 1 },
         expiresAt 
       });
@@ -228,9 +248,31 @@ function authRoutes(sql) {
   router.get('/me', authMiddleware(sql), async (req, res) => {
     try {
       const { session } = res.locals;
+      
+      // Get complete user information
+      const users = await sql/*sql*/`
+        select id, email, name, role, hierarchy, division, department
+        from public.users
+        where id = ${session.user_id}
+        limit 1
+      `;
+      
+      const user = users[0];
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
       const role = await getEffectiveRole(sql, session.user_id);
       return res.json({
-        user: { id: session.user_id, email: session.email },
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          hierarchy: user.hierarchy,
+          division: user.division,
+          department: user.department
+        },
         role,
         expiresAt: res.locals.newExpiry,
       });
