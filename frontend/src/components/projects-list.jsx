@@ -89,7 +89,7 @@ export function ProjectsList({ onProjectSelect }) {
 
   const getTaskCount = async (projectId) => {
     try {
-      const res = await fetch(`http://localhost:3001/api/tasks/project/${projectId}`)
+      const res = await fetch(`http://localhost:3001/api/tasks/project/${projectId}`, { credentials: 'include' })
       if (res.ok) {
         const data = await res.json()
         return data.tasks ? data.tasks.length : 0

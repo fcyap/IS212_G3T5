@@ -50,10 +50,10 @@ export function ProjectDetails({ projectId, onBack }) {
     const fetchProjectData = async () => {
       try {
         const [projectRes, membersRes, tasksRes, usersRes] = await Promise.all([
-          fetch(`http://localhost:3001/api/projects/${projectId}`),
-          fetch(`http://localhost:3001/api/projects/${projectId}/members`),
-          fetch(`http://localhost:3001/api/tasks/project/${projectId}`),
-          fetch('http://localhost:3001/api/users')
+          fetch(`http://localhost:3001/api/projects/${projectId}`, { credentials: 'include' }),
+          fetch(`http://localhost:3001/api/projects/${projectId}/members`, { credentials: 'include' }),
+          fetch(`http://localhost:3001/api/tasks/project/${projectId}`, { credentials: 'include' }),
+          fetch('http://localhost:3001/api/users', { credentials: 'include' })
         ])
 
         if (projectRes.ok) {
@@ -144,6 +144,7 @@ export function ProjectDetails({ projectId, onBack }) {
       const response = await fetch(`http://localhost:3001/api/projects/${projectId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ 
           userIds: [userId], 
           message: invitationMessage,
@@ -154,7 +155,7 @@ export function ProjectDetails({ projectId, onBack }) {
       if (response.ok) {
         console.log('Successfully added member');
         // Refresh members from API
-        const membersRes = await fetch(`http://localhost:3001/api/projects/${projectId}/members`);
+        const membersRes = await fetch(`http://localhost:3001/api/projects/${projectId}/members`, { credentials: 'include' });
         if (membersRes.ok) {
           const membersData = await membersRes.json();
           setMembers(membersData.members);
@@ -184,6 +185,7 @@ export function ProjectDetails({ projectId, onBack }) {
       const response = await fetch(`http://localhost:3001/api/projects/${projectId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ 
           userIds: selectedUsers, 
           message: invitationMessage,
@@ -194,7 +196,7 @@ export function ProjectDetails({ projectId, onBack }) {
       if (response.ok) {
         console.log('Successfully added members');
         // Refresh members from API
-        const membersRes = await fetch(`http://localhost:3001/api/projects/${projectId}/members`);
+        const membersRes = await fetch(`http://localhost:3001/api/projects/${projectId}/members`, { credentials: 'include' });
         if (membersRes.ok) {
           const membersData = await membersRes.json();
           setMembers(membersData.members);
@@ -228,7 +230,8 @@ export function ProjectDetails({ projectId, onBack }) {
   const handleRemoveMember = async (userId) => {
     try {
       const response = await fetch(`http://localhost:3001/api/projects/${projectId}/members/${userId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        credentials: 'include'
       })
 
       if (response.ok) {
@@ -245,6 +248,7 @@ export function ProjectDetails({ projectId, onBack }) {
       const response = await fetch(`http://localhost:3001/api/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           title,
           description: description || null,
@@ -301,6 +305,7 @@ export function ProjectDetails({ projectId, onBack }) {
       const response = await fetch(`http://localhost:3001/api/tasks/${editingTask.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           title: taskData.title,
           description: taskData.description || null,
@@ -330,6 +335,7 @@ export function ProjectDetails({ projectId, onBack }) {
       const response = await fetch(`http://localhost:3001/api/tasks/${taskId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ archived: true }),
       })
 
@@ -354,6 +360,7 @@ export function ProjectDetails({ projectId, onBack }) {
       const response = await fetch(`http://localhost:3001/api/projects/${projectId}/archive`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
       })
 
       if (response.ok) {
