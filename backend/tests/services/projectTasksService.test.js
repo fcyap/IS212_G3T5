@@ -156,8 +156,36 @@ describe('ProjectTasksService', () => {
       const result = await projectTasksService.createTask(projectId, taskData);
 
       expect(projectRepository.exists).toHaveBeenCalledWith(1);
+      expect(projectTasksRepository.create).toHaveBeenCalledWith(expect.objectContaining({
+        assigned_to: []
+      }));
       expect(result.success).toBe(true);
       expect(result.task).toEqual(mockCreatedTask);
+    });
+
+    test('should include creator in assignees when provided', async () => {
+      const projectId = 2;
+      const taskData = {
+        title: 'Creator Task',
+        assigned_to: []
+      };
+
+      const mockCreatedTask = {
+        id: 10,
+        ...taskData,
+        assigned_to: [7],
+        project_id: projectId
+      };
+
+      projectRepository.exists.mockResolvedValue(true);
+      projectTasksRepository.create.mockResolvedValue(mockCreatedTask);
+
+      const result = await projectTasksService.createTask(projectId, taskData, 7);
+
+      expect(projectTasksRepository.create).toHaveBeenCalledWith(expect.objectContaining({
+        assigned_to: [7]
+      }));
+      expect(result.success).toBe(true);
     });
 
     test('should handle project not found during task creation', async () => {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { CreateProjectDialog } from "@/components/create-project"
 import { useProjects } from "@/contexts/project-context"
@@ -47,7 +47,21 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
     const [isProjectsExpanded, setIsProjectsExpanded] = useState(true)
     const [isTeamsExpanded, setIsTeamsExpanded] = useState(true)
     const { projects, loading, error, selectedProject, selectProject } = useProjects()
-    const { user, loading: authLoading, canCreateProject } = useAuth()
+    const { user, role, loading: authLoading, canCreateProject } = useAuth()
+
+    const displayName = user?.name || user?.email || 'Unknown User'
+    const initials = (user?.name || user?.email || 'U')
+      .split(/\s+/)
+      .map(part => part[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase()
+    const roleLabel = role?.label
+      || user?.role?.label
+      || user?.role_label
+      || user?.roleName
+      || (typeof user?.role === 'string' ? user.role : null)
+      || 'No Role'
 
     return (
         <div
@@ -237,18 +251,18 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                     {isCollapsed ? (
                         <div className="flex items-center justify-center p-2 bg-gray-800 rounded-lg">
                             <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-xs font-semibold">
-                                {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                                {initials}
                             </div>
                         </div>
                     ) : (
                         <div className="bg-gray-800 rounded-lg p-3">
                             <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-sm font-semibold">
-                                    {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                                    {initials}
                                 </div>
                                 <div className="flex-1">
-                                    <div className="text-sm font-medium text-white">{user.name || 'Unknown User'}</div>
-                                    <div className="text-xs text-gray-400 capitalize">{user.role || 'No Role'}</div>
+                                    <div className="text-sm font-medium text-white">{displayName}</div>
+                                    <div className="text-xs text-gray-400 capitalize">{roleLabel}</div>
                                 </div>
                             </div>
                         </div>

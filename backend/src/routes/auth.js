@@ -54,8 +54,9 @@ function authRoutes(sql) {
 
     console.log('Getting user role...');
     const role = await getEffectiveRole(sql, user.id);
-    console.log('Login successful for user:', user.id);
-    return res.json({ user: { id: user.id, email: user.email }, role, expiresAt });
+    const payload = { user: { id: user.id, email: user.email }, role, expiresAt };
+    console.log('[Auth] /auth/login success', payload);
+    return res.json(payload);
   } catch (e) {
     console.error('POST /auth/login error:', e);  // <-- log root cause
     console.error('Error stack:', e.stack);
@@ -208,12 +209,13 @@ function authRoutes(sql) {
         path: '/',
       });
       
-      console.log('SUPABASE: Login successful for user:', users.id);
-      return res.json({ 
+      const loginPayload = {
         user: { id: users.id, email: users.email },
         role: { label: users.role || 'Staff', level: 1 },
-        expiresAt 
-      });
+        expiresAt
+      };
+      console.log('[Auth] /auth/supabase-login success', loginPayload);
+      return res.json(loginPayload);
       
     } catch (error) {
       console.error('SUPABASE: Login error:', error);

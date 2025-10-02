@@ -10,7 +10,7 @@ const getEffectiveRole = async (sql, userId) => {
     
     const user = users[0];
     if (!user) {
-      return { label: 'Staff', level: 1 };
+      return { label: 'Staff' };
     }
 
     const role = user.role || 'staff';
@@ -18,17 +18,17 @@ const getEffectiveRole = async (sql, userId) => {
     // Map database roles to display roles
     switch (role.toLowerCase()) {
       case 'admin':
-        return { label: 'Admin', level: 3 };
+        return { label: 'Admin' };
       case 'manager':
-        return { label: 'Manager', level: 2 };
+        return { label: 'Manager' };
       case 'staff':
       default:
-        return { label: 'Staff', level: 1 };
+        return { label: 'Staff' };
     }
   } catch (error) {
     console.error('Error getting user role:', error);
     // Fallback to staff role if there's an error
-    return { label: 'Staff', level: 1 };
+    return { label: 'Staff' };
   }
 };
 

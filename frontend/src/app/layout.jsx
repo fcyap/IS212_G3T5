@@ -5,6 +5,7 @@ import { Suspense } from "react"
 import { Toast } from "@/components/ui/toast"
 import { ProjectProvider } from "@/contexts/project-context"
 import { AuthProvider } from "@/hooks/useAuth"
+import { SessionProvider } from "@/components/session-provider"
 import "./globals.css"
 
 export const metadata = {
@@ -17,12 +18,14 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" className="dark">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable} antialiased`}>
-        <AuthProvider>
-          <ProjectProvider>
-            <Suspense fallback={null}>{children}</Suspense>
-            <Toast />
-          </ProjectProvider>
-        </AuthProvider>
+        <SessionProvider>
+          <AuthProvider>
+            <ProjectProvider>
+              <Suspense fallback={null}>{children}</Suspense>
+              <Toast />
+            </ProjectProvider>
+          </AuthProvider>
+        </SessionProvider>
         <Analytics />
       </body>
     </html>

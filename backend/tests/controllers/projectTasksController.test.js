@@ -139,7 +139,22 @@ describe('ProjectTasksController', () => {
 
       await projectTasksController.createTask(req, res);
 
-      expect(projectTasksService.createTask).toHaveBeenCalledWith('1', req.body);
+      expect(projectTasksService.createTask).toHaveBeenCalledWith('1', req.body, null);
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith(mockResult);
+    });
+
+    test('should include creator id from request user when creating', async () => {
+      req.params.projectId = '2';
+      req.user = { id: 77 };
+      req.body = { name: 'Task', assigned_to: [] };
+
+      const mockResult = { success: true, task: { id: 9, name: 'Task' } };
+      projectTasksService.createTask.mockResolvedValue(mockResult);
+
+      await projectTasksController.createTask(req, res);
+
+      expect(projectTasksService.createTask).toHaveBeenCalledWith('2', expect.objectContaining({ name: 'Task', assigned_to: [] }), 77);
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.json).toHaveBeenCalledWith(mockResult);
     });

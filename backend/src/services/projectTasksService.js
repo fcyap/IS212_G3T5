@@ -252,7 +252,7 @@ class ProjectTasksService {
    * @param {Object} taskData - The task data
    * @returns {Object} Created task data or error
    */
-  async createTask(projectId, taskData) {
+  async createTask(projectId, taskData, creatorId = null) {
     try {
       // Validate project exists
       const validatedProjectId = this.validatePositiveInteger(projectId, 'projectId');
@@ -279,6 +279,21 @@ class ProjectTasksService {
         throw new Error('assigned_to must be an array of positive integers');
       }
 
+      const normalizedAssignees = Array.isArray(assigned_to) ? assigned_to : [];
+      const assignees = normalizedAssignees
+        .map((value) => (typeof value === 'string' ? value.trim() : value))
+        .filter((value) => value !== '' && value !== null && value !== undefined)
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value))
+        .map((value) => Math.trunc(value));
+
+      const creatorNumeric = creatorId != null ? Number(creatorId) : null;
+      const validCreatorId = Number.isFinite(creatorNumeric) ? Math.trunc(creatorNumeric) : null;
+
+      if (validCreatorId != null && !assignees.includes(validCreatorId)) {
+        assignees.push(validCreatorId);
+      }
+
       // Validate deadline format if provided
       if (deadline && isNaN(Date.parse(deadline))) {
         throw new Error('Invalid deadline format. Use ISO 8601 format');
@@ -290,7 +305,7 @@ class ProjectTasksService {
         status,
         priority,
         project_id: validatedProjectId,
-        assigned_to: assigned_to || [],
+        assigned_to: assignees,
         deadline: deadline || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()

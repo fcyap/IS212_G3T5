@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react"
-import { SessionProvider, useSession } from "@/components/session-provider"
+import { useSession } from "@/components/session-provider"
 import { SidebarNavigation } from "@/components/sidebar-navigation"
 import { ProjectHeader } from "@/components/project-header"
 import { KanbanBoard } from "@/components/kanban-board"
@@ -115,9 +115,5 @@ function ProtectedProjectTimelinePage() {
 }
 
 export default function Page() {
-  return (
-    <SessionProvider>
-      <ProtectedProjectTimelinePage />
-    </SessionProvider>
-  );
+  return <ProtectedProjectTimelinePage />;
 }

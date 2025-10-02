@@ -109,16 +109,15 @@ class TaskService {
     }
 
     // Validate users exist if we have comprehensive validation
-    if (creatorId && userRepository.getUserById) {
-      await userRepository.getUserById(creatorId);
+    const normalizedCreator = creatorId != null ? Number(creatorId) : null;
+    const validCreatorId = Number.isFinite(normalizedCreator) ? Math.trunc(normalizedCreator) : null;
+
+    if (validCreatorId != null && userRepository.getUserById) {
+      await userRepository.getUserById(validCreatorId);
     }
 
     if (project_id && projectRepository.getProjectById) {
       await projectRepository.getProjectById(project_id);
-    }
-
-    if (assigned_to && assigned_to.length > 0 && userRepository.getUsersByIds) {
-      await userRepository.getUsersByIds(assigned_to);
     }
 
     // Normalize priority and status
@@ -126,7 +125,21 @@ class TaskService {
     const allowedStatuses = new Set(["pending", "in_progress", "completed", "blocked", "cancelled"]);
     const requested = String(status || "pending").toLowerCase();
     const normStatus = allowedStatuses.has(requested) ? requested : "pending";
-    const assignees = Array.isArray(assigned_to) ? assigned_to : [];
+    const normalizedAssignees = Array.isArray(assigned_to) ? assigned_to : [];
+    const assignees = normalizedAssignees
+      .map((value) => (typeof value === 'string' ? value.trim() : value))
+      .filter((value) => value !== '' && value !== null && value !== undefined)
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value))
+      .map((value) => Math.trunc(value));
+
+    if (validCreatorId != null && !assignees.includes(validCreatorId)) {
+      assignees.push(validCreatorId);
+    }
+
+    if (assignees.length > 0 && userRepository.getUsersByIds) {
+      await userRepository.getUsersByIds(assignees);
+    }
 
     // Handle tags
     const tagsArr = Array.isArray(tags)

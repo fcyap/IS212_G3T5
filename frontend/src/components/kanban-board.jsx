@@ -1,5 +1,4 @@
 "use client"
-import { CurrentUser } from "@/components/task-comment/test-task-comments";
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { TaskCard } from "./task-card"
@@ -12,6 +11,8 @@ import { Trash, Check, X, Plus } from "lucide-react"
 import { useKanban } from "@/components/kanban-context"
 import { Badge } from "@/components/ui/badge"
 import { CommentSection } from "./task-comment/task-comment-section"
+import { useUserSearch } from "@/hooks/useUserSearch"
+import { useAuth } from "@/hooks/useAuth"
 
 const priorityChipClasses = {
   Low: "bg-teal-200 text-teal-900",
@@ -42,22 +43,37 @@ function rowToCard(r) {
   };
 }
 
-export function KanbanBoard() {
+export function KanbanBoard({ projectId = null }) {
+  const { user: currentUser } = useAuth()
   async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees }) {
+    if (!currentUser?.id) {
+      console.error('[KanbanBoard] Cannot create task without an authenticated user')
+      return
+    }
     try {
+      const payload = {
+        title,
+        description: description || null,
+        priority: (priority || "Low").toLowerCase(),
+        status: editorLane,
+        deadline: dueDate || null,
+        assigned_to: Array.isArray(assignees) ? assignees.map(a => a.id) : [],
+        tags,
+      }
+
+      if (projectId != null) {
+        payload.project_id = projectId
+      }
+
+      if (!payload.assigned_to.includes(currentUser.id)) {
+        payload.assigned_to = [...payload.assigned_to, currentUser.id]
+      }
+
       const res = await fetch(`${API}/tasks`, {
         method: "POST",
+        credentials: 'include',
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title,
-          description: description || null,
-          priority: (priority || "Low").toLowerCase(),
-          status: editorLane,
-          deadline: dueDate || null,
-          project_id: projectId,
-          assigned_to: Array.isArray(assignees) && assignees.length > 0 ? assignees.map(a => a.id) : [CurrentUser.id],
-          tags,
-        }),
+        body: JSON.stringify(payload),
       })
       if (!res.ok) {
         const { error } = await res.json().catch(() => ({}))
@@ -65,15 +81,10 @@ export function KanbanBoard() {
       }
       const row = await res.json()
       const card = rowToCard(row)
-      const withAssignees = {
-     ...card,
-     assignees: [{ id: CurrentUser.id, name: CurrentUser.name }],
-   }
 
-      // setTasks(prev => editorPosition === "top" ? [card, ...prev] : [...prev, card])
       setTasks(prev =>
-     editorPosition === "top" ? [withAssignees, ...prev] : [...prev, withAssignees]
-   )
+        editorPosition === "top" ? [card, ...prev] : [...prev, card]
+      )
       setBanner("Task Successfully Created")
       cancelAddTask()
     } catch (err) {
@@ -95,7 +106,9 @@ export function KanbanBoard() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`${API}/tasks`)
+        const res = await fetch(`${API}/tasks`, {
+          credentials: 'include',
+        })
         if (!res.ok) throw new Error(`GET /tasks ${res.status}`)
         const rows = await res.json()
         setTasks(rows.map(rowToCard))
@@ -323,11 +336,12 @@ export function KanbanBoard() {
                 assigned_to,
               };
               console.log('[KanbanBoard] Sending payload to backend:', payload);
-              const res = await fetch(`${API}/tasks/${panelTask.id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-              })
+             const res = await fetch(`${API}/tasks/${panelTask.id}`, {
+               method: "PUT",
+                credentials: 'include',
+               headers: { "Content-Type": "application/json" },
+               body: JSON.stringify(payload),
+             })
               if (!res.ok) {
                 const { error } = await res.json().catch(() => ({}))
                 throw new Error(error || `PUT /tasks/${panelTask.id} ${res.status}`)
@@ -354,9 +368,12 @@ export function KanbanBoard() {
 
 
 function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
-    const canEdit =
+  const { user: currentUser } = useAuth()
+  const currentUserId = currentUser?.id
+  const canEdit =
     Array.isArray(task.assignees) &&
-    task.assignees.some((a) => a.id === CurrentUser.id);
+    currentUserId != null &&
+    task.assignees.some((a) => a.id === currentUserId);
   const [title, setTitle] = useState(task.title || "");
   const [description, setDescription] = useState(task.description || "");
   const [priority, setPriority] = useState(task.priority || "Low");
@@ -365,40 +382,19 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
   const [tags, setTags] = useState(Array.isArray(task.tags) ? task.tags : []);
   const [tagInput, setTagInput] = useState("");
   const [assignees, setAssignees] = useState(Array.isArray(task.assignees) ? task.assignees : []);
-  const [userSearch, setUserSearch] = useState("");
-  const [userSearchResults, setUserSearchResults] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-
-  // Fetch user suggestions from backend on each keydown
-  // Debounce timer for user search
-  const [userSearchDebounce, setUserSearchDebounce] = useState(null);
+  const {
+    query: userSearch,
+    results: userSearchResults,
+    loading: loadingUsers,
+    search: searchUsers,
+    clear: clearUserSearch,
+  } = useUserSearch({ canSearch: canEdit, minQueryLength: 1 })
 
   function handleUserSearchInput(e) {
-       if (!canEdit) return;
+    if (!canEdit) return;
     const value = e.target.value;
     console.log('[AssigneeSearch] (input onChange) value:', value);
-    setUserSearch(value);
-    if (userSearchDebounce) clearTimeout(userSearchDebounce);
-    if (!value.trim()) {
-      setUserSearchResults([]);
-      return;
-    }
-    setLoadingUsers(true);
-    const timer = setTimeout(async () => {
-      const apiUrl = `${API}/users/search?q=${encodeURIComponent(value)}&limit=8`;
-      console.log('[AssigneeSearch] Fetching:', apiUrl);
-      try {
-        const res = await fetch(apiUrl);
-        const data = await res.json();
-        setUserSearchResults(data.users || []);
-      } catch (err) {
-        console.log('[AssigneeSearch] Fetch error:', err);
-        setUserSearchResults([]);
-      } finally {
-        setLoadingUsers(false);
-      }
-    }, 250);
-    setUserSearchDebounce(timer);
+    searchUsers(value);
   }
 
 const canSave = canEdit && title.trim().length > 0 && priority;
@@ -418,8 +414,7 @@ const canSave = canEdit && title.trim().length > 0 && priority;
     if (!assignees.some((a) => a.id === user.id)) {
       setAssignees((prev) => [...prev, user]);
     }
-    setUserSearch("");
-    setUserSearchResults([]);
+    clearUserSearch();
   }
 
   function removeAssignee(userId) {
@@ -431,6 +426,7 @@ const canSave = canEdit && title.trim().length > 0 && priority;
     try {
       const res = await fetch(`${API}/tasks/${task.id}`, {
         method: "PUT",
+        credentials: 'include',
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ archived: true }),
       });
@@ -652,28 +648,40 @@ const canSave = canEdit && title.trim().length > 0 && priority;
   )
 }
 function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
+  const { user: currentUser } = useAuth()
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
   const [priority, setPriority] = useState("")
   const PRIORITIES = ["Low", "Medium", "High"]
+  const canEdit = true
   const canSave = title.trim().length > 0 && priority !== ""
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState([]);
 
   // --- Assignees & user search (copied from TaskSidePanel, trimmed) ---
   const [assignees, setAssignees] = useState([]);
-  const [userSearch, setUserSearch] = useState("");
-  const [userSearchResults, setUserSearchResults] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [userSearchDebounce, setUserSearchDebounce] = useState(null);
+  const {
+    query: userSearch,
+    results: userSearchResults,
+    loading: loadingUsers,
+    search: searchUsers,
+    clear: clearUserSearch,
+  } = useUserSearch({ canSearch: true, minQueryLength: 1 })
+
+  useEffect(() => {
+    if (!currentUser?.id) return
+    setAssignees(prev => {
+      if (prev.some(a => a.id === currentUser.id)) return prev
+      return [...prev, { id: currentUser.id, name: currentUser.name ?? 'You' }]
+    })
+  }, [currentUser])
 
   function addAssignee(user) {
     if (!assignees.some((a) => a.id === user.id)) {
       setAssignees((prev) => [...prev, user]);
     }
-    setUserSearch("");
-    setUserSearchResults([]);
+    clearUserSearch();
   }
 
   function removeAssignee(userId) {
@@ -682,26 +690,7 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
 
   function handleUserSearchInput(e) {
     const value = e.target.value;
-    setUserSearch(value);
-    if (userSearchDebounce) clearTimeout(userSearchDebounce);
-    if (!value.trim()) {
-      setUserSearchResults([]);
-      return;
-    }
-    setLoadingUsers(true);
-    const timer = setTimeout(async () => {
-      const apiUrl = `${API}/users/search?q=${encodeURIComponent(value)}&limit=8`;
-      try {
-        const res = await fetch(apiUrl);
-        const data = await res.json();
-        setUserSearchResults(data.users || []);
-      } catch {
-        setUserSearchResults([]);
-      } finally {
-        setLoadingUsers(false);
-      }
-    }, 250);
-    setUserSearchDebounce(timer);
+    searchUsers(value);
   }
 
   function addTagFromInput() {
@@ -726,6 +715,7 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
     try {
       const res = await fetch(`${API}/tasks/${taskId}`, {
         method: "PUT",
+        credentials: 'include',
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ archived: true }),
       })
@@ -921,6 +911,3 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
     </div>
   )
 }
-
-
-

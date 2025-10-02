@@ -200,7 +200,8 @@ describe('TaskService', () => {
       };
 
       // Mock insert method since service checks for it first
-      taskRepository.insert = jest.fn().mockResolvedValue({ data: mockCreatedTask, error: null });
+      taskRepository.insert = jest.fn().mockResolvedValue(mockCreatedTask);
+      userRepository.getUsersByIds.mockResolvedValue({ data: [], error: null });
 
       const result = await taskService.createTask(taskData);
 
@@ -217,13 +218,38 @@ describe('TaskService', () => {
       expect(result).toEqual(mockCreatedTask);
     });
 
+    test('should ensure creator is assigned when missing', async () => {
+      const taskData = {
+        title: 'Creator Task',
+        description: 'Task description',
+        assigned_to: []
+      };
+
+      const mockCreatedTask = {
+        id: 2,
+        title: 'Creator Task',
+        assigned_to: [5]
+      };
+
+      taskRepository.insert = jest.fn().mockResolvedValue(mockCreatedTask);
+      userRepository.getUserById.mockResolvedValue({ id: 5 });
+      userRepository.getUsersByIds.mockResolvedValue({ data: [{ id: 5 }], error: null });
+
+      const result = await taskService.createTask(taskData, 5);
+
+      expect(taskRepository.insert).toHaveBeenCalledWith(expect.objectContaining({
+        assigned_to: [5]
+      }));
+      expect(result).toEqual(mockCreatedTask);
+    });
+
     test('should handle creation error', async () => {
       const taskData = {
         title: 'New Task',
         description: 'Task description'
       };
 
-      taskRepository.insert = jest.fn().mockResolvedValue({ data: null, error: new Error('Validation failed') });
+      taskRepository.insert = jest.fn().mockRejectedValue(new Error('Validation failed'));
 
       await expect(taskService.createTask(taskData))
         .rejects.toThrow('Validation failed');

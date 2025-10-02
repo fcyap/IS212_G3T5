@@ -20,9 +20,24 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password: pw }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Login failed");
+        throw new Error(data?.error || "Login failed");
+      }
+      try {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(
+            'session.profile',
+            JSON.stringify({ user: data.user, role: data.role, expiresAt: data.expiresAt ?? null })
+          );
+          window.dispatchEvent(
+            new CustomEvent('session:login', {
+              detail: { user: data.user, role: data.role, expiresAt: data.expiresAt ?? null },
+            })
+          );
+        }
+      } catch (err) {
+        console.warn('[LoginPage] Failed to cache session profile', err);
       }
       router.push("/");
     } catch (e) {

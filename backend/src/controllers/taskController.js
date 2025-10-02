@@ -22,7 +22,8 @@ const list = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const task = await taskService.createTask(req.body);
+    const creatorId = req.user?.id ?? req.body?.creator_id ?? req.body?.creatorId ?? null;
+    const task = await taskService.createTask({ ...req.body }, creatorId ?? null);
     res.status(201).json(task);
   } catch (e) {
     console.error("[POST /tasks]", e);

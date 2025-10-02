@@ -135,6 +135,7 @@ class ProjectTasksController {
     try {
       const { projectId } = req.params;
       const taskData = req.body;
+      const creatorId = req.user?.id ?? req.body?.creator_id ?? req.body?.creatorId ?? null;
 
       if (!projectId) {
         return res.status(400).json({
@@ -144,7 +145,7 @@ class ProjectTasksController {
         });
       }
 
-      const result = await projectTasksService.createTask(projectId, taskData);
+      const result = await projectTasksService.createTask(projectId, taskData, creatorId);
 
       if (result.success) {
         return res.status(201).json(result);
