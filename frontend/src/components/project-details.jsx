@@ -17,9 +17,11 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ArrowLeft, Plus, Search, X, Check, Filter, ChevronDown, ChevronRight, Edit, Trash, Archive } from "lucide-react"
 import { useProjects } from "@/contexts/project-context"
+import { useAuth } from "@/hooks/useAuth"
 import toast from "react-hot-toast"
 
 export function ProjectDetails({ projectId, onBack }) {
+  const { currentUserId } = useAuth()
   const [project, setProject] = useState(null)
   const [members, setMembers] = useState([])
   const [tasks, setTasks] = useState([])
@@ -43,7 +45,6 @@ export function ProjectDetails({ projectId, onBack }) {
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
   const [showEditProject, setShowEditProject] = useState(false)
 
-  const currentUserId = parseInt(process.env.NEXT_PUBLIC_CURRENT_USER_ID || 1) // Allow override via env
   const { updateProject } = useProjects()
 
   useEffect(() => {

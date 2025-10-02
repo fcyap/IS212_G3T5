@@ -8,9 +8,11 @@ import { Search, Filter, SortAsc, SortDesc } from "lucide-react"
 import { useProjects } from "@/contexts/project-context"
 import { CreateProjectDialog } from "@/components/create-project"
 import { userService } from "@/lib/api"
+import { useAuth } from "@/hooks/useAuth"
 
 export function ProjectsList({ onProjectSelect }) {
   const { projects, loading, loadProjects } = useProjects()
+  const { currentUserId } = useAuth()
   const [filteredProjects, setFilteredProjects] = useState([])
   const [searchTerm, setSearchTerm] = useState("")
   const [sortBy, setSortBy] = useState("name") // name, created_at, updated_at
@@ -18,7 +20,6 @@ export function ProjectsList({ onProjectSelect }) {
   const [filterStatus, setFilterStatus] = useState("all") // all, active, hold, completed, archived
   const [filterRole, setFilterRole] = useState("all") // all, owner, collaborator
   const [allUsers, setAllUsers] = useState([])
-  const currentUserId = parseInt(process.env.NEXT_PUBLIC_USER_ID || 1)
 
   useEffect(() => {
     const fetchUsers = async () => {
