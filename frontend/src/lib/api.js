@@ -5,6 +5,7 @@ class ProjectService {
   async getAllProjects() {
     const response = await fetch(`${API_BASE_URL}/api/projects`, {
       credentials: 'include', // Include cookies for authentication
+      credentials: 'include', // Include cookies for authentication
     });
     if (!response.ok) {
       throw new Error(`Failed to fetch projects: ${response.statusText}`);
@@ -18,6 +19,7 @@ class ProjectService {
 
   async getProjectById(id) {
     const response = await fetch(`${API_BASE_URL}/api/projects/${id}`, {
+      credentials: 'include', // Include cookies for authentication
       credentials: 'include', // Include cookies for authentication
     });
     if (!response.ok) {
@@ -40,6 +42,7 @@ class ProjectService {
       headers: {
         'Content-Type': 'application/json',
       },
+      credentials: 'include', // Include cookies for authentication
       credentials: 'include', // Include cookies for authentication
       body: JSON.stringify(backendData),
     });
@@ -76,6 +79,7 @@ class ProjectService {
     const response = await fetch(`${API_BASE_URL}/api/projects/${id}`, {
       method: 'DELETE',
       credentials: 'include', // Include cookies for authentication
+      credentials: 'include', // Include cookies for authentication
     });
 
     if (!response.ok) {
@@ -86,6 +90,7 @@ class ProjectService {
 
   async getProjectMembers(projectId) {
     const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/members`, {
+      credentials: 'include', // Include cookies for authentication
       credentials: 'include', // Include cookies for authentication
     });
     if (!response.ok) {
@@ -101,6 +106,7 @@ class ProjectService {
   async archiveProject(projectId) {
     const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/archive`, {
       method: 'PATCH',
+      credentials: 'include', // Include cookies for authentication
       credentials: 'include', // Include cookies for authentication
     });
 
@@ -121,6 +127,7 @@ class ProjectService {
         'Content-Type': 'application/json',
       },
       credentials: 'include', // Include cookies for authentication
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify({ userIds: [userId] }),
     });
 
@@ -133,6 +140,7 @@ class ProjectService {
   async removeUserFromProject(projectId, userId) {
     const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/members/${userId}`, {
       method: 'DELETE',
+      credentials: 'include', // Include cookies for authentication
       credentials: 'include', // Include cookies for authentication
     });
 
@@ -169,6 +177,7 @@ class ProjectTasksService {
     const url = `${API_BASE_URL}/api/projects/${projectId}/tasks${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     const response = await fetch(url, {
       credentials: 'include', // Include cookies for authentication
+      credentials: 'include', // Include cookies for authentication
     });
 
     if (!response.ok) {
@@ -184,6 +193,7 @@ class ProjectTasksService {
 
   async getTaskById(projectId, taskId) {
     const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks/${taskId}`, {
+      credentials: 'include', // Include cookies for authentication
       credentials: 'include', // Include cookies for authentication
     });
     if (!response.ok) {
@@ -202,6 +212,7 @@ class ProjectTasksService {
       headers: {
         'Content-Type': 'application/json',
       },
+      credentials: 'include', // Include cookies for authentication
       credentials: 'include', // Include cookies for authentication
       body: JSON.stringify(taskData),
     });
@@ -224,6 +235,7 @@ class ProjectTasksService {
         'Content-Type': 'application/json',
       },
       credentials: 'include', // Include cookies for authentication
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify(taskData),
     });
 
@@ -242,6 +254,7 @@ class ProjectTasksService {
     const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
       method: 'DELETE',
       credentials: 'include', // Include cookies for authentication
+      credentials: 'include', // Include cookies for authentication
     });
 
     if (!response.ok) {
@@ -256,6 +269,9 @@ class ProjectTasksService {
   }
 
   async getTaskStats(projectId) {
+    const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks/stats`, {
+      credentials: 'include', // Include cookies for authentication
+    });
     const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks/stats`, {
       credentials: 'include', // Include cookies for authentication
     });
@@ -343,3 +359,4 @@ class UserService {
 export const projectService = new ProjectService();
 export const projectTasksService = new ProjectTasksService();
 export const userService = new UserService();
+export const notificationService = new NotificationService();
