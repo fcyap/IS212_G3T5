@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Search, Filter, SortAsc, SortDesc } from "lucide-react"
 import { useProjects } from "@/contexts/project-context"
 import { CreateProjectDialog } from "@/components/create-project"
+import { userService } from "@/lib/api"
 
 export function ProjectsList({ onProjectSelect }) {
   const { projects, loading, loadProjects } = useProjects()
@@ -22,11 +23,8 @@ export function ProjectsList({ onProjectSelect }) {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const usersRes = await fetch('http://localhost:3001/api/users')
-        if (usersRes.ok) {
-          const usersData = await usersRes.json()
-          setAllUsers(usersData.users || [])
-        }
+        const users = await userService.getAllUsers()
+        setAllUsers(users || [])
       } catch (error) {
         console.error('Error fetching users:', error)
       }

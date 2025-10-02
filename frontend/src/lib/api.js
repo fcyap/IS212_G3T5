@@ -4,7 +4,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 class ProjectService {
   async getAllProjects() {
     const response = await fetch(`${API_BASE_URL}/api/projects`, {
-      credentials: 'include'
+      credentials: 'include', // Include cookies for authentication
     });
     if (!response.ok) {
       throw new Error(`Failed to fetch projects: ${response.statusText}`);
@@ -18,7 +18,7 @@ class ProjectService {
 
   async getProjectById(id) {
     const response = await fetch(`${API_BASE_URL}/api/projects/${id}`, {
-      credentials: 'include'
+      credentials: 'include', // Include cookies for authentication
     });
     if (!response.ok) {
       throw new Error(`Failed to fetch project ${id}: ${response.statusText}`);
@@ -40,7 +40,7 @@ class ProjectService {
       headers: {
         'Content-Type': 'application/json',
       },
-      credentials: 'include',
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify(backendData),
     });
     
@@ -75,7 +75,7 @@ class ProjectService {
   async deleteProject(id) {
     const response = await fetch(`${API_BASE_URL}/api/projects/${id}`, {
       method: 'DELETE',
-      credentials: 'include'
+      credentials: 'include', // Include cookies for authentication
     });
 
     if (!response.ok) {
@@ -86,7 +86,7 @@ class ProjectService {
 
   async getProjectMembers(projectId) {
     const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/members`, {
-      credentials: 'include'
+      credentials: 'include', // Include cookies for authentication
     });
     if (!response.ok) {
       throw new Error(`Failed to fetch members for project ${projectId}: ${response.statusText}`);
@@ -101,7 +101,7 @@ class ProjectService {
   async archiveProject(projectId) {
     const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/archive`, {
       method: 'PATCH',
-      credentials: 'include'
+      credentials: 'include', // Include cookies for authentication
     });
 
     if (!response.ok) {
@@ -120,7 +120,7 @@ class ProjectService {
       headers: {
         'Content-Type': 'application/json',
       },
-      credentials: 'include',
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify({ userIds: [userId] }),
     });
 
@@ -133,7 +133,7 @@ class ProjectService {
   async removeUserFromProject(projectId, userId) {
     const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/members/${userId}`, {
       method: 'DELETE',
-      credentials: 'include'
+      credentials: 'include', // Include cookies for authentication
     });
 
     if (!response.ok) {
@@ -168,7 +168,7 @@ class ProjectTasksService {
 
     const url = `${API_BASE_URL}/api/projects/${projectId}/tasks${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     const response = await fetch(url, {
-      credentials: 'include'
+      credentials: 'include', // Include cookies for authentication
     });
 
     if (!response.ok) {
@@ -184,7 +184,7 @@ class ProjectTasksService {
 
   async getTaskById(projectId, taskId) {
     const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks/${taskId}`, {
-      credentials: 'include'
+      credentials: 'include', // Include cookies for authentication
     });
     if (!response.ok) {
       throw new Error(`Failed to fetch task ${taskId}: ${response.statusText}`);
@@ -202,7 +202,7 @@ class ProjectTasksService {
       headers: {
         'Content-Type': 'application/json',
       },
-      credentials: 'include',
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify(taskData),
     });
 
@@ -223,6 +223,7 @@ class ProjectTasksService {
       headers: {
         'Content-Type': 'application/json',
       },
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify(taskData),
     });
 
@@ -240,6 +241,7 @@ class ProjectTasksService {
   async deleteTask(taskId) {
     const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
       method: 'DELETE',
+      credentials: 'include', // Include cookies for authentication
     });
 
     if (!response.ok) {
@@ -254,7 +256,9 @@ class ProjectTasksService {
   }
 
   async getTaskStats(projectId) {
-    const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks/stats`);
+    const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks/stats`, {
+      credentials: 'include', // Include cookies for authentication
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch task stats for project ${projectId}: ${response.statusText}`);
     }
@@ -329,6 +333,44 @@ class UserService {
   }
 }
 
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch notifications');
+    return data.notifications;
+  }
+
+  async markAsRead(notificationId) {
+    const response = await fetch(`${API_BASE_URL}/api/notifications/${notificationId}/read`, {
+      method: 'PATCH',
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to mark notification as read: ${response.statusText}`);
+    }
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to mark notification as read');
+    }
+    return data.notification;
+  }
+
+  async markAllAsRead() {
+    const response = await fetch(`${API_BASE_URL}/api/notifications/mark-all-read`, {
+      method: 'PATCH',
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to mark all notifications as read: ${response.statusText}`);
+    }
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to mark all notifications as read');
+    }
+    return data;
+  }
+}
+
 export const projectService = new ProjectService();
 export const projectTasksService = new ProjectTasksService();
 export const userService = new UserService();
+export const notificationService = new NotificationService();
