@@ -78,7 +78,7 @@ async function initializeApp() {
     res.status(200).json({ ok: true });
   });
 
-  app.get('/me', strictSession, (req, res) => {
+  app.get('/me', authMw, (req, res) => {
     res.json({
       user: req.user,
       expiresAt: res.locals.newExpiry,
