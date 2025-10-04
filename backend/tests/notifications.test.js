@@ -1,4 +1,543 @@
-describe('Project Invitation Notifications - Acceptance Criteria Tests', () => {
+const notificationRepository = require('../src/repository/notificationRepository');
+const notificationService = require('../src/services/notificationService');
+
+/**
+ * Notification System Test Suite
+ * Tests basic CRUD operations and Acceptance Criteria
+ * 
+ * User Story: As a staff, I want to view my notification history so that 
+ * I can track past alerts and stay informed about previous task updates.
+ * 
+ * Acceptance Criteria:
+ * AC1: All notifications are saved in the database with timestamp, type, sender
+ * AC2: Old notifications remain accessible for at least 90 days
+ */
+
+describe('Notification CRUD Operations', () => {
+
+  describe('CREATE - Notification Creation', () => {
+    test('should create a notification with all required fields', async () => {
+      const notificationData = {
+        user_id: 1,
+        type: 'task_assigned',
+        title: 'New Task Assigned',
+        message: 'You have been assigned to "Update Documentation"',
+        sender_id: 2,
+        sender_name: 'John Doe',
+        metadata: { task_id: 123, project_id: 456 }
+      };
+
+      const notification = await notificationService.createNotification(notificationData);
+
+      expect(notification).toHaveProperty('id');
+      expect(notification.user_id).toBe(1);
+      expect(notification.type).toBe('task_assigned');
+      expect(notification.title).toBe('New Task Assigned');
+      expect(notification.message).toContain('Update Documentation');
+      expect(notification.sender_id).toBe(2);
+      expect(notification.sender_name).toBe('John Doe');
+      expect(notification.is_read).toBe(false);
+      expect(notification).toHaveProperty('created_at');
+      expect(notification).toHaveProperty('expires_at');
+      expect(notification.metadata).toHaveProperty('task_id', 123);
+    });
+
+    test('should fail to create notification without required fields', async () => {
+      const invalidData = {
+        user_id: 1,
+        // Missing type, title, message
+      };
+
+      await expect(notificationService.createNotification(invalidData))
+        .rejects.toThrow();
+    });
+
+    test('should create notification with default 90-day expiration', async () => {
+      const notificationData = {
+        user_id: 1,
+        type: 'project_invitation',
+        title: 'Project Invitation',
+        message: 'You have been invited to Project Alpha'
+      };
+
+      const notification = await notificationService.createNotification(notificationData);
+      
+      const createdDate = new Date(notification.created_at);
+      const expiresDate = new Date(notification.expires_at);
+      const daysDifference = Math.floor((expiresDate - createdDate) / (1000 * 60 * 60 * 24));
+
+      expect(daysDifference).toBeGreaterThanOrEqual(89);
+      expect(daysDifference).toBeLessThanOrEqual(91);
+    });
+
+    test('should create bulk notifications for multiple users', async () => {
+      const userIds = [1, 2, 3, 4, 5];
+      const template = {
+        type: 'project_updated',
+        title: 'Project Status Changed',
+        message: 'Project Alpha has been marked as completed',
+        sender_id: 10,
+        sender_name: 'Admin User',
+        metadata: { project_id: 789 }
+      };
+
+      const notifications = await notificationService.bulkCreateNotifications(userIds, template);
+
+      expect(notifications).toHaveLength(5);
+      expect(notifications[0].user_id).toBe(1);
+      expect(notifications[4].user_id).toBe(5);
+      expect(notifications.every(n => n.type === 'project_updated')).toBe(true);
+    });
+  });
+
+  describe('READ - Notification Retrieval', () => {
+    let testNotificationId;
+    let testUserId = 1;
+
+    beforeAll(async () => {
+      // Create test notification
+      const notification = await notificationService.createNotification({
+        user_id: testUserId,
+        type: 'task_comment',
+        title: 'New Comment',
+        message: 'Someone commented on your task',
+        sender_id: 2,
+        sender_name: 'Jane Smith'
+      });
+      testNotificationId = notification.id;
+    });
+
+    test('should retrieve all notifications for a user', async () => {
+      const notifications = await notificationService.getUserNotifications(testUserId);
+
+      expect(Array.isArray(notifications)).toBe(true);
+      expect(notifications.length).toBeGreaterThan(0);
+      expect(notifications.every(n => n.user_id === testUserId)).toBe(true);
+    });
+
+    test('should retrieve notification by ID', async () => {
+      const notification = await notificationService.getNotificationById(testNotificationId, testUserId);
+
+      expect(notification).toBeDefined();
+      expect(notification.id).toBe(testNotificationId);
+      expect(notification.user_id).toBe(testUserId);
+      expect(notification.type).toBe('task_comment');
+    });
+
+    test('should filter notifications by read status', async () => {
+      const unreadNotifications = await notificationService.getUserNotifications(testUserId, { is_read: false });
+
+      expect(Array.isArray(unreadNotifications)).toBe(true);
+      expect(unreadNotifications.every(n => n.is_read === false)).toBe(true);
+    });
+
+    test('should filter notifications by type', async () => {
+      const taskNotifications = await notificationService.getUserNotifications(testUserId, { type: 'task_comment' });
+
+      expect(Array.isArray(taskNotifications)).toBe(true);
+      expect(taskNotifications.every(n => n.type === 'task_comment')).toBe(true);
+    });
+
+    test('should get unread notification count', async () => {
+      const count = await notificationService.getUnreadCount(testUserId);
+
+      expect(typeof count).toBe('number');
+      expect(count).toBeGreaterThanOrEqual(0);
+    });
+
+    test('should get notification history with pagination', async () => {
+      const result = await notificationService.getNotificationHistory(testUserId, { limit: 10, offset: 0 });
+
+      expect(result).toHaveProperty('notifications');
+      expect(result).toHaveProperty('pagination');
+      expect(Array.isArray(result.notifications)).toBe(true);
+      expect(result.pagination).toHaveProperty('total');
+      expect(result.pagination).toHaveProperty('limit', 10);
+      expect(result.pagination).toHaveProperty('offset', 0);
+    });
+
+    test('should not allow user to access another user\'s notification', async () => {
+      await expect(notificationService.getNotificationById(testNotificationId, 999))
+        .rejects.toThrow('Unauthorized');
+    });
+  });
+
+  describe('UPDATE - Notification Modification', () => {
+    let testNotificationId;
+    let testUserId = 1;
+
+    beforeEach(async () => {
+      const notification = await notificationService.createNotification({
+        user_id: testUserId,
+        type: 'task_updated',
+        title: 'Task Status Changed',
+        message: 'Your task status has been updated',
+        sender_id: 3,
+        sender_name: 'Manager'
+      });
+      testNotificationId = notification.id;
+    });
+
+    test('should mark notification as read', async () => {
+      const notification = await notificationService.markAsRead(testNotificationId, testUserId);
+
+      expect(notification.is_read).toBe(true);
+      expect(notification).toHaveProperty('updated_at');
+    });
+
+    test('should mark all notifications as read for a user', async () => {
+      // Create multiple unread notifications
+      await notificationService.createNotification({
+        user_id: testUserId,
+        type: 'test',
+        title: 'Test 1',
+        message: 'Test message 1'
+      });
+      await notificationService.createNotification({
+        user_id: testUserId,
+        type: 'test',
+        title: 'Test 2',
+        message: 'Test message 2'
+      });
+
+      const updatedNotifications = await notificationService.markAllAsRead(testUserId);
+
+      expect(Array.isArray(updatedNotifications)).toBe(true);
+      expect(updatedNotifications.length).toBeGreaterThan(0);
+      expect(updatedNotifications.every(n => n.is_read === true)).toBe(true);
+    });
+
+    test('should not allow user to mark another user\'s notification as read', async () => {
+      await expect(notificationService.markAsRead(testNotificationId, 999))
+        .rejects.toThrow('Unauthorized');
+    });
+  });
+
+  describe('DELETE - Notification Deletion', () => {
+    let testNotificationId;
+    let testUserId = 1;
+
+    beforeEach(async () => {
+      const notification = await notificationService.createNotification({
+        user_id: testUserId,
+        type: 'member_removed',
+        title: 'Removed from Project',
+        message: 'You have been removed from Project Beta',
+        sender_id: 4,
+        sender_name: 'Admin'
+      });
+      testNotificationId = notification.id;
+    });
+
+    test('should delete a notification', async () => {
+      const result = await notificationService.deleteNotification(testNotificationId, testUserId);
+
+      expect(result).toBe(true);
+
+      // Verify it's deleted
+      await expect(notificationService.getNotificationById(testNotificationId, testUserId))
+        .rejects.toThrow('Notification not found');
+    });
+
+    test('should not allow user to delete another user\'s notification', async () => {
+      await expect(notificationService.deleteNotification(testNotificationId, 999))
+        .rejects.toThrow('Unauthorized');
+    });
+  });
+
+  describe('Specialized Notification Types', () => {
+    test('should create project invitation notification', async () => {
+      const notification = await notificationService.createProjectInvitationNotification({
+        userId: 1,
+        projectName: 'Website Redesign',
+        inviterName: 'Sarah Johnson',
+        inviterId: 5,
+        role: 'manager',
+        projectId: 101
+      });
+
+      expect(notification.type).toBe('project_invitation');
+      expect(notification.title).toContain('Website Redesign');
+      expect(notification.message).toContain('Sarah Johnson');
+      expect(notification.message).toContain('manager');
+      expect(notification.metadata.project_id).toBe(101);
+      expect(notification.metadata.role).toBe('manager');
+    });
+
+    test('should create task assigned notification', async () => {
+      const notification = await notificationService.createTaskAssignedNotification({
+        userId: 2,
+        taskTitle: 'Fix Login Bug',
+        taskId: 202,
+        projectName: 'Bug Fixes',
+        assignedBy: 'Tech Lead'
+      });
+
+      expect(notification.type).toBe('task_assigned');
+      expect(notification.title).toBe('New Task Assigned');
+      expect(notification.message).toContain('Fix Login Bug');
+      expect(notification.metadata.task_id).toBe(202);
+    });
+
+    test('should create task updated notification', async () => {
+      const notification = await notificationService.createTaskUpdatedNotification({
+        userId: 3,
+        taskTitle: 'Update Documentation',
+        taskId: 303,
+        updateType: 'completed',
+        updatedBy: 'Team Member'
+      });
+
+      expect(notification.type).toBe('task_updated');
+      expect(notification.message).toContain('completed');
+      expect(notification.metadata.task_id).toBe(303);
+    });
+  });
+});
+
+describe('Acceptance Criteria Tests', () => {
+
+  describe('AC1: All notifications are saved with timestamp, type, sender', () => {
+    test('should save notification with all required AC1 fields', async () => {
+      const notification = await notificationService.createNotification({
+        user_id: 1,
+        type: 'task_assigned',
+        title: 'Task Assignment',
+        message: 'New task assigned to you',
+        sender_id: 2,
+        sender_name: 'Project Manager'
+      });
+
+      // Verify timestamp
+      expect(notification).toHaveProperty('created_at');
+      expect(new Date(notification.created_at)).toBeInstanceOf(Date);
+      expect(isNaN(new Date(notification.created_at).getTime())).toBe(false);
+
+      // Verify type
+      expect(notification).toHaveProperty('type');
+      expect(typeof notification.type).toBe('string');
+      expect(notification.type).toBe('task_assigned');
+
+      // Verify sender
+      expect(notification).toHaveProperty('sender_id');
+      expect(notification).toHaveProperty('sender_name');
+      expect(notification.sender_id).toBe(2);
+      expect(notification.sender_name).toBe('Project Manager');
+
+      // Additional required fields
+      expect(notification).toHaveProperty('id');
+      expect(notification).toHaveProperty('user_id');
+      expect(notification).toHaveProperty('title');
+      expect(notification).toHaveProperty('message');
+    });
+
+    test('should have valid timestamp format (ISO 8601)', async () => {
+      const notification = await notificationService.createNotification({
+        user_id: 1,
+        type: 'test',
+        title: 'Test',
+        message: 'Test message'
+      });
+
+      const timestampRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
+      expect(notification.created_at).toMatch(timestampRegex);
+    });
+
+    test('should categorize notifications by type', async () => {
+      const types = [
+        'project_invitation',
+        'task_assigned',
+        'task_updated',
+        'task_comment',
+        'project_updated',
+        'member_added',
+        'member_removed'
+      ];
+
+      for (const type of types) {
+        const notification = await notificationService.createNotification({
+          user_id: 1,
+          type: type,
+          title: `Test ${type}`,
+          message: `Test message for ${type}`
+        });
+
+        expect(notification.type).toBe(type);
+      }
+    });
+  });
+
+  describe('AC2: Old notifications remain accessible for at least 90 days', () => {
+    test('should set default expiration to 90 days', async () => {
+      const notification = await notificationService.createNotification({
+        user_id: 1,
+        type: 'task_assigned',
+        title: 'Long-term Notification',
+        message: 'This should be accessible for 90 days'
+      });
+
+      const createdDate = new Date(notification.created_at);
+      const expiresDate = new Date(notification.expires_at);
+      const millisecondsIn90Days = 90 * 24 * 60 * 60 * 1000;
+      const difference = expiresDate - createdDate;
+
+      // Allow 1 day tolerance for processing time
+      expect(difference).toBeGreaterThanOrEqual(millisecondsIn90Days - (24 * 60 * 60 * 1000));
+      expect(difference).toBeLessThanOrEqual(millisecondsIn90Days + (24 * 60 * 60 * 1000));
+    });
+
+    test('should retrieve notifications within 90-day window', async () => {
+      const notification = await notificationService.createNotification({
+        user_id: 1,
+        type: 'test',
+        title: 'Test Notification',
+        message: 'Test for 90-day retention'
+      });
+
+      // Simulate notification at day 1
+      const dayOneNotifications = await notificationService.getUserNotifications(1);
+      expect(dayOneNotifications.find(n => n.id === notification.id)).toBeDefined();
+
+      // Simulate notification still accessible (not expired)
+      const history = await notificationService.getNotificationHistory(1);
+      expect(history.notifications.find(n => n.id === notification.id)).toBeDefined();
+    });
+
+    test('should include notification in history even after being read', async () => {
+      const notification = await notificationService.createNotification({
+        user_id: 1,
+        type: 'test',
+        title: 'Historical Test',
+        message: 'Should remain in history after read'
+      });
+
+      // Mark as read
+      await notificationService.markAsRead(notification.id, 1);
+
+      // Should still be in history
+      const history = await notificationService.getNotificationHistory(1);
+      const historicalNotification = history.notifications.find(n => n.id === notification.id);
+      
+      expect(historicalNotification).toBeDefined();
+      expect(historicalNotification.is_read).toBe(true);
+    });
+
+    test('should support pagination for viewing old notifications', async () => {
+      // Create 25 test notifications
+      const promises = [];
+      for (let i = 0; i < 25; i++) {
+        promises.push(
+          notificationService.createNotification({
+            user_id: 1,
+            type: 'test',
+            title: `Test ${i}`,
+            message: `Test message ${i}`
+          })
+        );
+      }
+      await Promise.all(promises);
+
+      // Get first page
+      const page1 = await notificationService.getNotificationHistory(1, { limit: 10, offset: 0 });
+      expect(page1.notifications).toHaveLength(10);
+      expect(page1.pagination.hasMore).toBe(true);
+
+      // Get second page
+      const page2 = await notificationService.getNotificationHistory(1, { limit: 10, offset: 10 });
+      expect(page2.notifications).toHaveLength(10);
+
+      // Get third page
+      const page3 = await notificationService.getNotificationHistory(1, { limit: 10, offset: 20 });
+      expect(page3.notifications.length).toBeGreaterThan(0);
+    });
+
+    test('should calculate expiration correctly for custom retention period', async () => {
+      const customExpirationDate = new Date();
+      customExpirationDate.setDate(customExpirationDate.getDate() + 120); // 120 days
+
+      const notificationData = {
+        user_id: 1,
+        type: 'important_notice',
+        title: 'Extended Retention',
+        message: 'This notification has extended retention',
+        expires_at: customExpirationDate
+      };
+
+      const notification = await notificationRepository.create(notificationData);
+
+      const createdDate = new Date(notification.created_at);
+      const expiresDate = new Date(notification.expires_at);
+      const daysDifference = Math.floor((expiresDate - createdDate) / (1000 * 60 * 60 * 24));
+
+      expect(daysDifference).toBeGreaterThanOrEqual(119);
+      expect(daysDifference).toBeLessThanOrEqual(121);
+    });
+  });
+
+  describe('Additional Business Logic Tests', () => {
+    test('should filter out expired notifications from default queries', async () => {
+      // Create notification with past expiration date
+      const pastDate = new Date();
+      pastDate.setDate(pastDate.getDate() - 1); // Yesterday
+
+      const expiredNotification = await notificationRepository.create({
+        user_id: 1,
+        type: 'test',
+        title: 'Expired',
+        message: 'This should be filtered out',
+        expires_at: pastDate
+      });
+
+      // Get active notifications
+      const activeNotifications = await notificationService.getUserNotifications(1);
+
+      // Expired notification should not be in the list
+      expect(activeNotifications.find(n => n.id === expiredNotification.id)).toBeUndefined();
+    });
+
+    test('should include expired notifications in full history', async () => {
+      // Create notification with past expiration date
+      const pastDate = new Date();
+      pastDate.setDate(pastDate.getDate() - 1);
+
+      const expiredNotification = await notificationRepository.create({
+        user_id: 1,
+        type: 'test',
+        title: 'Expired Historical',
+        message: 'This should be in full history',
+        expires_at: pastDate
+      });
+
+      // Get full history (includes expired)
+      const history = await notificationService.getNotificationHistory(1);
+
+      // Should find the expired notification in history
+      expect(history.notifications.find(n => n.id === expiredNotification.id)).toBeDefined();
+    });
+
+    test('should maintain notification integrity after updates', async () => {
+      const notification = await notificationService.createNotification({
+        user_id: 1,
+        type: 'test',
+        title: 'Integrity Test',
+        message: 'Testing data integrity'
+      });
+
+      const originalCreatedAt = notification.created_at;
+      const originalExpiry = notification.expires_at;
+
+      // Mark as read
+      const updated = await notificationService.markAsRead(notification.id, 1);
+
+      // Verify timestamps are preserved
+      expect(updated.created_at).toBe(originalCreatedAt);
+      expect(updated.expires_at).toBe(originalExpiry);
+      expect(updated).toHaveProperty('updated_at');
+    });
+  });
+});
+
+describe('Project Invitation Notifications - Original AC Tests', () => {
 
   describe('AC1: Notification is triggered immediately upon being added', () => {
     test('should validate immediate notification creation timing', () => {
