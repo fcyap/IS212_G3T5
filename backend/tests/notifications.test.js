@@ -247,21 +247,28 @@ describe('Notification CRUD Operations', () => {
 
   describe('Specialized Notification Types', () => {
     test('should create project invitation notification', async () => {
-      const notification = await notificationService.createProjectInvitationNotification({
-        userId: 1,
-        projectName: 'Website Redesign',
-        inviterName: 'Sarah Johnson',
-        inviterId: 5,
-        role: 'manager',
-        projectId: 101
-      });
+      // This test uses the actual implementation for adding collaborators
+      const projectId = 1;
+      const invitedUserId = 2;
+      const inviterUserId = 1;
+      const role = 'collaborator';
+      const customMessage = 'Welcome to the team!';
 
-      expect(notification.type).toBe('project_invitation');
-      expect(notification.title).toContain('Website Redesign');
-      expect(notification.message).toContain('Sarah Johnson');
-      expect(notification.message).toContain('manager');
-      expect(notification.metadata.project_id).toBe(101);
-      expect(notification.metadata.role).toBe('manager');
+      const notification = await notificationService.createProjectInvitationNotification(
+        projectId,
+        invitedUserId,
+        inviterUserId,
+        role,
+        customMessage
+      );
+
+      expect(notification).toHaveProperty('notif_id');
+      expect(notification).toHaveProperty('message');
+      expect(notification).toHaveProperty('creator_id');
+      expect(notification).toHaveProperty('recipient_emails');
+      expect(notification).toHaveProperty('created_at');
+      expect(notification.message).toContain('invited you to join');
+      expect(notification.message).toContain(customMessage);
     });
 
     test('should create task assigned notification', async () => {

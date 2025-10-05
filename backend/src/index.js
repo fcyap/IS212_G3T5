@@ -17,6 +17,7 @@ const projectTasksRoutes = require('./routes/projectTasks');
 const taskCommentRoutes = require('./routes/tasks/taskCommentRoute');
 const projectRoutes = require('./routes/projects');
 const userRoutes = require('./routes/users');
+const notificationRoutes = require('./routes/notifications');
 const { createLoggerMiddleware, logError } = require('./middleware/logger');
 
 const app = express();
@@ -94,6 +95,7 @@ async function initializeApp() {
   app.use('/api/tasks', authMw, taskCommentRoutes);
   app.use('/api/projects', authMw, projectTasksRoutes);
   app.use('/api/projects', authMw, projectRoutes);
+  app.use('/api/notifications', authMw, notificationRoutes);
   app.use('/tasks', authMw, tasksRouter);
 
   // UAA Protected route example
@@ -127,6 +129,32 @@ async function initializeApp() {
           : 'Something went wrong',
     });
   });
+
+  // ... existing code ...
+
+// Add this temporary test route (remove after testing)
+app.get('/test-email', async (req, res) => {
+  try {
+    const sgMail = require('@sendgrid/mail');
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    
+    const msg = {
+      to: 'yapfengcheng.yfc@gmail.com', // Replace with your actual email
+      from: process.env.FROM_EMAIL,
+      subject: 'Test SendGrid Email',
+      text: 'This is a test email from your app!',
+      html: '<strong>This is a test email from your app!</strong>',
+    };
+    
+    await sgMail.send(msg);
+    res.send('Email sent successfully!');
+  } catch (error) {
+    console.error('SendGrid error:', error);
+    res.status(500).send(`Failed to send email: ${error.message}`);
+  }
+});
+
+// ... existing code (your other routes and app.listen) ...
 
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

@@ -164,14 +164,15 @@ export function ProjectDetails({ projectId, onBack }) {
         }
         // Don't close the add member section, just clear selection if it was selected
         setSelectedUsers(selectedUsers.filter(id => id !== userId));
+        toast.success("Member added successfully!")
       } else {
         const errorData = await response.json();
         console.error('Failed to add member:', errorData.message);
-        alert(`Failed to add member: ${errorData.message}`);
+        toast.error(`Failed to add member: ${errorData.message}`)
       }
     } catch (error) {
       console.error('Error adding member:', error);
-      alert('Error adding member. Please try again.');
+      toast.error("Failed to add member. Please try again.")
     }
   }
 
@@ -208,15 +209,15 @@ export function ProjectDetails({ projectId, onBack }) {
         setSearchTerm("");
         setInvitationMessage("");
         setShowAddMember(false);
-        alert(`Successfully added ${selectedUsers.length} member(s) to the project!`);
+        toast.success(`Successfully added ${selectedUsers.length} member(s) to the project!`)
       } else {
         const errorData = await response.json();
         console.error('Failed to add members:', errorData.message);
-        alert(`Failed to add members: ${errorData.message}`);
+        toast.error(`Failed to add members: ${errorData.message}`)
       }
     } catch (error) {
       console.error('Error adding members:', error);
-      alert('Error adding members. Please try again.');
+      toast.error("Failed to add members. Please try again.")
     }
   }
 
@@ -238,9 +239,15 @@ export function ProjectDetails({ projectId, onBack }) {
       if (response.ok) {
         // Remove member from local state using new structure
         setMembers(members.filter(member => member.user_id !== userId))
+        toast.success("Member removed successfully!")
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to remove member:', errorData.message);
+        toast.error(`Failed to remove member: ${errorData.message}`)
       }
     } catch (error) {
-      console.error('Error removing member:', error)
+      console.error('Error removing member:', error);
+      toast.error("Failed to remove member. Please try again.")
     }
   }
 
@@ -270,9 +277,10 @@ export function ProjectDetails({ projectId, onBack }) {
       const newTask = await response.json()
       setTasks(prev => [...prev, newTask])
       setIsAddingTask(false)
+      toast.success("Task created successfully!")
     } catch (error) {
       console.error('Error creating task:', error)
-      alert(`Error creating task: ${error.message}`)
+      toast.error(`Failed to create task: ${error.message}`)
     }
   }
 

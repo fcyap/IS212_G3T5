@@ -1,6 +1,7 @@
 const projectRepository = require('../repository/projectRepository');
 const supabase = require('../utils/supabase');
 const userRepository = require('../repository/userRepository');
+const notificationService = require('../services/notificationService');
 
 /**
  * Project Service - Contains business logic for project operations
@@ -382,6 +383,21 @@ class ProjectService {
 
         const addedMember = await projectRepository.addUserToProject(projectId, userId, role);
         addedMembers.push(addedMember);
+
+        // Create notification for the invited user
+        try {
+          await notificationService.createProjectInvitationNotification(
+            projectId,
+            userId,
+            requestingUserId,
+            role,
+            message // Add custom message parameter
+          );
+          console.log(`Notification sent to user ${userId} for project ${projectId}`);
+        } catch (notificationError) {
+          console.error(`Failed to send notification to user ${userId}:`, notificationError);
+          // Don't fail the entire operation if notification fails
+        }
       } catch (error) {
         console.error(`Error adding user ${userId} to project ${projectId}:`, error);
         throw error;
