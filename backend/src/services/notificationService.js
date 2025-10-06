@@ -49,6 +49,7 @@ class NotificationService {
 
       // Create notification data matching the table schema
       const notificationData = {
+        type: 'invitation',  // Set notification type for collaborator invitations
         message: message,
         creator_id: inviterUserId,  // Add back creator_id referencing users.id
         recipient_emails: invitedUser.email,
