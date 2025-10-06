@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const session = require('express-session')
 const cors = require('cors');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
@@ -105,7 +106,18 @@ async function initializeApp() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser()); // Add cookie parser for UAA
-  app.use(csrf()); // CSRF protection for all state-changing requests
+    app.use(session({
+        secret: process.env.SESSION_SECRET,
+        resave: false,
+        saveUninitialized: true
+    }));
+  //app.use(csrf()); // CSRF protection for all state-changing requests
+    app.use(csrf({
+        csrf: true,              // Enable CSRF protection
+        csp: { policy: { "default-src": "'self'" } },
+        xframe: "SAMEORIGIN",
+        xssProtection: true
+    }));
   app.use(
     cors({
       origin: process.env.FRONTEND_ORIGIN || true, // Allow all origins in development
