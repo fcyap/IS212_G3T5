@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -15,7 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ArrowLeft, Plus, Search, X, Check, Filter, ChevronDown, ChevronRight, Edit, Trash, Archive } from "lucide-react"
+import { ArrowLeft, Plus, Search, X, Check, Filter, ChevronDown, ChevronRight, Edit, Trash, Archive, Calendar, List } from "lucide-react"
 import { useProjects } from "@/contexts/project-context"
 import toast from "react-hot-toast"
 
@@ -42,6 +42,7 @@ export function ProjectDetails({ projectId, onBack }) {
   const [editingTask, setEditingTask] = useState(null)
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
   const [showEditProject, setShowEditProject] = useState(false)
+  const [viewMode, setViewMode] = useState('details') // 'details' or 'timeline'
 
   const currentUserId = parseInt(process.env.NEXT_PUBLIC_CURRENT_USER_ID || 1) // Allow override via env
   const { updateProject } = useProjects()
@@ -451,7 +452,7 @@ export function ProjectDetails({ projectId, onBack }) {
 
   return (
     <div className="flex-1 bg-[#1a1a1d] p-6">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <Button variant="ghost" onClick={onBack} className="text-gray-400 hover:text-white">
@@ -467,6 +468,27 @@ export function ProjectDetails({ projectId, onBack }) {
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* View Mode Toggle */}
+            <div className="flex items-center bg-[#2a2a2e] rounded-lg p-1 mr-2">
+              <Button
+                size="sm"
+                variant={viewMode === 'details' ? 'default' : 'ghost'}
+                onClick={() => setViewMode('details')}
+                className={viewMode === 'details' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#1f1f23]'}
+              >
+                <List className="w-4 h-4 mr-1" />
+                Details
+              </Button>
+              <Button
+                size="sm"
+                variant={viewMode === 'timeline' ? 'default' : 'ghost'}
+                onClick={() => setViewMode('timeline')}
+                className={viewMode === 'timeline' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#1f1f23]'}
+              >
+                <Calendar className="w-4 h-4 mr-1" />
+                Timeline
+              </Button>
+            </div>
             {userPermissions.isCreator && project.status !== 'archived' && (
               <Button
                 onClick={() => setShowEditProject(true)}
@@ -490,6 +512,9 @@ export function ProjectDetails({ projectId, onBack }) {
           </div>
         </div>
 
+        {/* Conditional rendering based on view mode */}
+        {viewMode === 'details' ? (
+          <>
         {/* Project Info */}
         <div className="bg-[#2a2a2e] rounded-lg p-6 mb-6">
           <h2 className="text-lg font-semibold text-white mb-4">Project Details</h2>
@@ -922,6 +947,11 @@ export function ProjectDetails({ projectId, onBack }) {
             </div>
           )}
         </div>
+        </>
+      ) : (
+        /* Timeline View */
+        <ProjectTimeline tasks={tasks} allUsers={allUsers} />
+      )}
       </div>
 
       {/* Task Editing Side Panel */}
@@ -1498,6 +1528,529 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers }) {
           </Button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function ProjectTimeline({ tasks, allUsers }) {
+  const scrollContainerRef = useRef(null)
+  const headerScrollRef = useRef(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [startX, setStartX] = useState(0)
+  const [scrollLeft, setScrollLeft] = useState(0)
+  const [pixelsPerDay, setPixelsPerDay] = useState(20)
+  const [expandedTasks, setExpandedTasks] = useState(new Set())
+  const [hoveredTask, setHoveredTask] = useState(null)
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  // Calculate timeline date range with more padding
+  const getTimelineRange = () => {
+    const start = new Date(today)
+    start.setDate(start.getDate() - 90) // 3 months before
+    const end = new Date(today)
+    end.setDate(end.getDate() + 180) // 6 months after
+
+    if (tasks && tasks.length > 0) {
+      const dates = tasks.map(task => {
+        const created = new Date(task.created_at)
+        const deadline = task.deadline ? new Date(task.deadline) : null
+        const updated = task.updated_at ? new Date(task.updated_at) : null
+        return [created, deadline, updated].filter(Boolean)
+      }).flat()
+
+      if (dates.length > 0) {
+        const minTask = new Date(Math.min(...dates))
+        const maxTask = new Date(Math.max(...dates))
+
+        if (minTask < start) {
+          start.setTime(minTask.getTime())
+          start.setDate(start.getDate() - 30)
+        }
+        if (maxTask > end) {
+          end.setTime(maxTask.getTime())
+          end.setDate(end.getDate() + 30)
+        }
+      }
+    }
+
+    return { minDate: start, maxDate: end }
+  }
+
+  const { minDate, maxDate } = getTimelineRange()
+  const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24))
+  const timelineWidth = totalDays * pixelsPerDay
+
+  // Generate date markers - start from first day of each month
+  const generateDateMarkers = () => {
+    const markers = []
+    // Create a new date to avoid mutating minDate
+    const current = new Date(minDate.getFullYear(), minDate.getMonth(), 1)
+
+    while (current <= maxDate) {
+      markers.push(new Date(current))
+      // Move to first day of next month
+      current.setMonth(current.getMonth() + 1)
+    }
+
+    return markers
+  }
+
+  const dateMarkers = generateDateMarkers()
+
+  // Generate 5-day grid lines starting from first of each month (5th, 10th, 15th, 20th, 25th, 30th)
+  const generateFiveDayGridLines = () => {
+    const lines = []
+
+    // Start from the first day of the month containing minDate
+    const current = new Date(minDate.getFullYear(), minDate.getMonth(), 1)
+
+    while (current <= maxDate) {
+      // For each month, add lines on 5th, 10th, 15th, 20th, 25th, 30th (every 5 days starting from 5)
+      for (let day = 5; day <= 30; day += 5) {
+        const gridDate = new Date(current.getFullYear(), current.getMonth(), day)
+        // Only add if it's still in the same month and within our range
+        if (gridDate.getMonth() === current.getMonth() && gridDate >= minDate && gridDate <= maxDate) {
+          lines.push(new Date(gridDate))
+        }
+      }
+      // Move to next month
+      current.setMonth(current.getMonth() + 1)
+    }
+
+    return lines
+  }
+
+  const fiveDayGridLines = generateFiveDayGridLines()
+
+  // Generate daily subdividers
+  const generateDailySubdividers = () => {
+    const lines = []
+    const current = new Date(minDate)
+    current.setHours(0, 0, 0, 0)
+
+    while (current <= maxDate) {
+      // Skip days that already have a 5-day grid line
+      const day = current.getDate()
+      if (day % 5 !== 0) {
+        lines.push(new Date(current))
+      }
+      current.setDate(current.getDate() + 1)
+    }
+
+    return lines
+  }
+
+  const dailySubdividers = generateDailySubdividers()
+
+  // Calculate pixel position for a date
+  const getDatePosition = (date) => {
+    if (!date) return 0
+    const dateObj = new Date(date)
+    dateObj.setHours(0, 0, 0, 0) // Normalize to start of day
+    const minDateNormalized = new Date(minDate)
+    minDateNormalized.setHours(0, 0, 0, 0)
+    const daysSinceStart = Math.round((dateObj - minDateNormalized) / (1000 * 60 * 60 * 24))
+    return daysSinceStart * pixelsPerDay
+  }
+
+  // Center on "Today" when component mounts (but not when zooming)
+  useEffect(() => {
+    if (scrollContainerRef.current && pixelsPerDay === 20) { // Only on initial mount
+      const todayPosition = getDatePosition(today)
+      const containerWidth = scrollContainerRef.current.offsetWidth
+      // Center "today" in the visible scrollable area
+      const scrollTo = todayPosition - containerWidth / 2
+      scrollContainerRef.current.scrollLeft = Math.max(0, scrollTo)
+    }
+  }, [])
+
+  // Sync scroll between header and timeline
+  const handleTimelineScroll = (e) => {
+    if (headerScrollRef.current) {
+      headerScrollRef.current.scrollLeft = e.target.scrollLeft
+    }
+  }
+
+  // Mouse drag handlers
+  const handleMouseDown = (e) => {
+    if (!scrollContainerRef.current) return
+    setIsDragging(true)
+    setStartX(e.pageX - scrollContainerRef.current.offsetLeft)
+    setScrollLeft(scrollContainerRef.current.scrollLeft)
+  }
+
+  const handleDragMove = (e) => {
+    if (!isDragging || !scrollContainerRef.current) return
+    e.preventDefault()
+    const x = e.pageX - scrollContainerRef.current.offsetLeft
+    const walk = (x - startX) * 2 // Scroll speed multiplier
+    const newScrollLeft = scrollLeft - walk
+    scrollContainerRef.current.scrollLeft = newScrollLeft
+    if (headerScrollRef.current) {
+      headerScrollRef.current.scrollLeft = newScrollLeft
+    }
+  }
+
+  const handleMouseUp = () => {
+    setIsDragging(false)
+  }
+
+  const handleMouseLeaveContainer = () => {
+    setIsDragging(false)
+  }
+
+  // Zoom handler - using Shift+scroll to avoid browser zoom conflict
+  const handleWheel = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    // Store current scroll position
+    const currentScroll = container.scrollLeft
+
+    // Get center of viewport as the zoom anchor point
+    const rect = container.getBoundingClientRect()
+    const viewportCenter = rect.width / 2
+    const anchorPoint = viewportCenter + currentScroll
+
+    // Calculate zoom
+    const oldPixelsPerDay = pixelsPerDay
+    const delta = -e.deltaY
+    const zoomFactor = delta > 0 ? 1.05 : 0.95
+    const newPixelsPerDay = Math.max(5, Math.min(50, oldPixelsPerDay * zoomFactor))
+
+    // Calculate the zoom ratio
+    const zoomRatio = newPixelsPerDay / oldPixelsPerDay
+
+    // Keep the center point stable
+    const newScrollLeft = anchorPoint * zoomRatio - viewportCenter
+
+    // Update pixels per day
+    setPixelsPerDay(newPixelsPerDay)
+
+    // Immediately set scroll position to prevent any horizontal scroll from happening
+    setTimeout(() => {
+      if (container) {
+        container.scrollLeft = newScrollLeft
+        if (headerScrollRef.current) {
+          headerScrollRef.current.scrollLeft = newScrollLeft
+        }
+      }
+    }, 0)
+  }
+
+  const handleMouseMove = (e, taskId) => {
+    if (taskId) {
+      setHoveredTask(taskId)
+      setTooltipPosition({ x: e.clientX, y: e.clientY })
+    }
+  }
+
+  const handleMouseLeaveBar = () => {
+    setHoveredTask(null)
+  }
+
+  const toggleTaskExpansion = (taskId) => {
+    setExpandedTasks(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId)
+      } else {
+        newSet.add(taskId)
+      }
+      return newSet
+    })
+  }
+
+  const todayPosition = getDatePosition(today)
+
+  return (
+    <div className="bg-[#2a2a2e] rounded-lg p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-white">Project Timeline</h2>
+        <div className="text-xs text-gray-400">
+          Hold Shift + scroll to zoom • Drag to pan
+        </div>
+      </div>
+
+      {tasks.length === 0 ? (
+        <div className="text-center py-8">
+          <p className="text-gray-400">No tasks to display in timeline.</p>
+        </div>
+      ) : (
+        <div className="relative">
+          {/* Header row */}
+          <div className="flex border-b border-gray-600">
+            {/* Task header - fixed */}
+            <div className="w-48 flex-shrink-0 h-20 flex items-center pr-4">
+              <h3 className="text-sm font-semibold text-gray-300">Tasks</h3>
+            </div>
+
+            {/* Timeline header - scrollable */}
+            <div
+              ref={headerScrollRef}
+              className="flex-1 overflow-x-auto overflow-y-hidden"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', pointerEvents: 'none' }}
+            >
+              <div className="relative h-20" style={{ width: `${timelineWidth}px`, pointerEvents: 'auto' }}>
+                {dateMarkers.map((date, index) => {
+                  const position = getDatePosition(date)
+                  return (
+                    <div
+                      key={index}
+                      className="absolute text-sm font-medium text-gray-300 top-4"
+                      style={{ left: `${position}px`, transform: 'translateX(-50%)' }}
+                    >
+                      <div className="whitespace-nowrap">
+                        {date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* Today indicator line */}
+                <div
+                  className="absolute top-0 bottom-0 w-0.5 bg-blue-500 z-10 pointer-events-none"
+                  style={{ left: `${todayPosition}px` }}
+                >
+                  <div className="absolute top-1 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-blue-500 text-white text-xs rounded whitespace-nowrap">
+                    Today
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Task rows container with scroll */}
+          <div className="mt-4 flex">
+            {/* Fixed task labels column */}
+            <div className="w-48 flex-shrink-0 space-y-3">
+              {tasks.map((task) => {
+                const isExpanded = expandedTasks.has(task.id)
+                const assigneeNames = task.assigned_to?.map(userId => {
+                  const user = (allUsers || []).find(u => u.id === userId)
+                  return user ? (user.name || user.email) : 'Unknown'
+                }).join(', ') || 'Unassigned'
+
+                // Calculate expansion height
+                const expansionHeight = isExpanded ? 80 : 0 // Approximate height of expanded content
+
+                return (
+                  <div
+                    key={`label-${task.id}`}
+                    className="pr-4 cursor-pointer hover:bg-[#1f1f23] transition-colors"
+                    onClick={() => toggleTaskExpansion(task.id)}
+                    style={{ minHeight: `${56 + expansionHeight}px` }}
+                  >
+                    <div className="h-14 flex flex-col justify-center">
+                      <div className="text-sm font-medium text-white truncate" title={task.title}>
+                        {task.title}
+                      </div>
+                      <div className="text-xs text-gray-400 truncate">
+                        {assigneeNames}
+                      </div>
+                    </div>
+                    {isExpanded && (
+                      <div className="mt-2 pb-3 space-y-1 text-xs text-gray-400">
+                        <div>Priority: <span className={`${
+                          task.priority === 'high' ? 'text-red-400' :
+                          task.priority === 'medium' ? 'text-yellow-400' :
+                          'text-green-400'
+                        }`}>{task.priority?.toUpperCase()}</span></div>
+                        <div>Status: <span className="text-blue-400">{task.status}</span></div>
+                        {task.description && (
+                          <div className="mt-1 text-gray-500 line-clamp-2">{task.description}</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Scrollable timeline bars */}
+            <div
+              ref={scrollContainerRef}
+              className="flex-1 overflow-x-auto overflow-y-hidden cursor-grab active:cursor-grabbing"
+              onScroll={handleTimelineScroll}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleDragMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseLeaveContainer}
+              onWheel={(e) => {
+                if (e.shiftKey) {
+                  handleWheel(e)
+                }
+              }}
+              style={{ userSelect: 'none' }}
+            >
+              <div style={{ width: `${timelineWidth}px` }} className="space-y-3">
+                {tasks.map((task) => {
+                  const createdDate = new Date(task.created_at)
+                  const deadlineDate = task.deadline ? new Date(task.deadline) : null
+                  const updatedDate = task.updated_at ? new Date(task.updated_at) : null
+                  const isCompleted = task.status === 'completed'
+                  const isOverdue = deadlineDate && !isCompleted && deadlineDate < today
+                  const isExpanded = expandedTasks.has(task.id)
+
+                  const startPos = getDatePosition(createdDate)
+                  let endPos
+                  let showOverdueExtension = false
+                  let wasLateCompletion = false
+
+                  if (isCompleted && updatedDate) {
+                    endPos = getDatePosition(updatedDate)
+                    if (deadlineDate && updatedDate > deadlineDate) {
+                      wasLateCompletion = true
+                    }
+                  } else if (deadlineDate) {
+                    endPos = getDatePosition(deadlineDate)
+                    if (isOverdue) {
+                      showOverdueExtension = true
+                    }
+                  } else {
+                    // No deadline - extend far to the right
+                    endPos = timelineWidth
+                  }
+
+                  const barWidth = endPos - startPos
+                  const overdueExtensionWidth = showOverdueExtension
+                    ? getDatePosition(today) - endPos
+                    : 0
+
+                  // Calculate expansion height to match labels
+                  const expansionHeight = isExpanded ? 80 : 0
+
+                  return (
+                    <div
+                      key={`bar-${task.id}`}
+                      className="relative group hover:bg-[#1f1f23]/50 transition-colors"
+                      style={{ minHeight: `${56 + expansionHeight}px` }}
+                    >
+                      <div className="relative h-14">
+                        {/* Monthly grid lines (darker) */}
+                        {dateMarkers.map((date, index) => (
+                          <div
+                            key={`month-${index}`}
+                            className="absolute top-0 bottom-0 w-px bg-gray-600/50 pointer-events-none"
+                            style={{ left: `${getDatePosition(date)}px` }}
+                          />
+                        ))}
+                        {/* 5-day grid lines (medium) */}
+                        {fiveDayGridLines.map((date, index) => (
+                          <div
+                            key={`five-day-${index}`}
+                            className="absolute top-0 bottom-0 w-px bg-gray-700/30 pointer-events-none"
+                            style={{ left: `${getDatePosition(date)}px` }}
+                          />
+                        ))}
+                        {/* Daily subdividers (very light) */}
+                        {dailySubdividers.map((date, index) => (
+                          <div
+                            key={`daily-${index}`}
+                            className="absolute top-0 bottom-0 w-px bg-gray-700/10 pointer-events-none"
+                            style={{ left: `${getDatePosition(date)}px` }}
+                          />
+                        ))}
+
+                        {/* Main task bar */}
+                        <div
+                          className="absolute top-1/2 -translate-y-1/2 h-6 rounded group-hover:h-7"
+                          style={{
+                            left: `${startPos}px`,
+                            width: `${barWidth}px`,
+                            pointerEvents: 'auto',
+                          }}
+                          onMouseMove={(e) => handleMouseMove(e, task.id)}
+                          onMouseLeave={handleMouseLeaveBar}
+                        >
+                          {wasLateCompletion && deadlineDate ? (
+                            <>
+                              <div
+                                className="absolute h-full bg-blue-600 rounded-l"
+                                style={{
+                                  left: 0,
+                                  width: `${getDatePosition(deadlineDate) - startPos}px`,
+                                }}
+                              />
+                              <div
+                                className="absolute h-full bg-red-300/60 rounded-r"
+                                style={{
+                                  left: `${getDatePosition(deadlineDate) - startPos}px`,
+                                  right: 0,
+                                }}
+                              />
+                            </>
+                          ) : (
+                            <div
+                              className={`h-full rounded ${
+                                isCompleted ? 'bg-green-600' :
+                                task.status === 'in_progress' ? 'bg-blue-600' :
+                                'bg-gray-600'
+                              } ${
+                                !deadlineDate && !isCompleted ? 'bg-gradient-to-r from-gray-600 to-gray-600/20' : ''
+                              }`}
+                            />
+                          )}
+
+                          {/* Overdue extension */}
+                          {showOverdueExtension && (
+                            <div
+                              className="absolute top-0 h-full bg-red-600 rounded-r"
+                              style={{
+                                left: '100%',
+                                width: `${overdueExtensionWidth}px`,
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Floating tooltip that follows cursor */}
+          {hoveredTask && (
+            (() => {
+              const task = tasks.find(t => t.id === hoveredTask)
+              if (!task) return null
+
+              const createdDate = new Date(task.created_at)
+              const deadlineDate = task.deadline ? new Date(task.deadline) : null
+              const updatedDate = task.updated_at ? new Date(task.updated_at) : null
+              const isCompleted = task.status === 'completed'
+              const isOverdue = deadlineDate && !isCompleted && deadlineDate < today
+              const wasLateCompletion = isCompleted && updatedDate && deadlineDate && updatedDate > deadlineDate
+
+              return (
+                <div
+                  className="fixed bg-gray-800 text-white text-xs rounded px-3 py-2 z-50 pointer-events-none shadow-lg"
+                  style={{
+                    left: `${tooltipPosition.x + 10}px`,
+                    top: `${tooltipPosition.y + 10}px`,
+                  }}
+                >
+                  <div className="font-semibold mb-1">{task.title}</div>
+                  <div>Start: {createdDate.toLocaleDateString()}</div>
+                  {deadlineDate && <div>Deadline: {deadlineDate.toLocaleDateString()}</div>}
+                  {isCompleted && updatedDate && <div>Completed: {updatedDate.toLocaleDateString()}</div>}
+                  {!deadlineDate && !isCompleted && <div>No deadline set</div>}
+                  {isOverdue && <div className="text-red-400">Overdue!</div>}
+                  {wasLateCompletion && <div className="text-red-300">Completed late</div>}
+                </div>
+              )
+            })()
+          )}
+        </div>
+      )}
     </div>
   )
 }
