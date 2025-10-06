@@ -151,6 +151,7 @@ export function KanbanBoard() {
                   assignees={t.assignees}
                   deadline={t.deadline}
                   tags={t.tags}
+                  status={t.workflow}
                   onClick={() => openPanel(t)}
                 />
               ))}
@@ -195,6 +196,7 @@ export function KanbanBoard() {
                   assignees={t.assignees}
                   deadline={t.deadline}
                   tags={t.tags}
+                  status={t.workflow}
                   onClick={() => openPanel(t)}
                 />
               ))}
@@ -238,6 +240,7 @@ export function KanbanBoard() {
                   assignees={t.assignees}
                   deadline={t.deadline}
                   tags={t.tags}
+                  status={t.workflow}
                   onClick={() => openPanel(t)}
                 />
               ))}
@@ -281,6 +284,7 @@ export function KanbanBoard() {
                   assignees={t.assignees}
                   deadline={t.deadline}
                   tags={t.tags}
+                  status={t.workflow}
                   onClick={() => openPanel(t)}
                 />
               ))}
