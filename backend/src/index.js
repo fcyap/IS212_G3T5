@@ -106,8 +106,31 @@ async function initializeApp() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser()); // Add cookie parser for UAA
+    // Validate SESSION_SECRET presence and strength
+    const sessionSecret = process.env.SESSION_SECRET;
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    function isStrongSecret(secret) {
+        // Example: at least 32 chars, not a default value
+        return (
+            typeof secret === 'string' &&
+            secret.length >= 32 &&
+            !['changeme', 'default', 'secret', 'password'].includes(secret.toLowerCase())
+        );
+    }
+
+    if (!sessionSecret) {
+        throw new Error('SESSION_SECRET environment variable is not set.');
+    }
+    if (isProduction && !isStrongSecret(sessionSecret)) {
+        throw new Error('SESSION_SECRET is too weak for production. Please use a strong, random value of at least 32 characters.');
+    }
+    if (!isProduction && !isStrongSecret(sessionSecret)) {
+        console.warn('Warning: SESSION_SECRET is weak. Use a strong, random value in production.');
+    }
+
     app.use(session({
-        secret: process.env.SESSION_SECRET,
+        secret: sessionSecret,
         resave: false,
         saveUninitialized: true
     }));
