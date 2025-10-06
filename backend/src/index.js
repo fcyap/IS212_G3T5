@@ -148,6 +148,9 @@ async function initializeApp() {
     })
   );
 
+    app.get("/csrf-token", (req, res) => {
+        res.json({ csrfToken: req.csrfToken() });
+    });
   // Build a single auth middleware that either enforces session
   // or (when AUTH_BYPASS=true) fakes req.user if no session.
   const authMw = devBypass(requireSession);
