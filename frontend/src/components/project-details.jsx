@@ -1988,7 +1988,7 @@ function ProjectTimeline({ tasks, allUsers }) {
                             </>
                           ) : (
                             <div
-                              className={`h-full rounded ${
+                              className={`h-full ${showOverdueExtension ? 'rounded-l' : 'rounded'} ${
                                 isCompleted ? 'bg-green-600' :
                                 task.status === 'in_progress' ? 'bg-blue-600' :
                                 'bg-gray-600'
