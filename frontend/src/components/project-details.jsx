@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -950,7 +950,16 @@ export function ProjectDetails({ projectId, onBack }) {
         </>
       ) : (
         /* Timeline View */
-        <ProjectTimeline tasks={tasks} allUsers={allUsers} />
+        <ProjectTimeline
+          tasks={tasks}
+          allUsers={allUsers}
+          onTaskUpdate={(updatedTask) => {
+            setTasks(prev => prev.map(task => task.id === updatedTask.id ? updatedTask : task))
+          }}
+          onTaskDelete={(taskId) => {
+            setTasks(prev => prev.filter(task => task.id !== taskId))
+          }}
+        />
       )}
       </div>
 
@@ -1532,7 +1541,7 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers }) {
   )
 }
 
-function ProjectTimeline({ tasks, allUsers }) {
+function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
   const scrollContainerRef = useRef(null)
   const headerScrollRef = useRef(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -1543,6 +1552,10 @@ function ProjectTimeline({ tasks, allUsers }) {
   const [hoveredTask, setHoveredTask] = useState(null)
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
   const [editingTask, setEditingTask] = useState(null)
+  const [taskColumnWidth, setTaskColumnWidth] = useState(256) // 64 * 4 = 256px (w-64)
+  const [isResizing, setIsResizing] = useState(false)
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
+  const [hasInitialized, setHasInitialized] = useState(false)
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -1626,17 +1639,25 @@ function ProjectTimeline({ tasks, allUsers }) {
 
   const fiveDayGridLines = generateFiveDayGridLines()
 
-  // Generate daily subdividers
+  // Generate daily subdividers - optimized to only generate when zoomed in
   const generateDailySubdividers = () => {
+    // Only show daily subdividers when zoomed in enough
+    if (pixelsPerDay < 10) return []
+
     const lines = []
     const current = new Date(minDate)
     current.setHours(0, 0, 0, 0)
 
-    while (current <= maxDate) {
+    // Limit to reasonable number of subdividers
+    const maxSubdividers = 500
+    let count = 0
+
+    while (current <= maxDate && count < maxSubdividers) {
       // Skip days that already have a 5-day grid line
       const day = current.getDate()
       if (day % 5 !== 0) {
         lines.push(new Date(current))
+        count++
       }
       current.setDate(current.getDate() + 1)
     }
@@ -1657,22 +1678,36 @@ function ProjectTimeline({ tasks, allUsers }) {
     return daysSinceStart * pixelsPerDay
   }
 
-  // Center on "Today" when component mounts (but not when zooming)
+  // Consolidated scroll sync function
+  const syncScroll = (scrollLeft) => {
+    if (headerScrollRef.current) {
+      headerScrollRef.current.scrollLeft = scrollLeft
+    }
+  }
+
+  // Center on "Today" when component mounts (only once on initial mount)
   useEffect(() => {
-    if (scrollContainerRef.current && pixelsPerDay === 20) { // Only on initial mount
-      const todayPosition = getDatePosition(today)
+    if (scrollContainerRef.current && !hasInitialized) {
+      const todayNormalized = new Date(today)
+      todayNormalized.setHours(0, 0, 0, 0)
+      const minDateNormalized = new Date(minDate)
+      minDateNormalized.setHours(0, 0, 0, 0)
+      const daysSinceStart = Math.round((todayNormalized - minDateNormalized) / (1000 * 60 * 60 * 24))
+      const todayPosition = daysSinceStart * pixelsPerDay
       const containerWidth = scrollContainerRef.current.offsetWidth
       // Center "today" in the visible scrollable area
       const scrollTo = todayPosition - containerWidth / 2
-      scrollContainerRef.current.scrollLeft = Math.max(0, scrollTo)
+      const newScrollLeft = Math.max(0, scrollTo)
+      scrollContainerRef.current.scrollLeft = newScrollLeft
+      syncScroll(newScrollLeft)
+      setHasInitialized(true)
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasInitialized])
 
   // Sync scroll between header and timeline
   const handleTimelineScroll = (e) => {
-    if (headerScrollRef.current) {
-      headerScrollRef.current.scrollLeft = e.target.scrollLeft
-    }
+    syncScroll(e.target.scrollLeft)
   }
 
   // Mouse drag handlers
@@ -1690,9 +1725,7 @@ function ProjectTimeline({ tasks, allUsers }) {
     const walk = (x - startX) * 2 // Scroll speed multiplier
     const newScrollLeft = scrollLeft - walk
     scrollContainerRef.current.scrollLeft = newScrollLeft
-    if (headerScrollRef.current) {
-      headerScrollRef.current.scrollLeft = newScrollLeft
-    }
+    syncScroll(newScrollLeft)
   }
 
   const handleMouseUp = () => {
@@ -1703,52 +1736,64 @@ function ProjectTimeline({ tasks, allUsers }) {
     setIsDragging(false)
   }
 
-  // Zoom handler - using Shift+scroll to avoid browser zoom conflict
-  const handleWheel = (e) => {
+  // Resizable column handlers
+  const resizeStartXRef = useRef(0)
+  const resizeStartWidthRef = useRef(256)
+
+  const handleResizeStart = (e) => {
     e.preventDefault()
     e.stopPropagation()
-
-    const container = scrollContainerRef.current
-    if (!container) return
-
-    // Store current scroll position
-    const currentScroll = container.scrollLeft
-
-    // Get center of viewport as the zoom anchor point
-    const rect = container.getBoundingClientRect()
-    const viewportCenter = rect.width / 2
-    const anchorPoint = viewportCenter + currentScroll
-
-    // Calculate zoom
-    const oldPixelsPerDay = pixelsPerDay
-    const delta = -e.deltaY
-    const zoomFactor = delta > 0 ? 1.05 : 0.95
-    const newPixelsPerDay = Math.max(5, Math.min(50, oldPixelsPerDay * zoomFactor))
-
-    // Calculate the zoom ratio
-    const zoomRatio = newPixelsPerDay / oldPixelsPerDay
-
-    // Keep the center point stable
-    const newScrollLeft = anchorPoint * zoomRatio - viewportCenter
-
-    // Update pixels per day
-    setPixelsPerDay(newPixelsPerDay)
-
-    // Immediately set scroll position to prevent any horizontal scroll from happening
-    setTimeout(() => {
-      if (container) {
-        container.scrollLeft = newScrollLeft
-        if (headerScrollRef.current) {
-          headerScrollRef.current.scrollLeft = newScrollLeft
-        }
-      }
-    }, 0)
+    setIsResizing(true)
+    resizeStartXRef.current = e.clientX
+    resizeStartWidthRef.current = taskColumnWidth
   }
 
+  useEffect(() => {
+    const handleResizeMove = (e) => {
+      if (!isResizing) return
+      e.preventDefault()
+      const delta = e.clientX - resizeStartXRef.current
+      const newWidth = Math.max(200, Math.min(500, resizeStartWidthRef.current + delta))
+      setTaskColumnWidth(newWidth)
+    }
+
+    const handleResizeEnd = () => {
+      setIsResizing(false)
+    }
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleResizeMove)
+      document.addEventListener('mouseup', handleResizeEnd)
+      return () => {
+        document.removeEventListener('mousemove', handleResizeMove)
+        document.removeEventListener('mouseup', handleResizeEnd)
+      }
+    }
+  }, [isResizing, taskColumnWidth])
+
+  // Tooltip positioning with boundary detection
   const handleMouseMove = (e, taskId) => {
     if (taskId) {
       setHoveredTask(taskId)
-      setTooltipPosition({ x: e.clientX, y: e.clientY })
+      // Calculate tooltip position with boundary detection
+      const tooltipWidth = 250 // Approximate tooltip width
+      const tooltipHeight = 150 // Approximate tooltip height
+      const padding = 10
+
+      let x = e.clientX + padding
+      let y = e.clientY + padding
+
+      // Check right boundary
+      if (x + tooltipWidth > window.innerWidth) {
+        x = e.clientX - tooltipWidth - padding
+      }
+
+      // Check bottom boundary
+      if (y + tooltipHeight > window.innerHeight) {
+        y = e.clientY - tooltipHeight - padding
+      }
+
+      setTooltipPosition({ x, y })
     }
   }
 
@@ -1791,12 +1836,15 @@ function ProjectTimeline({ tasks, allUsers }) {
       }
 
       const updatedTask = await response.json()
-      // Update tasks in parent component - we need to pass this up
-      window.location.reload() // Temporary solution - ideally update via callback
+      // Call parent callback to update tasks
+      if (onTaskUpdate) {
+        onTaskUpdate(updatedTask)
+      }
       setEditingTask(null)
+      toast.success('Task updated successfully!')
     } catch (error) {
       console.error('Error updating task:', error)
-      alert(`Error updating task: ${error.message}`)
+      toast.error(`Error updating task: ${error.message}`)
     }
   }
 
@@ -1813,13 +1861,95 @@ function ProjectTimeline({ tasks, allUsers }) {
         throw new Error(errorData.error || `Failed to delete task: ${response.status}`)
       }
 
-      window.location.reload() // Temporary solution
+      // Call parent callback to update tasks
+      if (onTaskDelete) {
+        onTaskDelete(taskId)
+      }
       setEditingTask(null)
+      toast.success('Task deleted successfully!')
     } catch (error) {
       console.error('Error deleting task:', error)
-      alert(`Error deleting task: ${error.message}`)
+      toast.error(`Error deleting task: ${error.message}`)
     }
   }
+
+  // Helper function to zoom while maintaining center point
+  const zoomWithAnchor = useCallback((zoomFactor) => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const currentScroll = container.scrollLeft
+    const rect = container.getBoundingClientRect()
+    const viewportCenter = rect.width / 2
+    const anchorPoint = viewportCenter + currentScroll
+
+    const newPixelsPerDay = Math.max(5, Math.min(50, pixelsPerDay * zoomFactor))
+    const zoomRatio = newPixelsPerDay / pixelsPerDay
+    const newScrollLeft = anchorPoint * zoomRatio - viewportCenter
+
+    setPixelsPerDay(newPixelsPerDay)
+
+    requestAnimationFrame(() => {
+      if (container) {
+        container.scrollLeft = newScrollLeft
+        syncScroll(newScrollLeft)
+      }
+    })
+  }, [pixelsPerDay])
+
+  // Setup wheel event listener for zoom - only when hovering over timeline
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const wheelHandler = (e) => {
+      // Prevent default vertical scroll and zoom instead
+      e.preventDefault()
+      e.stopPropagation()
+
+      // Calculate zoom factor based on scroll direction
+      const delta = -e.deltaY
+      const zoomFactor = delta > 0 ? 1.05 : 0.95
+
+      // Use the same zoom function as buttons/keyboard for consistency
+      zoomWithAnchor(zoomFactor)
+    }
+
+    // Use passive: false to allow preventDefault
+    container.addEventListener('wheel', wheelHandler, { passive: false })
+
+    return () => {
+      container.removeEventListener('wheel', wheelHandler)
+    }
+  }, [zoomWithAnchor]) // Re-attach when zoomWithAnchor changes
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Zoom in: Ctrl/Cmd + Plus
+      if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=')) {
+        e.preventDefault()
+        zoomWithAnchor(1.1)
+      }
+      // Zoom out: Ctrl/Cmd + Minus
+      if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+        e.preventDefault()
+        zoomWithAnchor(0.9)
+      }
+      // Reset zoom: Ctrl/Cmd + 0
+      if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+        e.preventDefault()
+        zoomWithAnchor(20 / pixelsPerDay)
+      }
+      // Toggle shortcuts help: ?
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
+        setShowKeyboardShortcuts(prev => !prev)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [pixelsPerDay])
 
   return (
     <>
@@ -1831,16 +1961,86 @@ function ProjectTimeline({ tasks, allUsers }) {
             {minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} → {maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          {/* Zoom indicator */}
-          <div className="text-xs text-gray-400 bg-[#1f1f23] px-3 py-1.5 rounded border border-gray-700">
-            Zoom: {Math.round(pixelsPerDay)}px/day
+        <div className="flex items-center gap-3">
+          {/* Zoom controls */}
+          <div className="flex items-center gap-2 bg-[#1f1f23] px-2 py-1.5 rounded border border-gray-700">
+            <button
+              onClick={() => zoomWithAnchor(0.9)}
+              className="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-700 transition-colors"
+              title="Zoom out (Ctrl + -)"
+            >
+              −
+            </button>
+            <div className="text-xs text-gray-400 min-w-[70px] text-center">
+              {Math.round(pixelsPerDay)}px/day
+            </div>
+            <button
+              onClick={() => zoomWithAnchor(1.1)}
+              className="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-700 transition-colors"
+              title="Zoom in (Ctrl + +)"
+            >
+              +
+            </button>
+            <button
+              onClick={() => zoomWithAnchor(20 / pixelsPerDay)}
+              className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-700 transition-colors ml-1"
+              title="Reset zoom (Ctrl + 0)"
+            >
+              Reset
+            </button>
           </div>
-          <div className="text-xs text-gray-400">
-            Hold Shift + scroll to zoom • Drag to pan
-          </div>
+          {/* Help button */}
+          <button
+            onClick={() => setShowKeyboardShortcuts(prev => !prev)}
+            className="text-xs text-gray-400 hover:text-white bg-[#1f1f23] px-3 py-1.5 rounded border border-gray-700 transition-colors"
+            title="Keyboard shortcuts (?)"
+          >
+            ?
+          </button>
         </div>
       </div>
+
+      {/* Keyboard shortcuts modal */}
+      {showKeyboardShortcuts && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowKeyboardShortcuts(false)} />
+          <div className="relative bg-[#2a2a2e] border border-gray-600 rounded-lg p-6 max-w-md mx-4 shadow-2xl">
+            <h3 className="text-lg font-semibold text-white mb-4">Keyboard Shortcuts</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Zoom in</span>
+                <kbd className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs">Ctrl/Cmd + +</kbd>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Zoom out</span>
+                <kbd className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs">Ctrl/Cmd + -</kbd>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Reset zoom</span>
+                <kbd className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs">Ctrl/Cmd + 0</kbd>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Pan timeline</span>
+                <kbd className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs">Click & Drag</kbd>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Zoom with scroll</span>
+                <kbd className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs">Scroll over timeline</kbd>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Toggle this help</span>
+                <kbd className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs">?</kbd>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowKeyboardShortcuts(false)}
+              className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Legend */}
       <div className="mb-4 p-3 bg-[#1f1f23] rounded-lg border border-gray-700">
@@ -1879,11 +2079,19 @@ function ProjectTimeline({ tasks, allUsers }) {
         </div>
       ) : (
         <div className="relative">
-          {/* Header row */}
-          <div className="flex border-b border-gray-600">
-            {/* Task header - fixed */}
-            <div className="w-64 flex-shrink-0 h-20 flex items-center pr-4">
+          {/* Header row - sticky */}
+          <div className="flex border-b border-gray-600 sticky top-0 bg-[#2a2a2e] z-20">
+            {/* Task header - fixed with resize handle */}
+            <div className="flex-shrink-0 h-20 flex items-center pr-2 relative" style={{ width: `${taskColumnWidth}px` }}>
               <h3 className="text-sm font-semibold text-gray-300">Tasks</h3>
+              {/* Resize handle */}
+              <div
+                className="absolute right-0 top-0 bottom-0 w-1 hover:w-2 bg-gray-600 hover:bg-blue-500 cursor-col-resize transition-all group"
+                onMouseDown={handleResizeStart}
+                title="Drag to resize"
+              >
+                <div className="absolute inset-y-0 -left-1 -right-1" />
+              </div>
             </div>
 
             {/* Timeline header - scrollable */}
@@ -1924,67 +2132,66 @@ function ProjectTimeline({ tasks, allUsers }) {
           {/* Task rows container with scroll */}
           <div className="mt-4 flex">
             {/* Fixed task labels column */}
-            <div className="w-64 flex-shrink-0 space-y-3">
-              {tasks.map((task, index) => {
-                const isExpanded = expandedTasks.has(task.id)
-                const assigneeNames = task.assigned_to?.map(userId => {
-                  const user = (allUsers || []).find(u => u.id === userId)
-                  return user ? (user.name || user.email) : 'Unknown'
-                }).join(', ') || 'Unassigned'
+            <div className="flex-shrink-0" style={{ width: `${taskColumnWidth}px` }}>
+              <div className="pr-2 space-y-3">
+                {tasks.map((task, index) => {
+                  const isExpanded = expandedTasks.has(task.id)
+                  const assigneeNames = task.assigned_to?.map(userId => {
+                    const user = (allUsers || []).find(u => u.id === userId)
+                    return user ? (user.name || user.email) : 'Unknown'
+                  }).join(', ') || 'Unassigned'
 
-                // Calculate expansion height
-                const expansionHeight = isExpanded ? 80 : 0 // Approximate height of expanded content
-
-                return (
-                  <div
-                    key={`label-${task.id}`}
-                    className={`pr-4 cursor-pointer hover:bg-[#1f1f23] transition-colors ${index % 2 === 0 ? 'bg-[#25252a]/30' : ''}`}
-                    onClick={() => toggleTaskExpansion(task.id)}
-                    style={{ minHeight: `${56 + expansionHeight}px` }}
-                  >
-                    <div className="h-14 flex items-center gap-2">
-                      <ChevronRight className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-white truncate" title={task.title}>
-                          {task.title}
+                  return (
+                    <div
+                      key={`label-${task.id}`}
+                      className={`pr-2 cursor-pointer hover:bg-[#1f1f23] rounded-l transition-all duration-200 ${index % 2 === 0 ? 'bg-[#25252a]/30' : ''}`}
+                      onClick={() => toggleTaskExpansion(task.id)}
+                    >
+                      <div className="h-14 flex items-center gap-2">
+                        <ChevronRight className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-white truncate" title={task.title}>
+                            {task.title}
+                          </div>
+                          <div className="text-xs text-gray-400 truncate">
+                            {assigneeNames}
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-400 truncate">
-                          {assigneeNames}
+                      </div>
+                      <div
+                        className="overflow-hidden transition-all duration-200"
+                        style={{
+                          maxHeight: isExpanded ? '200px' : '0',
+                          opacity: isExpanded ? 1 : 0
+                        }}
+                      >
+                        <div className="pb-3 space-y-1 text-xs text-gray-400 pl-6">
+                          <div>Priority: <span className={`${
+                            task.priority === 'high' ? 'text-red-400' :
+                            task.priority === 'medium' ? 'text-yellow-400' :
+                            'text-green-400'
+                          }`}>{task.priority?.toUpperCase()}</span></div>
+                          <div>Status: <span className="text-blue-400">{task.status}</span></div>
+                          {task.description && (
+                            <div className="mt-1 text-gray-500 line-clamp-2">{task.description}</div>
+                          )}
                         </div>
                       </div>
                     </div>
-                    {isExpanded && (
-                      <div className="mt-2 pb-3 space-y-1 text-xs text-gray-400">
-                        <div>Priority: <span className={`${
-                          task.priority === 'high' ? 'text-red-400' :
-                          task.priority === 'medium' ? 'text-yellow-400' :
-                          'text-green-400'
-                        }`}>{task.priority?.toUpperCase()}</span></div>
-                        <div>Status: <span className="text-blue-400">{task.status}</span></div>
-                        {task.description && (
-                          <div className="mt-1 text-gray-500 line-clamp-2">{task.description}</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
 
             {/* Scrollable timeline bars */}
             <div
               ref={scrollContainerRef}
-              className="flex-1 overflow-x-auto overflow-y-hidden cursor-grab active:cursor-grabbing"
+              className={`flex-1 overflow-x-auto overflow-y-hidden ${isDragging ? 'cursor-grabbing' : 'cursor-grab'} active:cursor-grabbing`}
               onScroll={handleTimelineScroll}
               onMouseDown={handleMouseDown}
               onMouseMove={handleDragMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseLeaveContainer}
-              onWheel={(e) => {
-                if (e.shiftKey) {
-                  handleWheel(e)
-                }
-              }}
               style={{ userSelect: 'none' }}
             >
               <div style={{ width: `${timelineWidth}px` }} className="space-y-3">
@@ -2021,16 +2228,18 @@ function ProjectTimeline({ tasks, allUsers }) {
                     ? getDatePosition(today) - endPos
                     : 0
 
-                  // Calculate expansion height to match labels
-                  const expansionHeight = isExpanded ? 80 : 0
-
                   return (
                     <div
                       key={`bar-${task.id}`}
-                      className={`relative group hover:bg-[#1f1f23]/50 transition-colors ${index % 2 === 0 ? 'bg-[#25252a]/30' : ''}`}
-                      style={{ minHeight: `${56 + expansionHeight}px` }}
+                      className={`relative group hover:bg-[#1f1f23]/50 rounded-r ${index % 2 === 0 ? 'bg-[#25252a]/30' : ''}`}
                     >
-                      <div className="relative h-14">
+                      <div
+                        className="overflow-hidden transition-all duration-200"
+                        style={{
+                          height: isExpanded ? '134px' : '56px' // 56px base + 78px expanded content
+                        }}
+                      >
+                        <div className="relative h-14">
                         {/* Monthly grid lines (darker) */}
                         {dateMarkers.map((date, index) => (
                           <div
@@ -2112,6 +2321,7 @@ function ProjectTimeline({ tasks, allUsers }) {
                           )}
                         </div>
                       </div>
+                    </div>
                     </div>
                   )
                 })}
