@@ -5,6 +5,7 @@ const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 
+const { csrf } = require('lusca');
 // Import UAA modules
 const { sql } = require('./db');
 const { authRoutes } = require('./routes/auth');
@@ -104,6 +105,7 @@ async function initializeApp() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser()); // Add cookie parser for UAA
+  app.use(csrf()); // CSRF protection for all state-changing requests
   app.use(
     cors({
       origin: process.env.FRONTEND_ORIGIN || true, // Allow all origins in development
