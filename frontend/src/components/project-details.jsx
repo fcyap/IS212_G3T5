@@ -35,7 +35,8 @@ export function ProjectDetails({ projectId, onBack }) {
     assignee: '',
     dueDate: '',
     priority: 'all',
-    status: 'all'
+    status: 'all',
+    showBlockedOnly: false
   })
   const [showFilters, setShowFilters] = useState(false)
   const [expandedTasks, setExpandedTasks] = useState(new Set())
@@ -293,7 +294,8 @@ export function ProjectDetails({ projectId, onBack }) {
       assignee: '',
       dueDate: '',
       priority: 'all',
-      status: 'all'
+      status: 'all',
+      showBlockedOnly: false
     })
   }
 
@@ -424,6 +426,10 @@ export function ProjectDetails({ projectId, onBack }) {
     }
 
     if (taskFilters.status !== 'all' && task.status !== taskFilters.status) {
+      return false
+    }
+
+    if (taskFilters.showBlockedOnly && !task.blocked) {
       return false
     }
 
@@ -760,6 +766,17 @@ export function ProjectDetails({ projectId, onBack }) {
                   </Select>
                 </div>
               </div>
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={taskFilters.showBlockedOnly}
+                    onChange={(e) => setTaskFilters(prev => ({ ...prev, showBlockedOnly: e.target.checked }))}
+                    className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-red-500 focus:ring-red-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-gray-300">Show blocked tasks only</span>
+                </label>
+              </div>
               <div className="flex justify-end">
                 <Button
                   onClick={resetFilters}
@@ -843,6 +860,11 @@ export function ProjectDetails({ projectId, onBack }) {
                                         'bg-green-600 text-white'
                                       }`}>
                                         {task.priority.toUpperCase()}
+                                      </span>
+                                    )}
+                                    {task.blocked && (
+                                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-900 text-red-200 border border-red-600">
+                                        🚫 BLOCKED
                                       </span>
                                     )}
                                     {task.deadline && (
@@ -2070,6 +2092,10 @@ function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
             <div className="w-6 h-3 bg-gradient-to-r from-gray-500 to-gray-500/20 rounded"></div>
             <span className="text-gray-300">No Deadline</span>
           </div>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-3 bg-red-900 border-2 border-red-600 rounded"></div>
+            <span className="text-gray-300">🚫 Blocked</span>
+          </div>
         </div>
       </div>
 
@@ -2172,6 +2198,9 @@ function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
                             'text-green-400'
                           }`}>{task.priority?.toUpperCase()}</span></div>
                           <div>Status: <span className="text-blue-400">{task.status}</span></div>
+                          {task.blocked && (
+                            <div className="text-red-400 font-semibold">🚫 BLOCKED</div>
+                          )}
                           {task.description && (
                             <div className="mt-1 text-gray-500 line-clamp-2">{task.description}</div>
                           )}
@@ -2300,6 +2329,7 @@ function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
                           ) : (
                             <div
                               className={`h-full ${showOverdueExtension ? 'rounded-l' : 'rounded'} ${
+                                task.blocked ? 'bg-red-900 border-2 border-red-600' :
                                 isCompleted ? 'bg-green-500' :
                                 task.status === 'in_progress' ? 'bg-blue-500' :
                                 'bg-gray-500'
@@ -2355,6 +2385,7 @@ function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
                   {deadlineDate && <div>Deadline: {deadlineDate.toLocaleDateString()}</div>}
                   {isCompleted && updatedDate && <div>Completed: {updatedDate.toLocaleDateString()}</div>}
                   {!deadlineDate && !isCompleted && <div>No deadline set</div>}
+                  {task.blocked && <div className="text-red-400 font-semibold">🚫 BLOCKED</div>}
                   {isOverdue && <div className="text-red-400">Overdue!</div>}
                   {wasLateCompletion && <div className="text-red-300">Completed late</div>}
                 </div>
