@@ -10,14 +10,24 @@ export default function LoginPage() {
   const [showPw, setShowPw] = useState(false);
   const [err, setErr] = useState("");
 
+    const getCsrfToken = async () => {
+        const response = await fetch(process.env.NEXT_PUBLIC_API_URL + "/csrf-token", {
+            method: "GET",
+            credentials: "include" // send cookies with the request
+        });
+        const data = await response.json();
+        return data.csrfToken;
+    };
+
   const onSubmit = async (e) => {
     e.preventDefault();
     setErr("");
+      const csrfToken = await getCsrfToken();
     try {
       const res = await fetch(process.env.NEXT_PUBLIC_API_URL + "/auth/supabase-login", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
         body: JSON.stringify({ email, password: pw }),
       });
       const data = await res.json().catch(() => ({}));
