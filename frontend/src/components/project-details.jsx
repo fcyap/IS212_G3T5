@@ -1542,6 +1542,7 @@ function ProjectTimeline({ tasks, allUsers }) {
   const [expandedTasks, setExpandedTasks] = useState(new Set())
   const [hoveredTask, setHoveredTask] = useState(null)
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
+  const [editingTask, setEditingTask] = useState(null)
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -1769,12 +1770,106 @@ function ProjectTimeline({ tasks, allUsers }) {
 
   const todayPosition = getDatePosition(today)
 
+  const handleUpdateTask = async (taskData) => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/tasks/${editingTask.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: taskData.title,
+          description: taskData.description || null,
+          priority: taskData.priority.toLowerCase(),
+          status: taskData.status,
+          deadline: taskData.deadline || null,
+          tags: taskData.tags || [],
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Failed to update task: ${response.status}`)
+      }
+
+      const updatedTask = await response.json()
+      // Update tasks in parent component - we need to pass this up
+      window.location.reload() // Temporary solution - ideally update via callback
+      setEditingTask(null)
+    } catch (error) {
+      console.error('Error updating task:', error)
+      alert(`Error updating task: ${error.message}`)
+    }
+  }
+
+  const handleDeleteTask = async (taskId) => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: true }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Failed to delete task: ${response.status}`)
+      }
+
+      window.location.reload() // Temporary solution
+      setEditingTask(null)
+    } catch (error) {
+      console.error('Error deleting task:', error)
+      alert(`Error deleting task: ${error.message}`)
+    }
+  }
+
   return (
+    <>
     <div className="bg-[#2a2a2e] rounded-lg p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-white">Project Timeline</h2>
-        <div className="text-xs text-gray-400">
-          Hold Shift + scroll to zoom • Drag to pan
+        <div className="flex items-center gap-4">
+          <h2 className="text-lg font-semibold text-white">Project Timeline</h2>
+          <div className="text-xs text-gray-400 bg-[#1f1f23] px-3 py-1.5 rounded border border-gray-700">
+            {minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} → {maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          {/* Zoom indicator */}
+          <div className="text-xs text-gray-400 bg-[#1f1f23] px-3 py-1.5 rounded border border-gray-700">
+            Zoom: {Math.round(pixelsPerDay)}px/day
+          </div>
+          <div className="text-xs text-gray-400">
+            Hold Shift + scroll to zoom • Drag to pan
+          </div>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="mb-4 p-3 bg-[#1f1f23] rounded-lg border border-gray-700">
+        <div className="flex items-center gap-6 flex-wrap text-xs">
+          <span className="text-gray-400 font-semibold">Legend:</span>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-3 bg-gray-500 rounded"></div>
+            <span className="text-gray-300">Pending</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-3 bg-blue-500 rounded"></div>
+            <span className="text-gray-300">In Progress</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-3 bg-green-500 rounded"></div>
+            <span className="text-gray-300">Completed</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-3 bg-red-500 rounded"></div>
+            <span className="text-gray-300">Overdue</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-3 bg-gradient-to-r from-blue-500 to-red-400 rounded"></div>
+            <span className="text-gray-300">Late Completion</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-3 bg-gradient-to-r from-gray-500 to-gray-500/20 rounded"></div>
+            <span className="text-gray-300">No Deadline</span>
+          </div>
         </div>
       </div>
 
@@ -1787,7 +1882,7 @@ function ProjectTimeline({ tasks, allUsers }) {
           {/* Header row */}
           <div className="flex border-b border-gray-600">
             {/* Task header - fixed */}
-            <div className="w-48 flex-shrink-0 h-20 flex items-center pr-4">
+            <div className="w-64 flex-shrink-0 h-20 flex items-center pr-4">
               <h3 className="text-sm font-semibold text-gray-300">Tasks</h3>
             </div>
 
@@ -1815,11 +1910,11 @@ function ProjectTimeline({ tasks, allUsers }) {
 
                 {/* Today indicator line */}
                 <div
-                  className="absolute top-0 bottom-0 w-0.5 bg-blue-500 z-10 pointer-events-none"
+                  className="absolute top-0 bottom-0 w-1 bg-blue-400 z-10 pointer-events-none shadow-lg"
                   style={{ left: `${todayPosition}px` }}
                 >
-                  <div className="absolute top-1 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-blue-500 text-white text-xs rounded whitespace-nowrap">
-                    Today
+                  <div className="absolute top-1 left-1/2 -translate-x-1/2 px-3 py-1 bg-blue-400 text-white text-xs font-semibold rounded-md shadow-md whitespace-nowrap">
+                    TODAY
                   </div>
                 </div>
               </div>
@@ -1829,8 +1924,8 @@ function ProjectTimeline({ tasks, allUsers }) {
           {/* Task rows container with scroll */}
           <div className="mt-4 flex">
             {/* Fixed task labels column */}
-            <div className="w-48 flex-shrink-0 space-y-3">
-              {tasks.map((task) => {
+            <div className="w-64 flex-shrink-0 space-y-3">
+              {tasks.map((task, index) => {
                 const isExpanded = expandedTasks.has(task.id)
                 const assigneeNames = task.assigned_to?.map(userId => {
                   const user = (allUsers || []).find(u => u.id === userId)
@@ -1843,16 +1938,19 @@ function ProjectTimeline({ tasks, allUsers }) {
                 return (
                   <div
                     key={`label-${task.id}`}
-                    className="pr-4 cursor-pointer hover:bg-[#1f1f23] transition-colors"
+                    className={`pr-4 cursor-pointer hover:bg-[#1f1f23] transition-colors ${index % 2 === 0 ? 'bg-[#25252a]/30' : ''}`}
                     onClick={() => toggleTaskExpansion(task.id)}
                     style={{ minHeight: `${56 + expansionHeight}px` }}
                   >
-                    <div className="h-14 flex flex-col justify-center">
-                      <div className="text-sm font-medium text-white truncate" title={task.title}>
-                        {task.title}
-                      </div>
-                      <div className="text-xs text-gray-400 truncate">
-                        {assigneeNames}
+                    <div className="h-14 flex items-center gap-2">
+                      <ChevronRight className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-white truncate" title={task.title}>
+                          {task.title}
+                        </div>
+                        <div className="text-xs text-gray-400 truncate">
+                          {assigneeNames}
+                        </div>
                       </div>
                     </div>
                     {isExpanded && (
@@ -1890,7 +1988,7 @@ function ProjectTimeline({ tasks, allUsers }) {
               style={{ userSelect: 'none' }}
             >
               <div style={{ width: `${timelineWidth}px` }} className="space-y-3">
-                {tasks.map((task) => {
+                {tasks.map((task, index) => {
                   const createdDate = new Date(task.created_at)
                   const deadlineDate = task.deadline ? new Date(task.deadline) : null
                   const updatedDate = task.updated_at ? new Date(task.updated_at) : null
@@ -1929,7 +2027,7 @@ function ProjectTimeline({ tasks, allUsers }) {
                   return (
                     <div
                       key={`bar-${task.id}`}
-                      className="relative group hover:bg-[#1f1f23]/50 transition-colors"
+                      className={`relative group hover:bg-[#1f1f23]/50 transition-colors ${index % 2 === 0 ? 'bg-[#25252a]/30' : ''}`}
                       style={{ minHeight: `${56 + expansionHeight}px` }}
                     >
                       <div className="relative h-14">
@@ -1937,7 +2035,7 @@ function ProjectTimeline({ tasks, allUsers }) {
                         {dateMarkers.map((date, index) => (
                           <div
                             key={`month-${index}`}
-                            className="absolute top-0 bottom-0 w-px bg-gray-600/50 pointer-events-none"
+                            className="absolute top-0 bottom-0 w-px bg-gray-600/70 pointer-events-none"
                             style={{ left: `${getDatePosition(date)}px` }}
                           />
                         ))}
@@ -1945,22 +2043,22 @@ function ProjectTimeline({ tasks, allUsers }) {
                         {fiveDayGridLines.map((date, index) => (
                           <div
                             key={`five-day-${index}`}
-                            className="absolute top-0 bottom-0 w-px bg-gray-700/30 pointer-events-none"
+                            className="absolute top-0 bottom-0 w-px bg-gray-700/40 pointer-events-none"
                             style={{ left: `${getDatePosition(date)}px` }}
                           />
                         ))}
-                        {/* Daily subdividers (very light) */}
+                        {/* Daily subdividers (light) */}
                         {dailySubdividers.map((date, index) => (
                           <div
                             key={`daily-${index}`}
-                            className="absolute top-0 bottom-0 w-px bg-gray-700/10 pointer-events-none"
+                            className="absolute top-0 bottom-0 w-px bg-gray-700/15 pointer-events-none"
                             style={{ left: `${getDatePosition(date)}px` }}
                           />
                         ))}
 
                         {/* Main task bar */}
                         <div
-                          className="absolute top-1/2 -translate-y-1/2 h-6 rounded group-hover:h-7"
+                          className="absolute top-1/2 -translate-y-1/2 h-6 rounded group-hover:h-7 cursor-pointer hover:shadow-lg transition-shadow"
                           style={{
                             left: `${startPos}px`,
                             width: `${barWidth}px`,
@@ -1968,18 +2066,22 @@ function ProjectTimeline({ tasks, allUsers }) {
                           }}
                           onMouseMove={(e) => handleMouseMove(e, task.id)}
                           onMouseLeave={handleMouseLeaveBar}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setEditingTask(task)
+                          }}
                         >
                           {wasLateCompletion && deadlineDate ? (
                             <>
                               <div
-                                className="absolute h-full bg-blue-600 rounded-l"
+                                className="absolute h-full bg-blue-500 rounded-l"
                                 style={{
                                   left: 0,
                                   width: `${getDatePosition(deadlineDate) - startPos}px`,
                                 }}
                               />
                               <div
-                                className="absolute h-full bg-red-300/60 rounded-r"
+                                className="absolute h-full bg-red-400 rounded-r"
                                 style={{
                                   left: `${getDatePosition(deadlineDate) - startPos}px`,
                                   right: 0,
@@ -1989,11 +2091,11 @@ function ProjectTimeline({ tasks, allUsers }) {
                           ) : (
                             <div
                               className={`h-full ${showOverdueExtension ? 'rounded-l' : 'rounded'} ${
-                                isCompleted ? 'bg-green-600' :
-                                task.status === 'in_progress' ? 'bg-blue-600' :
-                                'bg-gray-600'
+                                isCompleted ? 'bg-green-500' :
+                                task.status === 'in_progress' ? 'bg-blue-500' :
+                                'bg-gray-500'
                               } ${
-                                !deadlineDate && !isCompleted ? 'bg-gradient-to-r from-gray-600 to-gray-600/20' : ''
+                                !deadlineDate && !isCompleted ? 'bg-gradient-to-r from-gray-500 to-gray-500/20' : ''
                               }`}
                             />
                           )}
@@ -2001,7 +2103,7 @@ function ProjectTimeline({ tasks, allUsers }) {
                           {/* Overdue extension */}
                           {showOverdueExtension && (
                             <div
-                              className="absolute top-0 h-full bg-red-600 rounded-r"
+                              className="absolute top-0 h-full bg-red-500 rounded-r"
                               style={{
                                 left: '100%',
                                 width: `${overdueExtensionWidth}px`,
@@ -2052,5 +2154,17 @@ function ProjectTimeline({ tasks, allUsers }) {
         </div>
       )}
     </div>
+
+    {/* Task Editing Side Panel for Timeline */}
+    {editingTask && (
+      <TaskEditingSidePanel
+        task={editingTask}
+        onClose={() => setEditingTask(null)}
+        onSave={handleUpdateTask}
+        onDelete={() => handleDeleteTask(editingTask.id)}
+        allUsers={allUsers}
+      />
+    )}
+    </>
   )
 }
