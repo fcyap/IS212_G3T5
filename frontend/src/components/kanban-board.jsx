@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { TaskCard } from "./task-card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { getCsrfToken } from "@/lib/csrf"
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select"
@@ -45,9 +46,14 @@ function rowToCard(r) {
 export function KanbanBoard() {
   async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees }) {
     try {
+      const csrfToken = await getCsrfToken();
       const res = await fetch(`${API}/tasks`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken
+        },
+        credentials: "include",
         body: JSON.stringify({
           title,
           description: description || null,
@@ -323,9 +329,14 @@ export function KanbanBoard() {
                 assigned_to,
               };
               console.log('[KanbanBoard] Sending payload to backend:', payload);
+              const csrfToken = await getCsrfToken();
               const res = await fetch(`${API}/tasks/${panelTask.id}`, {
                 method: "PUT",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-csrf-token": csrfToken
+                },
+                credentials: "include",
                 body: JSON.stringify(payload),
               })
               if (!res.ok) {
@@ -429,9 +440,14 @@ const canSave = canEdit && title.trim().length > 0 && priority;
 
   async function handleDelete() {
     try {
+      const csrfToken = await getCsrfToken();
       const res = await fetch(`${API}/tasks/${task.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken
+        },
+        credentials: "include",
         body: JSON.stringify({ archived: true }),
       });
       if (!res.ok) {
@@ -724,9 +740,14 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
       return
     }
     try {
+      const csrfToken = await getCsrfToken();
       const res = await fetch(`${API}/tasks/${taskId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken
+        },
+        credentials: "include",
         body: JSON.stringify({ archived: true }),
       })
       if (!res.ok) {
