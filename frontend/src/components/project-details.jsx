@@ -408,6 +408,36 @@ export function ProjectDetails({ projectId, onBack }) {
 
   // Filter tasks based on current filters
   const filteredTasks = (tasks || []).filter(task => {
+    // Helper to check if task is blocked
+    const isBlocked = task.blocked === true || task.status === 'blocked'
+
+    // If showing blocked only, ignore other filters except assignee and priority
+    if (taskFilters.showBlockedOnly) {
+      if (!isBlocked) return false
+
+      if (taskFilters.assignee && !task.assigned_to?.some(userId => {
+        const user = (allUsers || []).find(u => u.id === userId)
+        return user && (user.name || user.email).toLowerCase().includes(taskFilters.assignee.toLowerCase())
+      })) {
+        return false
+      }
+
+      if (taskFilters.priority !== 'all' && task.priority !== taskFilters.priority.toLowerCase()) {
+        return false
+      }
+
+      if (taskFilters.dueDate && task.deadline) {
+        const taskDate = new Date(task.deadline).toDateString()
+        const filterDate = new Date(taskFilters.dueDate).toDateString()
+        if (taskDate !== filterDate) return false
+      }
+
+      return true
+    }
+
+    // Normal filtering (exclude blocked tasks)
+    if (isBlocked) return false
+
     if (taskFilters.assignee && !task.assigned_to?.some(userId => {
       const user = (allUsers || []).find(u => u.id === userId)
       return user && (user.name || user.email).toLowerCase().includes(taskFilters.assignee.toLowerCase())
@@ -429,19 +459,19 @@ export function ProjectDetails({ projectId, onBack }) {
       return false
     }
 
-    if (taskFilters.showBlockedOnly && !task.blocked) {
-      return false
-    }
-
     return true
   })
 
   // Group tasks by status
-  const groupedTasks = {
-    pending: filteredTasks.filter(task => task.status === 'pending'),
-    in_progress: filteredTasks.filter(task => task.status === 'in_progress'),
-    completed: filteredTasks.filter(task => task.status === 'completed')
-  }
+  const groupedTasks = taskFilters.showBlockedOnly
+    ? {
+        blocked: filteredTasks
+      }
+    : {
+        pending: filteredTasks.filter(task => task.status === 'pending' && task.status !== 'blocked'),
+        in_progress: filteredTasks.filter(task => task.status === 'in_progress'),
+        completed: filteredTasks.filter(task => task.status === 'completed')
+      }
 
   // Calculate progress
   const totalTasks = (tasks || []).length
@@ -803,12 +833,14 @@ export function ProjectDetails({ projectId, onBack }) {
             const statusLabels = {
               pending: 'Pending',
               in_progress: 'In Progress',
-              completed: 'Completed'
+              completed: 'Completed',
+              blocked: 'Blocked'
             }
             const statusColors = {
               pending: 'bg-yellow-600',
               in_progress: 'bg-blue-600',
-              completed: 'bg-green-600'
+              completed: 'bg-green-600',
+              blocked: 'bg-red-600'
             }
 
             return (
@@ -1578,9 +1610,15 @@ function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
   const [isResizing, setIsResizing] = useState(false)
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [hasInitialized, setHasInitialized] = useState(false)
+  const [showBlockedOnly, setShowBlockedOnly] = useState(false)
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
+
+  // Filter tasks based on blocked filter
+  const filteredTasks = showBlockedOnly
+    ? (tasks || []).filter(task => task.blocked === true || task.status === 'blocked')
+    : (tasks || []).filter(task => !(task.blocked === true || task.status === 'blocked'))
 
   // Calculate timeline date range with more padding
   const getTimelineRange = () => {
@@ -1589,8 +1627,8 @@ function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
     const end = new Date(today)
     end.setDate(end.getDate() + 180) // 6 months after
 
-    if (tasks && tasks.length > 0) {
-      const dates = tasks.map(task => {
+    if (filteredTasks && filteredTasks.length > 0) {
+      const dates = filteredTasks.map(task => {
         const created = new Date(task.created_at)
         const deadline = task.deadline ? new Date(task.deadline) : null
         const updated = task.updated_at ? new Date(task.updated_at) : null
@@ -1982,6 +2020,15 @@ function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
           <div className="text-xs text-gray-400 bg-[#1f1f23] px-3 py-1.5 rounded border border-gray-700">
             {minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} → {maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
           </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showBlockedOnly}
+              onChange={(e) => setShowBlockedOnly(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-red-500 focus:ring-red-500 focus:ring-offset-0"
+            />
+            <span className="text-sm text-gray-300">Show blocked tasks only</span>
+          </label>
         </div>
         <div className="flex items-center gap-3">
           {/* Zoom controls */}
@@ -2099,7 +2146,7 @@ function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
         </div>
       </div>
 
-      {tasks.length === 0 ? (
+      {filteredTasks.length === 0 ? (
         <div className="text-center py-8">
           <p className="text-gray-400">No tasks to display in timeline.</p>
         </div>
@@ -2148,7 +2195,7 @@ function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
                   style={{ left: `${todayPosition}px` }}
                 >
                   <div className="absolute top-1 left-1/2 -translate-x-1/2 px-3 py-1 bg-blue-400 text-white text-xs font-semibold rounded-md shadow-md whitespace-nowrap">
-                    TODAY
+                    {today.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }).toUpperCase()}
                   </div>
                 </div>
               </div>
@@ -2160,7 +2207,7 @@ function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
             {/* Fixed task labels column */}
             <div className="flex-shrink-0" style={{ width: `${taskColumnWidth}px` }}>
               <div className="pr-2 space-y-3">
-                {tasks.map((task, index) => {
+                {filteredTasks.map((task, index) => {
                   const isExpanded = expandedTasks.has(task.id)
                   const assigneeNames = task.assigned_to?.map(userId => {
                     const user = (allUsers || []).find(u => u.id === userId)
@@ -2224,11 +2271,12 @@ function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
               style={{ userSelect: 'none' }}
             >
               <div style={{ width: `${timelineWidth}px` }} className="space-y-3">
-                {tasks.map((task, index) => {
+                {filteredTasks.map((task, index) => {
                   const createdDate = new Date(task.created_at)
                   const deadlineDate = task.deadline ? new Date(task.deadline) : null
                   const updatedDate = task.updated_at ? new Date(task.updated_at) : null
                   const isCompleted = task.status === 'completed'
+                  const isBlocked = task.blocked === true || task.status === 'blocked'
                   const isOverdue = deadlineDate && !isCompleted && deadlineDate < today
                   const isExpanded = expandedTasks.has(task.id)
 
@@ -2329,12 +2377,12 @@ function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
                           ) : (
                             <div
                               className={`h-full ${showOverdueExtension ? 'rounded-l' : 'rounded'} ${
-                                task.blocked ? 'bg-red-900 border-2 border-red-600' :
+                                isBlocked ? 'bg-red-900 border-2 border-red-600' :
                                 isCompleted ? 'bg-green-500' :
                                 task.status === 'in_progress' ? 'bg-blue-500' :
                                 'bg-gray-500'
                               } ${
-                                !deadlineDate && !isCompleted ? 'bg-gradient-to-r from-gray-500 to-gray-500/20' : ''
+                                !deadlineDate && !isCompleted && !isBlocked ? 'bg-gradient-to-r from-gray-500 to-gray-500/20' : ''
                               }`}
                             />
                           )}
@@ -2362,7 +2410,7 @@ function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
           {/* Floating tooltip that follows cursor */}
           {hoveredTask && (
             (() => {
-              const task = tasks.find(t => t.id === hoveredTask)
+              const task = filteredTasks.find(t => t.id === hoveredTask)
               if (!task) return null
 
               const createdDate = new Date(task.created_at)
