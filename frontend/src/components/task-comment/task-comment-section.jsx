@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CommentBox } from './task-comment';
 import { CommentItem } from './task-comment-item';
 import { CurrentUser } from './test-task-comments';
+import { getCsrfToken } from '@/lib/csrf';
 
 const API = 'http://localhost:3001/api/tasks';
 
@@ -54,9 +55,14 @@ const toViewModel = (row) => ({
     } else {
       console.log('[handleCreateComment] currentUser:', currentUser);
     }
+    const csrfToken = await getCsrfToken();
     const res = await fetch(`${API}/${taskId}/comments`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken
+      },
+      credentials: 'include',
       body: JSON.stringify({ content, userId: currentUser.id, parentId }),
     });
     const body = await res.json().catch(() => ({}));
@@ -80,9 +86,14 @@ const toViewModel = (row) => ({
     } else {
       console.log('[handleUpdateComment] currentUser:', currentUser);
     }
+    const csrfToken = await getCsrfToken();
     const res = await fetch(`${API}/comments/${commentId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken
+      },
+      credentials: 'include',
       body: JSON.stringify({ content, userId: currentUser.id }),
     });
     const body = await res.json().catch(() => ({}));
