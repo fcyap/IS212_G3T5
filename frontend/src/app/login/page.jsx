@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { getCsrfToken } from "@/lib/csrf";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -9,15 +10,6 @@ export default function LoginPage() {
   const [pw, setPw] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [err, setErr] = useState("");
-
-    const getCsrfToken = async () => {
-        const response = await fetch(process.env.NEXT_PUBLIC_API_URL + "/csrf-token", {
-            method: "GET",
-            credentials: "include" // send cookies with the request
-        });
-        const data = await response.json();
-        return data.csrfToken;
-    };
 
   const onSubmit = async (e) => {
     e.preventDefault();

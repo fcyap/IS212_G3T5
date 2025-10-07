@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { getCsrfToken } from "@/lib/csrf"
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select"
@@ -143,11 +144,16 @@ export function ProjectDetails({ projectId, onBack }) {
   const handleAddMember = async (userId) => {
     try {
       console.log(`Adding user ${userId} to project ${projectId} as collaborator`);
+      const csrfToken = await getCsrfToken();
       const response = await fetch(`http://localhost:3001/api/projects/${projectId}/members`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          userIds: [userId], 
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          userIds: [userId],
           message: invitationMessage,
           role: 'collaborator' // Default role for new members
         })
@@ -183,11 +189,16 @@ export function ProjectDetails({ projectId, onBack }) {
 
     try {
       console.log(`Adding ${selectedUsers.length} users to project ${projectId} as collaborators`);
+      const csrfToken = await getCsrfToken();
       const response = await fetch(`http://localhost:3001/api/projects/${projectId}/members`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          userIds: selectedUsers, 
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          userIds: selectedUsers,
           message: invitationMessage,
           role: 'collaborator' // Default role for new members
         })
@@ -229,8 +240,13 @@ export function ProjectDetails({ projectId, onBack }) {
 
   const handleRemoveMember = async (userId) => {
     try {
+      const csrfToken = await getCsrfToken();
       const response = await fetch(`http://localhost:3001/api/projects/${projectId}/members/${userId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'x-csrf-token': csrfToken
+        },
+        credentials: 'include'
       })
 
       if (response.ok) {
@@ -244,9 +260,14 @@ export function ProjectDetails({ projectId, onBack }) {
 
   const handleCreateTask = async ({ title, description, dueDate, priority, tags }) => {
     try {
+      const csrfToken = await getCsrfToken();
       const response = await fetch(`http://localhost:3001/api/tasks`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken
+        },
+        credentials: 'include',
         body: JSON.stringify({
           title,
           description: description || null,
@@ -301,9 +322,14 @@ export function ProjectDetails({ projectId, onBack }) {
 
   const handleUpdateTask = async (taskData) => {
     try {
+      const csrfToken = await getCsrfToken();
       const response = await fetch(`http://localhost:3001/api/tasks/${editingTask.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken
+        },
+        credentials: 'include',
         body: JSON.stringify({
           title: taskData.title,
           description: taskData.description || null,
@@ -330,9 +356,14 @@ export function ProjectDetails({ projectId, onBack }) {
 
   const handleDeleteTask = async (taskId) => {
     try {
+      const csrfToken = await getCsrfToken();
       const response = await fetch(`http://localhost:3001/api/tasks/${taskId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken
+        },
+        credentials: 'include',
         body: JSON.stringify({ archived: true }),
       })
 
@@ -354,9 +385,14 @@ export function ProjectDetails({ projectId, onBack }) {
 
     try {
       console.log(`Archiving project ${projectId}`)
+      const csrfToken = await getCsrfToken();
       const response = await fetch(`http://localhost:3001/api/projects/${projectId}/archive`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken
+        },
+        credentials: 'include',
       })
 
       if (response.ok) {
