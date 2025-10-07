@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { TaskCard } from "./task-card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { getCsrfToken } from "@/lib/csrf"
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select"
@@ -51,29 +52,24 @@ export function KanbanBoard({ projectId = null }) {
       return
     }
     try {
-      const payload = {
-        title,
-        description: description || null,
-        priority: (priority || "Low").toLowerCase(),
-        status: editorLane,
-        deadline: dueDate || null,
-        assigned_to: Array.isArray(assignees) ? assignees.map(a => a.id) : [],
-        tags,
-      }
-
-      if (projectId != null) {
-        payload.project_id = projectId
-      }
-
-      if (!payload.assigned_to.includes(currentUser.id)) {
-        payload.assigned_to = [...payload.assigned_to, currentUser.id]
-      }
-
+      const csrfToken = await getCsrfToken();
       const res = await fetch(`${API}/tasks`, {
         method: "POST",
-        credentials: 'include',
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          title,
+          description: description || null,
+          priority: (priority || "Low").toLowerCase(),
+          status: editorLane,
+          deadline: dueDate || null,
+          project_id: projectId,
+          assigned_to: Array.isArray(assignees) && assignees.length > 0 ? assignees.map(a => a.id) : [CurrentUser.id],
+          tags,
+        }),
       })
       if (!res.ok) {
         const { error } = await res.json().catch(() => ({}))
@@ -336,12 +332,16 @@ export function KanbanBoard({ projectId = null }) {
                 assigned_to,
               };
               console.log('[KanbanBoard] Sending payload to backend:', payload);
-             const res = await fetch(`${API}/tasks/${panelTask.id}`, {
-               method: "PUT",
-                credentials: 'include',
-               headers: { "Content-Type": "application/json" },
-               body: JSON.stringify(payload),
-             })
+              const csrfToken = await getCsrfToken();
+              const res = await fetch(`${API}/tasks/${panelTask.id}`, {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-csrf-token": csrfToken
+                },
+                credentials: "include",
+                body: JSON.stringify(payload),
+              })
               if (!res.ok) {
                 const { error } = await res.json().catch(() => ({}))
                 throw new Error(error || `PUT /tasks/${panelTask.id} ${res.status}`)
@@ -424,10 +424,14 @@ const canSave = canEdit && title.trim().length > 0 && priority;
 
   async function handleDelete() {
     try {
+      const csrfToken = await getCsrfToken();
       const res = await fetch(`${API}/tasks/${task.id}`, {
         method: "PUT",
-        credentials: 'include',
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken
+        },
+        credentials: "include",
         body: JSON.stringify({ archived: true }),
       });
       if (!res.ok) {
@@ -713,10 +717,14 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
       return
     }
     try {
+      const csrfToken = await getCsrfToken();
       const res = await fetch(`${API}/tasks/${taskId}`, {
         method: "PUT",
-        credentials: 'include',
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken
+        },
+        credentials: "include",
         body: JSON.stringify({ archived: true }),
       })
       if (!res.ok) {

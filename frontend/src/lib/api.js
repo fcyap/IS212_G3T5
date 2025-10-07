@@ -1,4 +1,6 @@
 // API service for communicating with the backend
+import { getCsrfToken } from './csrf';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 class ProjectService {
@@ -34,16 +36,18 @@ class ProjectService {
       user_ids: projectData.user_ids,
       creator_id: projectData.creator_id
     };
-    
+
+    const csrfToken = await getCsrfToken();
     const response = await fetch(`${API_BASE_URL}/api/projects`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken,
       },
-      credentials: 'include', // Include cookies for authentication
+      credentials: 'include',
       body: JSON.stringify(backendData),
     });
-    
+
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(errorData.message || `Failed to create project: ${response.statusText}`);
@@ -56,15 +60,17 @@ class ProjectService {
   }
 
   async updateProject(id, projectData) {
+    const csrfToken = await getCsrfToken();
     const response = await fetch(`${API_BASE_URL}/api/projects/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken,
       },
       credentials: 'include', // Include cookies for authentication
       body: JSON.stringify(projectData),
     });
-    
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: response.statusText }));
       throw new Error(errorData.error || `Failed to update project ${id}: ${response.statusText}`);
@@ -73,9 +79,13 @@ class ProjectService {
   }
 
   async deleteProject(id) {
+    const csrfToken = await getCsrfToken();
     const response = await fetch(`${API_BASE_URL}/api/projects/${id}`, {
       method: 'DELETE',
-      credentials: 'include', // Include cookies for authentication
+      headers: {
+        'x-csrf-token': csrfToken,
+      },
+      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -99,9 +109,13 @@ class ProjectService {
   }
 
   async archiveProject(projectId) {
+    const csrfToken = await getCsrfToken();
     const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/archive`, {
       method: 'PATCH',
-      credentials: 'include', // Include cookies for authentication
+      headers: {
+        'x-csrf-token': csrfToken,
+      },
+      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -115,12 +129,14 @@ class ProjectService {
   }
 
   async addUserToProject(projectId, userId) {
+    const csrfToken = await getCsrfToken();
     const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/members`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken,
       },
-      credentials: 'include', // Include cookies for authentication
+      credentials: 'include',
       body: JSON.stringify({ userIds: [userId] }),
     });
 
@@ -131,9 +147,13 @@ class ProjectService {
   }
 
   async removeUserFromProject(projectId, userId) {
+    const csrfToken = await getCsrfToken();
     const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/members/${userId}`, {
       method: 'DELETE',
-      credentials: 'include', // Include cookies for authentication
+      headers: {
+        'x-csrf-token': csrfToken,
+      },
+      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -197,12 +217,14 @@ class ProjectTasksService {
   }
 
   async createTask(projectId, taskData) {
+    const csrfToken = await getCsrfToken();
     const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken,
       },
-      credentials: 'include', // Include cookies for authentication
+      credentials: 'include',
       body: JSON.stringify(taskData),
     });
 
@@ -218,12 +240,14 @@ class ProjectTasksService {
   }
 
   async updateTask(taskId, taskData) {
+    const csrfToken = await getCsrfToken();
     const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken,
       },
-      credentials: 'include', // Include cookies for authentication
+      credentials: 'include',
       body: JSON.stringify(taskData),
     });
 
@@ -239,9 +263,13 @@ class ProjectTasksService {
   }
 
   async deleteTask(taskId) {
+    const csrfToken = await getCsrfToken();
     const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
       method: 'DELETE',
-      credentials: 'include', // Include cookies for authentication
+      headers: {
+        'x-csrf-token': csrfToken,
+      },
+      credentials: 'include',
     });
 
     if (!response.ok) {
