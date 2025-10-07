@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { CommentBox } from './task-comment';
 import { CommentItem } from './task-comment-item';
-import { CurrentUser } from './test-task-comments';
 import { getCsrfToken } from '@/lib/csrf';
+import { useAuth } from '@/hooks/useAuth';
 
 const API = 'http://localhost:3001/api/tasks';
 
