@@ -19,6 +19,17 @@ const priorityChipClasses = {
   High: "bg-fuchsia-300 text-fuchsia-950",
 }
 
+const prettyStatus = (s) => {
+  const key = String(s || "").toLowerCase();
+  const map = {
+    pending: "To do",
+    in_progress: "Doing",
+    completed: "Completed",
+    blocked: "Blocked",
+    cancelled: "Cancelled",
+  };
+  return map[key] ?? cap(key.replace("_", " "));
+};
 
 const API = process.env.NEXT_PUBLIC_API_URL
 const cap = (s) => (s ? s.toString().charAt(0).toUpperCase() + s.toString().slice(1).toLowerCase() : "")
@@ -45,7 +56,7 @@ function rowToCard(r) {
 export function KanbanBoard() {
   async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees }) {
     try {
-      const res = await fetch(`${API}/tasks`, {
+      const res = await fetch(`${API}/tasks?archived=false&parent_id=null`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -66,14 +77,14 @@ export function KanbanBoard() {
       const row = await res.json()
       const card = rowToCard(row)
       const withAssignees = {
-     ...card,
-     assignees: [{ id: CurrentUser.id, name: CurrentUser.name }],
-   }
+        ...card,
+        assignees: [{ id: CurrentUser.id, name: CurrentUser.name }],
+      }
 
       // setTasks(prev => editorPosition === "top" ? [card, ...prev] : [...prev, card])
       setTasks(prev =>
-     editorPosition === "top" ? [withAssignees, ...prev] : [...prev, withAssignees]
-   )
+        editorPosition === "top" ? [withAssignees, ...prev] : [...prev, withAssignees]
+      )
       setBanner("Task Successfully Created")
       cancelAddTask()
     } catch (err) {
@@ -95,7 +106,7 @@ export function KanbanBoard() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`${API}/tasks`)
+        const res = await fetch(`${API}/tasks?archived=false&parent_id=null`)
         if (!res.ok) throw new Error(`GET /tasks ${res.status}`)
         const rows = await res.json()
         setTasks(rows.map(rowToCard))
@@ -357,8 +368,9 @@ export function KanbanBoard() {
 }
 
 
-function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
-    const canEdit =
+function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false  }) {
+  const [childPanelTask, setChildPanelTask] = useState(null);
+  const canEdit =
     Array.isArray(task.assignees) &&
     task.assignees.some((a) => a.id === CurrentUser.id);
   const [title, setTitle] = useState(task.title || "");
@@ -376,9 +388,50 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
   // Fetch user suggestions from backend on each keydown
   // Debounce timer for user search
   const [userSearchDebounce, setUserSearchDebounce] = useState(null);
+  // Subtasks
+  const [subtasks, setSubtasks] = useState([]);
+  const [isSubtaskOpen, setIsSubtaskOpen] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch(`${API}/tasks?archived=false&parent_id=${task.id}`);
+        if (!res.ok) throw new Error(`GET /tasks ${res.status}`);
+        const rows = await res.json();
+        // rows already have assignees hydrated by backend; if you map, keep tags/assignees as you do elsewhere
+        if (mounted) setSubtasks(rows.map(rowToCard));
+      } catch (e) {
+        console.error('[load subtasks]', e);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [task.id]);
+
+  async function loadSubtasks() {
+    try {
+      // Prefer backend filter: /tasks?parent_id=ID
+      const res = await fetch(`${API}/tasks?parent_id=${task.id}`);
+      if (!res.ok) throw new Error(`GET /tasks?parent_id=${task.id} ${res.status}`);
+      const rows = await res.json();
+      setSubtasks(Array.isArray(rows) ? rows : []);
+    } catch (err) {
+      console.error("[load subtasks]", err);
+      // Fallback: fetch all then filter if your backend doesn't support parent_id
+      try {
+        const resAll = await fetch(`${API}/tasks`);
+        const rowsAll = await resAll.json();
+        setSubtasks((rowsAll || []).filter((r) => r.parent_id === task.id));
+      } catch (e) {
+        console.error("[load subtasks fallback]", e);
+        setSubtasks([]);
+      }
+    }
+  }
+
 
   function handleUserSearchInput(e) {
-       if (!canEdit) return;
+    if (!canEdit) return;
     const value = e.target.value;
     console.log('[AssigneeSearch] (input onChange) value:', value);
     setUserSearch(value);
@@ -405,7 +458,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
     setUserSearchDebounce(timer);
   }
 
-const canSave = canEdit && title.trim().length > 0 && priority;
+  const canSave = canEdit && title.trim().length > 0 && priority;
   function addTagFromInput() {
     const t = tagInput.trim();
     if (!t) return;
@@ -450,7 +503,50 @@ const canSave = canEdit && title.trim().length > 0 && priority;
   }
 
   return (
-    <div className="fixed inset-0 z-40">
+        <>
+      {childPanelTask && (
+        <TaskSidePanel
+          task={childPanelTask}
+          onClose={() => setChildPanelTask(null)}
+          onSave={async (patch) => {
+            const assigned_to = Array.isArray(patch.assignees)
+              ? patch.assignees.map(a => a.id)
+              : [];
+            const payload = {
+              title: patch.title,
+              description: patch.description || null,
+              priority: patch.priority,
+              status: patch.status,
+              deadline: patch.deadline || null,
+              tags: patch.tags || [],
+              assigned_to,
+            };
+            try {
+              const res = await fetch(`${API}/tasks/${childPanelTask.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+              if (!res.ok) {
+                const { error } = await res.json().catch(() => ({}));
+                throw new Error(error || `PUT /tasks/${childPanelTask.id} ${res.status}`);
+              }
+              const row = await res.json();
+              setSubtasks(prev => prev.map(s => (s.id === row.id ? rowToCard(row) : s)));
+              setChildPanelTask(null);
+            } catch (e) {
+              console.error("[update subtask]", e);
+              alert(e.message);
+            }
+          }}
+          onDeleted={(id) => {
+            setSubtasks(prev => prev.filter(s => s.id !== id));
+            setChildPanelTask(null);
+          }}
+          nested
+        />
+      )}
+    <div className={nested ? "fixed inset-0 z-50" : "fixed inset-0 z-40"}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       {/* Panel */}
@@ -468,7 +564,7 @@ const canSave = canEdit && title.trim().length > 0 && priority;
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="bg-transparent text-gray-100 border-gray-700"
-               disabled={!canEdit}
+              disabled={!canEdit}
             />
           </div>
 
@@ -480,7 +576,7 @@ const canSave = canEdit && title.trim().length > 0 && priority;
               onChange={(e) => setDescription(e.target.value)}
               rows={4}
               className="bg-transparent text-gray-100 border-gray-700"
-               disabled={!canEdit}
+              disabled={!canEdit}
             />
           </div>
 
@@ -513,14 +609,14 @@ const canSave = canEdit && title.trim().length > 0 && priority;
                   >
                     {t}
                     <button
-  type="button"
-  className="ml-1 text-gray-300 hover:text-white disabled:opacity-50"
-  onClick={() => canEdit && removeTagAt(i)}
-  disabled={!canEdit}
-  aria-label={`Remove ${t}`}
->
-  ×
-</button>
+                      type="button"
+                      className="ml-1 text-gray-300 hover:text-white disabled:opacity-50"
+                      onClick={() => canEdit && removeTagAt(i)}
+                      disabled={!canEdit}
+                      aria-label={`Remove ${t}`}
+                    >
+                      ×
+                    </button>
                   </span>
                 ))}
               </div>
@@ -540,7 +636,7 @@ const canSave = canEdit && title.trim().length > 0 && priority;
                   removeTagAt(tags.length - 1)
                 }
               }}
-               disabled={!canEdit}
+              disabled={!canEdit}
               placeholder="Type a tag and press Enter (or comma)"
             />
           </div>
@@ -613,6 +709,67 @@ const canSave = canEdit && title.trim().length > 0 && priority;
               <span className="text-xs text-gray-500">No assignees</span>
             )}
           </div>
+          {/* Subtasks */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs text-gray-400">Subtasks</label>
+              <Button
+                type="button"
+                className="bg-gray-700 hover:bg-gray-600 text-white h-8 px-3"
+                onClick={() => setIsSubtaskOpen(true)}
+                disabled={!canEdit}
+              >
+                + Add subtask
+              </Button>
+            </div>
+
+            {/* Table: Name + Status */}
+            {subtasks.length > 0 ? (
+              <div className="overflow-hidden rounded-md border border-gray-700">
+                <table className="w-full text-sm">
+                  <thead className="bg-[#222428] text-gray-300">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium">Name</th>
+                      <th className="text-left px-3 py-2 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700">
+                    {subtasks.map((st) => (
+                      <tr key={st.id} className="hover:bg-[#25272c]">
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            className="text-left text-gray-100 hover:underline"
+                            onClick={() => setChildPanelTask(st)}
+                            title="Open subtask"
+                          >
+                            {st.title}
+                          </button>
+                        </td>                        <td className="px-3 py-2 text-gray-300">
+                          {prettyStatus(st.workflow || st.status || "pending")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-xs text-gray-500">No subtasks yet.</div>
+            )}
+
+            {/* Modal */}
+            {isSubtaskOpen && (
+              <SubtaskDialog
+                parentId={task.id}
+                parentDeadline={deadline}
+                onClose={() => setIsSubtaskOpen(false)}
+                onCreated={(row) => {
+                  setSubtasks((prev) => [rowToCard(row), ...prev]);
+                  setIsSubtaskOpen(false);
+                }}
+              />
+            )}
+          </div>
 
           {/* Deadline */}
           <div>
@@ -653,6 +810,7 @@ const canSave = canEdit && title.trim().length > 0 && priority;
         </div>
       </div>
     </div>
+    </>
   )
 }
 function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
@@ -925,6 +1083,286 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
     </div>
   )
 }
+function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("Low");
+  const [status, setStatus] = useState("pending");
+  const [deadline, setDeadline] = useState("");
+  const [tags, setTags] = useState([]);
+  const [tagInput, setTagInput] = useState("");
+  const [assignees, setAssignees] = useState([]);
+  const [userSearch, setUserSearch] = useState("");
+  const [userSearchResults, setUserSearchResults] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [debounce, setDebounce] = useState(null);
+
+  const PRIORITIES = ["Low", "Medium", "High"];
+
+  const parentMax = parentDeadline
+    ? String(parentDeadline).slice(0, 10)
+    : null;
+
+
+  const deadlineError =
+    parentMax && deadline && deadline > parentMax
+      ? `Deadline must be on or before ${parentMax}`
+      : "";
+
+  const canSave = title.trim().length > 0 && !deadlineError;
+
+  function addTagFromInput() {
+    const v = tagInput.trim();
+    if (!v) return;
+    if (!tags.includes(v)) setTags((prev) => [...prev, v]);
+    setTagInput("");
+  }
+  function removeTagAt(i) {
+    setTags((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  function addAssignee(user) {
+    if (!assignees.some((a) => a.id === user.id)) {
+      setAssignees((prev) => [...prev, user]);
+    }
+    setUserSearch("");
+    setUserSearchResults([]);
+  }
+  function removeAssignee(id) {
+    setAssignees((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  function handleUserSearchInput(e) {
+    const value = e.target.value;
+    setUserSearch(value);
+    if (debounce) clearTimeout(debounce);
+    if (!value.trim()) {
+      setUserSearchResults([]);
+      return;
+    }
+    setLoadingUsers(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API}/users/search?q=${encodeURIComponent(value)}&limit=8`);
+        const data = await res.json();
+        setUserSearchResults(data.users || []);
+      } catch {
+        setUserSearchResults([]);
+      } finally {
+        setLoadingUsers(false);
+      }
+    }, 250);
+    setDebounce(t);
+  }
+
+  async function handleCreate() {
+    try {
+      if (parentMax && deadline && deadline > parentMax) {
+        alert(`Subtask deadline must be on or before ${parentMax}.`);
+        return;
+      }
+      const assignedTo =
+     assignees.length > 0 ? assignees.map(a => a.id) : [CurrentUser.id];
+      const payload = {
+        title: title.trim(),
+        description: description.trim() || null,
+        priority: priority.toLowerCase(),
+        status,
+        deadline: deadline || null,
+        tags,
+        parent_id: parentId,
+        assigned_to: assignedTo,
+      };
+
+      const res = await fetch(`${API}/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({}));
+        throw new Error(error || `POST /tasks ${res.status}`);
+      }
+      const row = await res.json();
+      onCreated?.(row); // push into list in parent
+    } catch (e) {
+      console.error("[create subtask]", e);
+      alert(e.message);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute right-1/2 top-12 translate-x-1/2 w-full max-w-lg rounded-xl border border-gray-700 bg-[#1f2023] p-5 shadow-xl">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-white font-semibold">Add subtask</h4>
+          <button onClick={onClose} className="text-gray-300 hover:text-white text-xl">×</button>
+        </div>
+
+        <div className="space-y-4">
+          {/* Title */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Title</label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="bg-transparent text-gray-100 border-gray-700"
+              placeholder="Subtask title"
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Description</label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              className="bg-transparent text-gray-100 border-gray-700"
+            />
+          </div>
+
+          {/* Priority & Status */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Priority</label>
+              <Select value={priority} onValueChange={setPriority}>
+                <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent className="bg-white">
+                  {PRIORITIES.map((p) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Status</label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent className="bg-white">
+                  <SelectItem value="pending">To do</SelectItem>
+                  <SelectItem value="in_progress">In progress</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="blocked">Blocked</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Deadline */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Deadline</label>
+            <Input
+              type="date"
+              value={deadline || ""}
+              onChange={(e) => setDeadline(e.target.value)}
+              className="bg-transparent text-gray-100 border-gray-700"
+              max={parentMax || undefined}
+            />
+            {deadlineError && (
+              <div className="mt-1 text-xs text-red-400">{deadlineError}</div>
+            )}
+          </div>
+
+          {/* Tags */}
+          <div>
+            <label className="block text-xs text-gray-400">Tags</label>
+            {tags.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {tags.map((t, i) => (
+                  <span key={`${t}-${i}`} className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200">
+                    {t}
+                    <button className="ml-1 text-gray-300 hover:text-white" onClick={() => removeTagAt(i)}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <input
+              className="mt-1 w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  addTagFromInput();
+                }
+                if (e.key === "Backspace" && tagInput === "" && tags.length) {
+                  removeTagAt(tags.length - 1);
+                }
+              }}
+              placeholder="Type a tag and press Enter (or comma)"
+            />
+          </div>
+
+          {/* Assignees */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Assignees</label>
+            <div className="mb-2 relative">
+              <input
+                type="text"
+                className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                placeholder="Search users…"
+                value={userSearch}
+                onChange={handleUserSearchInput}
+                aria-busy={loadingUsers ? "true" : "false"}
+                autoComplete="off"
+              />
+              {userSearchResults.length > 0 && (
+                <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
+                  {userSearchResults.map((u) => (
+                    <div
+                      key={u.id}
+                      className="px-3 py-2 hover:bg-gray-700 cursor-pointer text-gray-100"
+                      onClick={() => addAssignee(u)}
+                    >
+                      <span className="font-medium">{u.name}</span>
+                      <span className="ml-2 text-xs text-gray-400">{u.email}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {assignees.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {assignees.map((a) => (
+                  <span
+                    key={a.id}
+                    className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200"
+                    title={a.name}
+                  >
+                    {a.name}
+                    <button className="ml-1 text-gray-300 hover:text-white" onClick={() => removeAssignee(a.id)}>
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="text-xs text-gray-500">No assignees</span>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" className="text-gray-300 hover:text-white" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={!canSave} className="bg-white/90 text-black hover:bg-white" onClick={handleCreate}>
+            Create subtask
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 
 

@@ -1,4 +1,4 @@
-const taskRepository = require('../repository/taskRepository');
+﻿const taskRepository = require('../repository/taskRepository');
 const projectRepository = require('../repository/projectRepository');
 const userRepository = require('../repository/userRepository');
 
@@ -8,11 +8,20 @@ const userRepository = require('../repository/userRepository');
  *
  * Supports both comprehensive project management and simple kanban board operations
  */
+  function normalizeAssignedTo(val) {
+  if (!Array.isArray(val)) return [];
+  return val
+    .map(v => (typeof v === 'string' ? v.trim() : v))
+    .filter(v => v !== '' && v !== null && v !== undefined)
+    .map(Number)
+    .filter(Number.isFinite)
+    .map(n => Math.trunc(n)); // int4[]
+}
 class TaskService {
-
-  async listWithAssignees({ archived = false } = {}) {
+  
+  async listWithAssignees({ archived = false, parentId } = {}) {
     try {
-      const { data: tasks, error } = await taskRepository.list({ archived });
+      const { data: tasks, error } = await taskRepository.list({ archived, parentId });
       if (error) throw error;
 
       const idSet = new Set();
@@ -100,6 +109,7 @@ class TaskService {
       project_id,
       assigned_to,
       tags,
+      parent_id = null,  
     } = taskData;
 
     if (!title || title.trim() === '') {
@@ -126,7 +136,7 @@ class TaskService {
     const allowedStatuses = new Set(["pending", "in_progress", "completed", "blocked", "cancelled"]);
     const requested = String(status || "pending").toLowerCase();
     const normStatus = allowedStatuses.has(requested) ? requested : "pending";
-    const assignees = Array.isArray(assigned_to) ? assigned_to : [];
+    const assignees = normalizeAssignedTo(assigned_to);
 
     // Handle tags
     const tagsArr = Array.isArray(tags)
@@ -151,6 +161,9 @@ class TaskService {
       project_id: project_id || null,
       assigned_to: assignees,
       tags: normTags,
+      parent_id: parent_id === null || parent_id === undefined
+     ? null
+     : Number(parent_id),
       created_at: new Date(),
       updated_at: new Date()
     };
@@ -178,16 +191,7 @@ class TaskService {
       if (input.archived !== undefined) patch.archived = !!input.archived;
 
       if (input.assigned_to !== undefined) {
-        // Accept number[], string[] of numbers, or null/empty
-        const arr = Array.isArray(input.assigned_to) ? input.assigned_to : [];
-        const normalized = arr
-          .map(v => (typeof v === 'string' ? v.trim() : v))
-          .filter(v => v !== '' && v !== null && v !== undefined)
-          .map(Number)
-          .filter(Number.isFinite) // keep only valid numbers
-          .map(n => Math.trunc(n)); // ensure integers
-
-        patch.assigned_to = normalized; // <-- Supabase column of type int4[]
+        patch.assigned_to = normalizeAssignedTo(input.assigned_to);
       }
 
       // Handle tags
@@ -230,9 +234,13 @@ class TaskService {
     }
 
     // Validate assigned users exist (if updating assignments)
-    if (updates.assigned_to && updates.assigned_to.length > 0 && userRepository.getUsersByIds) {
-      await userRepository.getUsersByIds(updates.assigned_to);
-    }
+ if (updates.assigned_to !== undefined) {
+   updates.assigned_to = normalizeAssignedTo(updates.assigned_to);
+   // Optional: validate users exist
+   if (updates.assigned_to.length > 0 && userRepository.getUsersByIds) {
+     await userRepository.getUsersByIds(updates.assigned_to);
+   }
+ }
 
     const updateData = {
       ...updates,
