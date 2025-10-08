@@ -22,6 +22,8 @@ const projectRoutes = require('./routes/projects');
 const userRoutes = require('./routes/users');
 const notificationRoutes = require('./routes/notifications');
 const { createLoggerMiddleware, logError } = require('./middleware/logger');
+const cron = require('node-cron');
+const notificationService = require('./services/notificationService');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -196,6 +198,17 @@ app.get('/test-email', async (req, res) => {
 });
 
 // ... existing code (your other routes and app.listen) ...
+
+  // Schedule deadline notification checks to run daily at 8am
+  cron.schedule('0 8 * * *', async () => {
+    console.log('Running scheduled deadline notification check at 8am...');
+    try {
+      const result = await notificationService.checkAndSendDeadlineNotifications();
+      console.log(`Deadline notification check completed. Sent ${result.notificationsSent} notifications for ${result.tasksChecked} tasks.`);
+    } catch (error) {
+      console.error('Error during scheduled deadline notification check:', error);
+    }
+  });
 
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

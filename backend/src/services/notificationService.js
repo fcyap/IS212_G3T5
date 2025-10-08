@@ -793,6 +793,323 @@ class NotificationService {
   async getAllNotifications(options = {}) {
     return await notificationRepository.getAll(options);
   }
+
+  /**
+   * Check for tasks with upcoming deadlines and send notifications to managers
+   * @returns {Object} Summary of notifications sent
+   */
+  async checkAndSendDeadlineNotifications() {
+    try {
+      console.log('Checking for upcoming task deadlines...');
+
+      // Get tasks due within 24 hours or on the due date
+      const tasksDueSoon = await this.getTasksDueSoon();
+
+      if (tasksDueSoon.length === 0) {
+        console.log('No tasks due soon found');
+        return { notificationsSent: 0, tasksChecked: 0 };
+      }
+
+      let notificationsSent = 0;
+
+      for (const task of tasksDueSoon) {
+        try {
+          // Get project managers for the task's project
+          const managers = await this.getProjectManagers(task.project_id);
+
+          for (const manager of managers) {
+            // Check if we already sent a notification for this task recently
+            const existingNotification = await this.checkExistingDeadlineNotification(task.id, manager.email);
+            if (existingNotification) {
+              console.log(`Already sent deadline notification for task ${task.id} to manager ${manager.email}`);
+              continue;
+            }
+
+            // Create in-app notification
+            await this.createDeadlineNotification(task, manager);
+
+            // Send email notification
+            await this.sendDeadlineEmailNotification(task, manager);
+
+            notificationsSent++;
+          }
+        } catch (error) {
+          console.error(`Error processing deadline notification for task ${task.id}:`, error);
+        }
+      }
+
+      console.log(`Deadline notification check completed. Sent ${notificationsSent} notifications.`);
+      return { notificationsSent, tasksChecked: tasksDueSoon.length };
+
+    } catch (error) {
+      console.error('Error in checkAndSendDeadlineNotifications:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get tasks that are due today or tomorrow (for 8am notifications)
+   * @returns {Array} Tasks due soon
+   */
+  async getTasksDueSoon() {
+    try {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      // Get tasks with deadlines today or tomorrow
+      const { data: tasks, error } = await taskRepository.list({ archived: false });
+
+      if (error) throw error;
+
+      const tasksDueSoon = tasks.filter(task => {
+        if (!task.deadline) return false;
+
+        const deadline = new Date(task.deadline);
+        const deadlineDate = new Date(deadline.getFullYear(), deadline.getMonth(), deadline.getDate());
+
+        // Check if deadline is today or tomorrow
+        return deadlineDate.getTime() === today.getTime() || deadlineDate.getTime() === tomorrow.getTime();
+      });
+
+      // Hydrate tasks with project and assignee information
+      const hydratedTasks = [];
+      for (const task of tasksDueSoon) {
+        try {
+          let project = null;
+          if (task.project_id) {
+            project = await projectRepository.getProjectById(task.project_id);
+          }
+          const assignees = await this.getTaskAssignees(task.assigned_to);
+
+          hydratedTasks.push({
+            ...task,
+            project,
+            assignees
+          });
+        } catch (error) {
+          console.error(`Error hydrating task ${task.id}:`, error);
+        }
+      }
+
+      return hydratedTasks;
+    } catch (error) {
+      console.error('Error getting tasks due soon:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get project managers for a given project
+   * @param {Number} projectId - Project ID
+   * @returns {Array} Project managers
+   */
+  async getProjectManagers(projectId) {
+    try {
+      if (!projectId) return [];
+
+      const project = await projectRepository.getProjectById(projectId);
+      if (!project) return [];
+
+      // For now, assume the project creator is the manager
+      // In a real system, you might have a separate managers table or role-based access
+      const manager = await userRepository.getUserById(project.creator_id);
+      return manager ? [manager] : [];
+    } catch (error) {
+      console.error('Error getting project managers:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get task assignees information
+   * @param {Array} assignedToIds - Array of user IDs
+   * @returns {Array} Assignee objects
+   */
+  async getTaskAssignees(assignedToIds) {
+    try {
+      if (!Array.isArray(assignedToIds) || assignedToIds.length === 0) return [];
+
+      const { data: users, error } = await userRepository.getUsersByIds(assignedToIds);
+      if (error) throw error;
+
+      return users || [];
+    } catch (error) {
+      console.error('Error getting task assignees:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Check if a deadline notification was already sent for this task recently
+   * @param {Number} taskId - Task ID
+   * @param {Number} managerId - Manager user ID
+   * @returns {Boolean} Whether notification exists
+   */
+  async checkExistingDeadlineNotification(taskId, managerEmail) {
+    try {
+      // Check for notifications sent in the last 24 hours for this task
+      const oneDayAgo = new Date(Date.now() - (24 * 60 * 60 * 1000));
+
+      const notifications = await notificationRepository.getByUserEmail(
+        managerEmail,
+        { limit: 100 }
+      );
+
+      if (!notifications || !Array.isArray(notifications)) {
+        console.log(`No notifications found for ${managerEmail}, proceeding with notification`);
+        return false;
+      }
+
+      // Filter notifications for this manager about this task in the last 24 hours
+      const recentNotifications = notifications.filter(notification => {
+        const isRecent = new Date(notification.created_at) > oneDayAgo;
+        const isDeadlineNotification = notification.message.includes(`Task "${taskId}"`) &&
+                                      notification.notif_types === 'deadline';
+
+        return isRecent && isDeadlineNotification;
+      });
+
+      return recentNotifications.length > 0;
+    } catch (error) {
+      console.error('Error checking existing deadline notification:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Create an in-app deadline notification
+   * @param {Object} task - Task object
+   * @param {Object} manager - Manager user object
+   */
+  async createDeadlineNotification(task, manager) {
+    try {
+      const deadline = new Date(task.deadline);
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const deadlineDate = new Date(deadline.getFullYear(), deadline.getMonth(), deadline.getDate());
+
+      let urgencyMessage = '';
+      let notificationType = '';
+
+      if (deadlineDate.getTime() === today.getTime()) {
+        urgencyMessage = 'is due TODAY';
+        notificationType = 'Due Today';
+      } else if (deadlineDate.getTime() === tomorrow.getTime()) {
+        urgencyMessage = 'is due TOMORROW';
+        notificationType = 'Due Tomorrow';
+      }
+
+      const assigneeNames = task.assignees.map(a => a.name).join(', ');
+
+      const message = `Task "${task.title}" ${urgencyMessage}\n` +
+                     `Project: ${task.project?.name || 'Unknown'}\n` +
+                     `Assigned to: ${assigneeNames}\n` +
+                     `Deadline: ${deadline.toLocaleDateString()}`;
+
+      await notificationRepository.create({
+        message,
+        creator_id: manager.id, // Manager receives the notification
+        recipient_emails: manager.email,
+        notif_types: 'deadline'
+      });
+
+      console.log(`Created ${notificationType.toLowerCase()} notification for task "${task.title}" sent to ${manager.email}`);
+    } catch (error) {
+      console.error('Error creating deadline notification:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send deadline email notification
+   * @param {Object} task - Task object
+   * @param {Object} manager - Manager user object
+   */
+  async sendDeadlineEmailNotification(task, manager) {
+    try {
+      if (!sgMail || !process.env.SENDGRID_API_KEY) {
+        console.warn('SendGrid not configured, skipping email notification');
+        return;
+      }
+
+      const deadline = new Date(task.deadline);
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const deadlineDate = new Date(deadline.getFullYear(), deadline.getMonth(), deadline.getDate());
+
+      let subject = '';
+      let urgencyMessage = '';
+      let priorityColor = '#dc3545'; // Default red for urgent
+
+      if (deadlineDate.getTime() === today.getTime()) {
+        subject = `🚨 Task Due Today: ${task.title}`;
+        urgencyMessage = 'is due TODAY';
+        priorityColor = '#dc3545'; // Red for today
+      } else if (deadlineDate.getTime() === tomorrow.getTime()) {
+        subject = `⚠️ Task Due Tomorrow: ${task.title}`;
+        urgencyMessage = 'is due TOMORROW';
+        priorityColor = '#ffc107'; // Yellow for tomorrow
+      }
+
+      const assigneeNames = task.assignees.map(a => a.name).join(', ');
+
+      const htmlContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: ${priorityColor};">${subject}</h2>
+
+          <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3>Task Details:</h3>
+            <p><strong>Task:</strong> ${task.title}</p>
+            <p><strong>Project:</strong> ${task.project?.name || 'Unknown'}</p>
+            <p><strong>Assigned to:</strong> ${assigneeNames}</p>
+            <p><strong>Deadline:</strong> ${deadline.toLocaleDateString()} at ${deadline.toLocaleTimeString()}</p>
+            <p><strong>Status:</strong> ${task.status || 'Unknown'}</p>
+          </div>
+
+          <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0; color: #856404;">
+              <strong>Action Required:</strong> Please follow up with the assigned staff to ensure this task is completed on time.
+            </p>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:3002'}/projects/${task.project_id}"
+               style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              View Task Details
+            </a>
+          </div>
+
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+          <p style="color: #6c757d; font-size: 12px;">
+            This is an automated notification from the Project Management System.
+          </p>
+        </div>
+      `;
+
+      const msg = {
+        to: manager.email,
+        from: process.env.FROM_EMAIL || 'noreply@yourapp.com',
+        subject,
+        html: htmlContent,
+      };
+
+      await sgMail.send(msg);
+      console.log(`Sent deadline email notification for task "${task.title}" to ${manager.email}`);
+
+    } catch (error) {
+      console.error('Error sending deadline email notification:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new NotificationService();

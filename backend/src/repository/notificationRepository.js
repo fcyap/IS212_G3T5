@@ -61,8 +61,8 @@ class NotificationRepository {
             .select('*')
             .order('created_at', { ascending: false });
 
-        // Filter notifications where user is either creator or recipient
-        query = query.or(`recipient_emails.cs.["${userEmail}"]`);
+        // Filter notifications where user is recipient (check if email is in comma-separated list)
+        query = query.ilike('recipient_emails', `%${userEmail}%`);
 
         if (filters.limit) {
             query = query.limit(filters.limit);

@@ -282,6 +282,39 @@ router.get('/:projectId/tasks', async (req, res) => {
   }
 });
 
+// POST /projects/:projectId/tasks - Create a new task
+router.post('/:projectId/tasks', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const taskData = req.body;
+    const creatorId = req.user?.id || req.body?.creator_id || req.body?.creatorId || null;
+
+    // Validate project exists
+    const validatedProjectId = validatePositiveInteger(projectId, 'projectId');
+
+    // Import the service
+    const projectTasksService = require('../services/projectTasksService');
+
+    const result = await projectTasksService.createTask(validatedProjectId, taskData, creatorId);
+
+    if (result.success) {
+      return res.status(201).json(result);
+    } else {
+      const statusCode = result.error === 'Project not found' ? 404 : 400;
+      return res.status(statusCode).json(result);
+    }
+
+  } catch (error) {
+    console.error('Error creating task:', error);
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({
+      success: false,
+      error: (statusCode === 404 || statusCode === 400) ? error.message : 'Failed to create task',
+      ...(statusCode === 400 && { message: error.message })
+    });
+  }
+});
+
 // GET /projects/:projectId/tasks/stats - Get project task statistics
 router.get('/:projectId/tasks/stats', async (req, res) => {
   try {
@@ -423,6 +456,39 @@ router.get('/:projectId/tasks/:taskId', async (req, res) => {
     res.status(statusCode).json({
       success: false,
       error: (statusCode === 404 || statusCode === 400) ? error.message : 'Failed to retrieve task',
+      ...(statusCode === 400 && { message: error.message })
+    });
+  }
+});
+
+// PUT /projects/:projectId/tasks/:taskId - Update a task
+router.put('/:projectId/tasks/:taskId', async (req, res) => {
+  try {
+    const { projectId, taskId } = req.params;
+    const updateData = req.body;
+
+    // Validate inputs
+    const validatedProjectId = validatePositiveInteger(projectId, 'projectId');
+    const validatedTaskId = validatePositiveInteger(taskId, 'taskId');
+
+    // Import the service
+    const projectTasksService = require('../services/projectTasksService');
+
+    const result = await projectTasksService.updateTask(validatedTaskId, updateData);
+
+    if (result.success) {
+      return res.status(200).json(result);
+    } else {
+      const statusCode = result.error === 'Task not found' ? 404 : 400;
+      return res.status(statusCode).json(result);
+    }
+
+  } catch (error) {
+    console.error('Error updating task:', error);
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({
+      success: false,
+      error: (statusCode === 404 || statusCode === 400) ? error.message : 'Failed to update task',
       ...(statusCode === 400 && { message: error.message })
     });
   }
