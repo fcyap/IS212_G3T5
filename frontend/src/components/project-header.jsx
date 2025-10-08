@@ -34,6 +34,7 @@ import { useProjects } from "@/contexts/project-context"
 import { useAuth } from "@/hooks/useAuth"
 import { EditProjectDialog } from "./edit-project-dialog"
 import { CreateProjectDialog } from "./create-project"
+import { NotificationBell } from "./notification-bell"
 
 export function ProjectHeader({ currentView }) {
   const { startAddTask } = useKanban()
@@ -85,9 +86,7 @@ export function ProjectHeader({ currentView }) {
               New Project
             </Button>
           </CreateProjectDialog>
-          <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-            <HelpCircle className="w-4 h-4" />
-          </Button>
+          <NotificationBell />
           <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
             <Settings className="w-4 h-4" />
           </Button>

@@ -272,16 +272,22 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
 
             {/* Bottom Section */}
             <div className="p-4 border-t border-gray-700 space-y-3">
-                {isCollapsed ? (
-                    <Button variant="ghost" className="w-full text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg p-2">
-                        <Mail className="w-4 h-4" />
-                    </Button>
-                ) : (
-                    <Button variant="ghost" className="w-full text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg">
-                        <Users className="w-4 h-4 mr-2" />
-                        Invite teammates
-                    </Button>
-                )}
+                <div className="flex items-center justify-between">
+                    {isCollapsed ? (
+                        <>
+                            <Button variant="ghost" className="text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg p-2">
+                                <Users className="w-4 h-4" />
+                            </Button>
+                        </>
+                    ) : (
+                        <>
+                            <Button variant="ghost" className="flex-1 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg mr-2">
+                                <Users className="w-4 h-4 mr-2" />
+                                Invite teammates
+                            </Button>
+                        </>
+                    )}
+                </div>
             </div>
         </div>
     )

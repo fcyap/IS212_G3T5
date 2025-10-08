@@ -130,6 +130,7 @@ async function initializeApp() {
   // Routes that require an authenticated session
   app.use('/api', authMw, apiRoutes);
   app.use('/users', authMw, userRoutes);
+  app.use('/api/notifications', authMw, notificationRoutes);
 
   // Data APIs using the bypass wrapper during dev
   app.use('/api/tasks', authMw, taskCommentRoutes);

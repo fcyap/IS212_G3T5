@@ -255,6 +255,101 @@ class NotificationService {
       // Don't throw error for email failures - notification is still created
     }
   }
+
+  /**
+   * Get notifications for a user by email (matching recipient_emails)
+   * @param {String} userEmail - User's email address
+   * @param {Number} limit - Maximum number of notifications to return
+   * @param {Number} offset - Number of notifications to skip
+   * @returns {Array} List of notifications
+   */
+  async getUserNotifications(userEmail, limit = 50, offset = 0) {
+    if (!userEmail) {
+      throw new Error('User email is required');
+    }
+
+    const filters = { limit, offset };
+    return await notificationRepository.getByRecipientEmail(userEmail, filters);
+  }
+
+  /**
+   * Get notifications for a recipient email
+   * @param {String} recipientEmail - Recipient's email address
+   * @param {Object} filters - Optional filters
+   * @returns {Array} List of notifications
+   */
+  async getNotificationsByRecipient(recipientEmail, filters = {}) {
+    if (!recipientEmail) {
+      throw new Error('Recipient email is required');
+    }
+
+    return await notificationRepository.getByRecipientEmail(recipientEmail, filters);
+  }
+
+  /**
+   * Get notifications created by a user
+   * @param {Number} creatorId - Creator's user ID
+   * @param {Object} filters - Optional filters
+   * @returns {Array} List of notifications
+   */
+  async getNotificationsByCreator(creatorId, filters = {}) {
+    if (!creatorId) {
+      throw new Error('Creator ID is required');
+    }
+
+    return await notificationRepository.getByCreatorId(creatorId, filters);
+  }
+
+  /**
+   * Get a single notification
+   * @param {Number} notifId - Notification ID
+   * @returns {Object} Notification
+   */
+  async getNotificationById(notifId) {
+    const notification = await notificationRepository.getById(notifId);
+
+    if (!notification) {
+      throw new Error('Notification not found');
+    }
+
+    return notification;
+  }
+
+  /**
+   * Get notification count for a recipient
+   * @param {String} recipientEmail - Recipient's email
+   * @returns {Number} Count
+   */
+  async getCountByRecipient(recipientEmail) {
+    if (!recipientEmail) {
+      throw new Error('Recipient email is required');
+    }
+
+    return await notificationRepository.getCountByRecipient(recipientEmail);
+  }
+
+  /**
+   * Get notification history for a recipient with pagination
+   * @param {String} recipientEmail - Recipient's email
+   * @param {Object} options - Pagination options
+   * @returns {Object} Paginated results
+   */
+  async getNotificationHistory(recipientEmail, options = {}) {
+    if (!recipientEmail) {
+      throw new Error('Recipient email is required');
+    }
+
+    return await notificationRepository.getHistoryByRecipient(recipientEmail, options);
+  }
+
+  /**
+   * Get all notifications (admin only)
+   * @param {Object} options - Pagination options
+   * @returns {Object} Paginated results
+   */
+  async getAllNotifications(options = {}) {
+    return await notificationRepository.getAll(options);
+  }
 }
 
 module.exports = new NotificationService();

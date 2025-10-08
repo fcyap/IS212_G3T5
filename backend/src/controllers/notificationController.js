@@ -67,7 +67,45 @@ const getNotificationsByCreator = async (req, res) => {
   }
 };
 
+/**
+ * Create a test notification (for testing purposes)
+ */
+const createTestNotification = async (req, res) => {
+  try {
+    const { recipientEmail, message, notif_types = 'test' } = req.body;
+    const creatorId = req.user?.id || 1;
+
+    if (!recipientEmail || !message) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Recipient email and message are required' 
+      });
+    }
+
+    const notificationData = {
+      message,
+      creator_id: creatorId,
+      recipient_emails: recipientEmail,
+      notif_types
+    };
+
+    const notification = await notificationService.getNotificationById ? 
+      await notificationRepository.create(notificationData) :
+      await require('../repository/notificationRepository').create(notificationData);
+
+    res.json({
+      success: true,
+      notification,
+      message: 'Test notification created successfully'
+    });
+  } catch (err) {
+    console.error('Error creating test notification:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 module.exports = {
   getUserNotifications,
-  getNotificationsByCreator
+  getNotificationsByCreator,
+  createTestNotification
 };

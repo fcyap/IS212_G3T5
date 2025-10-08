@@ -367,7 +367,37 @@ class UserService {
   }
 }
 
+class NotificationService {
+  async getUserNotifications(limit = 50, offset = 0) {
+    const response = await fetch(`${API_BASE_URL}/api/notifications?limit=${limit}&offset=${offset}`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch notifications: ${response.statusText}`);
+    }
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch notifications');
+    }
+    return data;
+  }
+
+  async getNotificationsByCreator(limit = 50, offset = 0) {
+    const response = await fetch(`${API_BASE_URL}/api/notifications/created?limit=${limit}&offset=${offset}`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch created notifications: ${response.statusText}`);
+    }
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch created notifications');
+    }
+    return data;
+  }
+}
 
 export const projectService = new ProjectService();
 export const projectTasksService = new ProjectTasksService();
 export const userService = new UserService();
+export const notificationService = new NotificationService();
