@@ -40,7 +40,9 @@ export function useUserSearch({ canSearch = true, minQueryLength = 1, debounceMs
     setLoading(true)
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`${API}/users/search?q=${encodeURIComponent(trimmed)}&limit=8`)
+        const res = await fetch(`${API}/users/search?q=${encodeURIComponent(trimmed)}&limit=8`, {
+          credentials: 'include',
+        })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) {
           throw new Error(data?.message || res.statusText)
@@ -53,7 +55,7 @@ export function useUserSearch({ canSearch = true, minQueryLength = 1, debounceMs
         setLoading(false)
       }
     }, debounceMs)
-  }, [canSearch, debounceMs, minQueryLength])
+  }, [API, canSearch, debounceMs, minQueryLength])
 
   return {
     query,

@@ -71,6 +71,9 @@ const NotificationItem = ({ notification }) => {
     switch (type) {
       case 'invitation': return 'bg-blue-600'
       case 'comment': return 'bg-green-600'
+      case 'task_assignment': return 'bg-indigo-600'
+      case 'reassignment': return 'bg-purple-600'
+      case 'remove_from_task': return 'bg-red-600'
       case 'test': return 'bg-yellow-600'
       case 'general': return 'bg-purple-600'
       default: return 'bg-gray-600'
@@ -81,6 +84,9 @@ const NotificationItem = ({ notification }) => {
     switch (type) {
       case 'invitation': return 'Project Invitation'
       case 'comment': return 'New Comment'
+      case 'task_assignment': return 'Task Assignment'
+      case 'reassignment': return 'Task Reassignment'
+      case 'remove_from_task': return 'Removed From Task'
       case 'test': return 'Test'
       case 'general': return 'General'
       default: return type || 'Notification'

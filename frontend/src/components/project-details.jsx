@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
 import { getCsrfToken } from "@/lib/csrf"
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
@@ -264,7 +265,7 @@ export function ProjectDetails({ projectId, onBack }) {
     }
   }
 
-  const handleCreateTask = async ({ title, description, dueDate, priority, tags }) => {
+  const handleCreateTask = async ({ title, description, dueDate, priority, tags, assignees = [] }) => {
     try {
       const csrfToken = await getCsrfToken();
       const response = await fetch(`http://localhost:3001/api/tasks`, {
@@ -281,7 +282,9 @@ export function ProjectDetails({ projectId, onBack }) {
           status: 'pending',
           deadline: dueDate || null,
           project_id: projectId,
-          assigned_to: [],
+          assigned_to: Array.isArray(assignees) && assignees.length > 0
+            ? Array.from(new Set(assignees.map((a) => a.id ?? a)))
+            : [],
           tags: tags || [],
         })
       })
@@ -328,6 +331,9 @@ export function ProjectDetails({ projectId, onBack }) {
 
   const handleUpdateTask = async (taskData) => {
     try {
+      const normalizedAssignees = Array.isArray(taskData.assignees)
+        ? Array.from(new Set(taskData.assignees.map((value) => Number(value)).filter(Number.isFinite)))
+        : undefined;
       const csrfToken = await getCsrfToken();
       const response = await fetch(`http://localhost:3001/api/tasks/${editingTask.id}`, {
         method: 'PUT',
@@ -343,6 +349,7 @@ export function ProjectDetails({ projectId, onBack }) {
           status: taskData.status,
           deadline: taskData.deadline || null,
           tags: taskData.tags || [],
+          ...(normalizedAssignees ? { assigned_to: normalizedAssignees } : {}),
         })
       })
 
@@ -796,7 +803,11 @@ export function ProjectDetails({ projectId, onBack }) {
           {/* Add Task Form */}
           {isAddingTask && (
             <div className="mb-6">
-              <ProjectTaskForm onSave={handleCreateTask} onCancel={cancelAddTask} />
+              <ProjectTaskForm
+                onSave={handleCreateTask}
+                onCancel={cancelAddTask}
+                projectMembers={members}
+              />
             </div>
           )}
 
@@ -977,6 +988,7 @@ export function ProjectDetails({ projectId, onBack }) {
           onSave={handleUpdateTask}
           onDelete={() => handleDeleteTask(editingTask.id)}
           allUsers={allUsers}
+          projectMembers={members}
         />
       )}
 
@@ -1196,27 +1208,86 @@ const priorityChipClasses = {
   High: "bg-fuchsia-300 text-fuchsia-950",
 }
 
-function ProjectTaskForm({ onSave, onCancel }) {
+function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
+  const { user } = useAuth()
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
   const [priority, setPriority] = useState("")
   const [tags, setTags] = useState([])
   const [tagInput, setTagInput] = useState("")
+  const [assignees, setAssignees] = useState([])
+  const [assigneeQuery, setAssigneeQuery] = useState("")
 
   const PRIORITIES = ["Low", "Medium", "High"]
   const canSave = title.trim().length > 0 && priority !== ""
 
+  const memberOptions = useMemo(() => {
+    if (!Array.isArray(projectMembers)) return []
+    return projectMembers
+      .map((member) => ({
+        id: member.user_id ?? member.id,
+        name: member.name ?? member.full_name ?? member.email ?? "Unknown User",
+        email: member.email ?? "",
+      }))
+      .filter((member) => member.id != null)
+  }, [projectMembers])
+
+  useEffect(() => {
+    if (!user?.id) return
+    const currentMember = memberOptions.find((member) => member.id === user.id)
+    if (!currentMember) return
+    setAssignees((prev) => {
+      if (prev.some((assignee) => assignee.id === currentMember.id)) return prev
+      return [...prev, currentMember]
+    })
+  }, [user?.id, memberOptions])
+
+  const availableAssigneeResults = useMemo(() => {
+    const search = assigneeQuery.trim().toLowerCase()
+    if (!search) return []
+    return memberOptions
+      .filter((member) => !assignees.some((assignee) => assignee.id === member.id))
+      .filter((member) => {
+        const name = member.name?.toLowerCase() ?? ""
+        const email = member.email?.toLowerCase() ?? ""
+        return name.includes(search) || email.includes(search)
+      })
+      .slice(0, 8)
+  }, [assigneeQuery, memberOptions, assignees])
+
+  const addAssignee = (member) => {
+    setAssignees((prev) => [...prev, member])
+    setAssigneeQuery("")
+  }
+
+  const removeAssignee = (userId) => {
+    setAssignees((prev) => prev.filter((assignee) => assignee.id !== userId))
+  }
+
   const addTagFromInput = () => {
-    const v = tagInput.trim()
-    if (!v) return
-    if (!tags.includes(v)) setTags((prev) => [...prev, v])
+    const value = tagInput.trim()
+    if (!value) return
+    if (!tags.includes(value)) setTags((prev) => [...prev, value])
     setTagInput("")
   }
 
   const removeTag = (index) => {
     setTags((prev) => prev.filter((_, i) => i !== index))
   }
+
+  const handleAssigneeInputKeyDown = (event) => {
+    if (event.key === "Enter" && availableAssigneeResults.length > 0) {
+      event.preventDefault()
+      addAssignee(availableAssigneeResults[0])
+    }
+    if (event.key === "Escape") {
+      setAssigneeQuery("")
+    }
+  }
+
+  const showNoResults =
+    assigneeQuery.trim().length > 0 && availableAssigneeResults.length === 0
 
   return (
     <div className="rounded-xl border border-gray-700 bg-[#1f1f23] p-4 shadow-sm">
@@ -1242,21 +1313,21 @@ function ProjectTaskForm({ onSave, onCancel }) {
       {/* Tags */}
       <label className="block text-xs text-gray-400 mb-1">Tags</label>
       <div className="flex flex-wrap gap-2 mb-2">
-        {tags.map((t, i) => (
+        {tags.map((tag, index) => (
           <span
-            key={`${t}-${i}`}
+            key={`${tag}-${index}`}
             className="inline-flex items-center rounded-md bg-gray-700 text-gray-100 px-2 py-1 text-xs"
           >
-            {t}
+            {tag}
             <button
               type="button"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setTags(prev => prev.filter((_, idx) => idx !== i))
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                removeTag(index)
               }}
               className="ml-1 text-gray-300 hover:text-white"
-              aria-label={`Remove tag ${t}`}
+              aria-label={`Remove tag ${tag}`}
             >
               ×
             </button>
@@ -1266,18 +1337,83 @@ function ProjectTaskForm({ onSave, onCancel }) {
       <Input
         value={tagInput}
         onChange={(e) => setTagInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === ",") {
-            e.preventDefault()
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === ",") {
+            event.preventDefault()
             addTagFromInput()
-          } else if (e.key === "Backspace" && tagInput === "" && tags.length) {
-            e.preventDefault()
-            setTags(prev => prev.slice(0, -1))
+          } else if (event.key === "Backspace" && tagInput === "" && tags.length) {
+            event.preventDefault()
+            setTags((prev) => prev.slice(0, -1))
           }
         }}
         placeholder="Type a tag and press Enter (or comma)"
         className="mb-3 bg-transparent text-gray-100 border-gray-700"
       />
+
+      {/* Assignees */}
+      <label className="block text-xs text-gray-400 mb-1">Assignees</label>
+      {memberOptions.length === 0 ? (
+        <p className="text-xs text-gray-500 mb-3">
+          No project members available to assign.
+        </p>
+      ) : (
+        <div className="mb-3">
+          <div className="relative">
+            <input
+              type="text"
+              className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+              placeholder="Search project members by name or email..."
+              value={assigneeQuery}
+              onChange={(event) => setAssigneeQuery(event.target.value)}
+              onKeyDown={handleAssigneeInputKeyDown}
+              autoComplete="off"
+            />
+            {assigneeQuery && (
+              <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
+                {availableAssigneeResults.map((member) => (
+                  <button
+                    key={member.id}
+                    type="button"
+                    className="w-full px-3 py-2 text-left hover:bg-gray-700 text-gray-100"
+                    onClick={() => addAssignee(member)}
+                  >
+                    <span className="font-medium">{member.name}</span>
+                    {member.email && (
+                      <span className="ml-2 text-xs text-gray-400">{member.email}</span>
+                    )}
+                  </button>
+                ))}
+                {showNoResults && (
+                  <div className="px-3 py-2 text-sm text-gray-400">No matching members</div>
+                )}
+              </div>
+            )}
+          </div>
+          {assignees.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {assignees.map((assignee) => (
+                <Badge
+                  key={assignee.id}
+                  className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200 flex items-center"
+                  title={assignee.name}
+                >
+                  {assignee.name}
+                  <button
+                    type="button"
+                    className="ml-1 text-gray-300 hover:text-white"
+                    onClick={() => removeAssignee(assignee.id)}
+                    aria-label={`Remove ${assignee.name}`}
+                  >
+                    ×
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <span className="text-xs text-gray-500 mt-2 block">No assignees</span>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         {/* Due date */}
@@ -1294,15 +1430,15 @@ function ProjectTaskForm({ onSave, onCancel }) {
         {/* Priority dropdown */}
         <div>
           <label className="block text-xs text-gray-400 mb-1">Priority</label>
-          <Select value={priority} onValueChange={(v) => setPriority(v)}>
+          <Select value={priority} onValueChange={(value) => setPriority(value)}>
             <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
               <SelectValue placeholder="Select priority" />
             </SelectTrigger>
             <SelectContent className="bg-white">
-              {PRIORITIES.map((p) => (
-                <SelectItem key={p} value={p}>
-                  <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>
-                    {p}
+              {PRIORITIES.map((item) => (
+                <SelectItem key={item} value={item}>
+                  <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[item]}`}>
+                    {item}
                   </span>
                 </SelectItem>
               ))}
@@ -1321,6 +1457,7 @@ function ProjectTaskForm({ onSave, onCancel }) {
               dueDate: dueDate || undefined,
               priority,
               tags,
+              assignees,
             })
           }
           disabled={!canSave}
@@ -1337,7 +1474,7 @@ function ProjectTaskForm({ onSave, onCancel }) {
   )
 }
 
-function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers }) {
+function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, projectMembers = [] }) {
   const [title, setTitle] = useState(task.title || "")
   const [description, setDescription] = useState(task.description || "")
   const [priority, setPriority] = useState(task.priority || "low")
@@ -1345,9 +1482,84 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers }) {
   const [deadline, setDeadline] = useState(task.deadline || "")
   const [tags, setTags] = useState(Array.isArray(task.tags) ? task.tags : [])
   const [tagInput, setTagInput] = useState("")
+  const [assignees, setAssignees] = useState([])
+  const [assigneeQuery, setAssigneeQuery] = useState("")
 
   const canSave = title.trim().length > 0 && priority
-  const assignees = Array.isArray(task.assigned_to) ? task.assigned_to : []
+
+  const memberOptions = useMemo(() => {
+    if (!Array.isArray(projectMembers)) return []
+    return projectMembers
+      .map((member) => ({
+        id: member.user_id ?? member.id,
+        name: member.name ?? member.full_name ?? member.email ?? "Unknown User",
+        email: member.email ?? "",
+      }))
+      .filter((member) => member.id != null)
+  }, [projectMembers])
+
+  const allUsersLookup = useMemo(() => {
+    const map = new Map()
+    if (Array.isArray(allUsers)) {
+      allUsers.forEach((user) => {
+        map.set(user.id, user)
+      })
+    }
+    return map
+  }, [allUsers])
+
+  const initialAssignees = useMemo(() => {
+    const fromTaskAssignees = Array.isArray(task.assignees) ? task.assignees : []
+    if (fromTaskAssignees.length > 0) {
+      return fromTaskAssignees
+        .map((entry) => {
+          const id = entry.id ?? entry.user_id ?? entry
+          if (id == null) return null
+          const member = memberOptions.find((m) => m.id === id)
+          const fallbackUser = allUsersLookup.get(id)
+          return {
+            id,
+            name: entry.name ?? member?.name ?? fallbackUser?.name ?? `User ${id}`,
+            email: entry.email ?? member?.email ?? fallbackUser?.email ?? "",
+          }
+        })
+        .filter(Boolean)
+    }
+
+    if (Array.isArray(task.assigned_to)) {
+      return task.assigned_to
+        .map((id) => {
+          const member = memberOptions.find((m) => m.id === id)
+          const fallbackUser = allUsersLookup.get(id)
+          if (!member && !fallbackUser) return null
+          return {
+            id,
+            name: member?.name ?? fallbackUser?.name ?? `User ${id}`,
+            email: member?.email ?? fallbackUser?.email ?? "",
+          }
+        })
+        .filter(Boolean)
+    }
+
+    return []
+  }, [task, memberOptions, allUsersLookup])
+
+  useEffect(() => {
+    setAssignees(initialAssignees)
+  }, [initialAssignees])
+
+  const availableAssigneeResults = useMemo(() => {
+    const search = assigneeQuery.trim().toLowerCase()
+    if (!search) return []
+    return memberOptions
+      .filter((member) => !assignees.some((assignee) => assignee.id === member.id))
+      .filter((member) => {
+        const name = member.name?.toLowerCase() ?? ""
+        const email = member.email?.toLowerCase() ?? ""
+        return name.includes(search) || email.includes(search)
+      })
+      .slice(0, 8)
+  }, [assigneeQuery, memberOptions, assignees])
 
   function addTagFromInput() {
     const t = tagInput.trim()
@@ -1359,6 +1571,28 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers }) {
   function removeTagAt(idx) {
     setTags(prev => prev.filter((_, i) => i !== idx))
   }
+
+  const addAssignee = (member) => {
+    setAssignees((prev) => [...prev, member])
+    setAssigneeQuery("")
+  }
+
+  const removeAssignee = (userId) => {
+    setAssignees((prev) => prev.filter((assignee) => assignee.id !== userId))
+  }
+
+  const handleAssigneeInputKeyDown = (event) => {
+    if (event.key === "Enter" && availableAssigneeResults.length > 0) {
+      event.preventDefault()
+      addAssignee(availableAssigneeResults[0])
+    }
+    if (event.key === "Escape") {
+      setAssigneeQuery("")
+    }
+  }
+
+  const showNoAssigneeResults =
+    assigneeQuery.trim().length > 0 && availableAssigneeResults.length === 0
 
   const handleDelete = () => {
     if (window.confirm('Are you sure you want to delete this task?')) {
@@ -1484,23 +1718,67 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers }) {
           {/* Assignees */}
           <div>
             <label className="block text-xs text-gray-400 mb-1">Assignees</label>
-            {assignees.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {assignees.map((userId) => {
-                  const user = (allUsers || []).find(u => u.id === userId)
-                  return (
-                    <span
-                      key={userId}
-                      className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200 rounded-md"
-                      title={user?.name || 'Unknown User'}
-                    >
-                      {user?.name || 'Unknown User'}
-                    </span>
-                  )
-                })}
-              </div>
+            {memberOptions.length === 0 ? (
+              <p className="text-xs text-gray-500">
+                No project members available to assign.
+              </p>
             ) : (
-              <span className="text-xs text-gray-500">No assignees</span>
+              <div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                    placeholder="Search project members..."
+                    value={assigneeQuery}
+                    onChange={(event) => setAssigneeQuery(event.target.value)}
+                    onKeyDown={handleAssigneeInputKeyDown}
+                    autoComplete="off"
+                  />
+                  {assigneeQuery && (
+                    <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
+                      {availableAssigneeResults.map((member) => (
+                        <button
+                          key={member.id}
+                          type="button"
+                          className="w-full px-3 py-2 text-left hover:bg-gray-700 text-gray-100"
+                          onClick={() => addAssignee(member)}
+                        >
+                          <span className="font-medium">{member.name}</span>
+                          {member.email && (
+                            <span className="ml-2 text-xs text-gray-400">{member.email}</span>
+                          )}
+                        </button>
+                      ))}
+                      {showNoAssigneeResults && (
+                        <div className="px-3 py-2 text-sm text-gray-400">No matching members</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {assignees.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {assignees.map((assignee) => (
+                      <Badge
+                        key={assignee.id}
+                        className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200 flex items-center"
+                        title={assignee.name}
+                      >
+                        {assignee.name}
+                        <button
+                          type="button"
+                          className="ml-1 text-gray-300 hover:text-white"
+                          onClick={() => removeAssignee(assignee.id)}
+                          aria-label={`Remove ${assignee.name}`}
+                        >
+                          ×
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-xs text-gray-500 mt-2 block">No assignees</span>
+                )}
+              </div>
             )}
           </div>
 
@@ -1525,7 +1803,8 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers }) {
               priority,
               status,
               deadline,
-              tags
+              tags,
+              assignees: assignees.map((assignee) => assignee.id)
             })}
             disabled={!canSave}
             className="bg-white/90 text-black"

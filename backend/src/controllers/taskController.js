@@ -38,7 +38,7 @@ const update = async (req, res) => {
       return res.status(400).json({ error: "Invalid id" });
     }
     console.log("req.body:", req.body);
-    const task = await taskService.updateTask(id, req.body);
+    const task = await taskService.updateTask(id, req.body, req.user?.id ?? null);
     res.json(task);
   } catch (e) {
     console.error("[PUT /tasks/:id]", e);

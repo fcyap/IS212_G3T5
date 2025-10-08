@@ -2,14 +2,18 @@ const taskService = require('../../src/services/taskService');
 const taskRepository = require('../../src/repository/taskRepository');
 const projectRepository = require('../../src/repository/projectRepository');
 const userRepository = require('../../src/repository/userRepository');
+const notificationService = require('../../src/services/notificationService');
 
 jest.mock('../../src/repository/taskRepository');
 jest.mock('../../src/repository/projectRepository');
 jest.mock('../../src/repository/userRepository');
+jest.mock('../../src/services/notificationService');
 
 describe('TaskService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    notificationService.createTaskAssignmentNotifications.mockResolvedValue({ notificationsSent: 0 });
+    notificationService.createTaskRemovalNotifications = jest.fn().mockResolvedValue({ notificationsSent: 0 });
   });
 
   describe('listWithAssignees', () => {
@@ -216,6 +220,15 @@ describe('TaskService', () => {
         updated_at: expect.any(Date)
       }));
       expect(result).toEqual(mockCreatedTask);
+      expect(notificationService.createTaskAssignmentNotifications).toHaveBeenCalledWith(expect.objectContaining({
+        task: mockCreatedTask,
+        assigneeIds: [1, 2],
+        assignedById: null,
+        previousAssigneeIds: [],
+        currentAssigneeIds: [1, 2],
+        notificationType: 'task_assignment'
+      }));
+      expect(notificationService.createTaskRemovalNotifications).not.toHaveBeenCalled();
     });
 
     test('should ensure creator is assigned when missing', async () => {
@@ -311,6 +324,77 @@ describe('TaskService', () => {
 
       await expect(taskService.updateTask(taskId, updateData))
         .rejects.toThrow('Invalid status');
+    });
+
+    test('should notify newly assigned users when assignees change', async () => {
+      const taskId = 1;
+      const updateData = { assigned_to: [1, 2, 3] };
+
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        assigned_to: [1, 2]
+      });
+
+      const mockUpdatedTask = {
+        id: taskId,
+        title: 'Updated Task',
+        assigned_to: [1, 2, 3],
+        updated_at: new Date().toISOString()
+      };
+
+      taskRepository.updateById = jest.fn().mockResolvedValue(mockUpdatedTask);
+
+      const result = await taskService.updateTask(taskId, updateData);
+
+      expect(taskRepository.updateById).toHaveBeenCalledWith(taskId, expect.objectContaining({
+        assigned_to: [1, 2, 3],
+        updated_at: expect.any(String)
+      }));
+      expect(result).toEqual(mockUpdatedTask);
+      expect(notificationService.createTaskAssignmentNotifications).toHaveBeenCalledWith(expect.objectContaining({
+        task: mockUpdatedTask,
+        assigneeIds: [3],
+        assignedById: null,
+        previousAssigneeIds: [1, 2],
+        currentAssigneeIds: [1, 2, 3],
+        notificationType: 'reassignment'
+      }));
+      expect(notificationService.createTaskRemovalNotifications).not.toHaveBeenCalled();
+    });
+
+    test('should notify removed users when assignees are removed', async () => {
+      const taskId = 2;
+      const updateData = { assigned_to: [1, 2] };
+
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        assigned_to: [1, 2, 3]
+      });
+
+      const mockUpdatedTask = {
+        id: taskId,
+        title: 'Updated Task',
+        assigned_to: [1, 2],
+        updated_at: new Date().toISOString()
+      };
+
+      taskRepository.updateById = jest.fn().mockResolvedValue(mockUpdatedTask);
+
+      const result = await taskService.updateTask(taskId, updateData);
+
+      expect(taskRepository.updateById).toHaveBeenCalledWith(taskId, expect.objectContaining({
+        assigned_to: [1, 2],
+        updated_at: expect.any(String)
+      }));
+      expect(result).toEqual(mockUpdatedTask);
+      expect(notificationService.createTaskRemovalNotifications).toHaveBeenCalledWith(expect.objectContaining({
+        task: mockUpdatedTask,
+        assigneeIds: [3],
+        assignedById: null,
+        previousAssigneeIds: [1, 2, 3],
+        currentAssigneeIds: [1, 2]
+      }));
+      expect(notificationService.createTaskAssignmentNotifications).not.toHaveBeenCalled();
     });
   });
 

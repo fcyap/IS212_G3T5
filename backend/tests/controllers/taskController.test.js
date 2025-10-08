@@ -179,7 +179,7 @@ describe('TaskController', () => {
 
       await taskController.update(req, res);
 
-      expect(taskService.updateTask).toHaveBeenCalledWith(1, req.body);
+      expect(taskService.updateTask).toHaveBeenCalledWith(1, req.body, null);
       expect(res.json).toHaveBeenCalledWith(mockUpdatedTask);
     });
 
@@ -217,6 +217,7 @@ describe('TaskController', () => {
 
       await taskController.update(req, res);
 
+      expect(taskService.updateTask).toHaveBeenCalledWith(1, req.body, null);
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({
         error: 'Task not found'

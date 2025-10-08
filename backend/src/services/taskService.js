@@ -1,6 +1,7 @@
 const taskRepository = require('../repository/taskRepository');
 const projectRepository = require('../repository/projectRepository');
 const userRepository = require('../repository/userRepository');
+const notificationService = require('./notificationService');
 
 /**
  * Task Service - Contains business logic for task operations
@@ -155,6 +156,8 @@ class TaskService {
       )
     );
 
+    const uniqueAssignees = Array.from(new Set(assignees));
+
     const newTaskData = {
       title: title.trim(),
       description: description?.trim() || null,
@@ -162,7 +165,7 @@ class TaskService {
       status: normStatus,
       deadline: deadline || null,
       project_id: project_id || null,
-      assigned_to: assignees,
+      assigned_to: uniqueAssignees,
       tags: normTags,
       created_at: new Date(),
       updated_at: new Date()
@@ -170,9 +173,36 @@ class TaskService {
 
     if (taskRepository.insert) {
       const created = await taskRepository.insert(newTaskData); // returns hydrated task object
+      const notifyAssignees = uniqueAssignees.filter((id) => id !== validCreatorId);
+      if (notifyAssignees.length) {
+        notificationService
+          .createTaskAssignmentNotifications({
+            task: created,
+            assigneeIds: notifyAssignees,
+            assignedById: validCreatorId,
+            previousAssigneeIds: [],
+            currentAssigneeIds: uniqueAssignees,
+            notificationType: 'task_assignment'
+          })
+          .catch((err) => console.error('Failed to send task assignment notifications:', err));
+      }
       return created;
     }
-    return await taskRepository.createTask(newTaskData);
+    const createdTask = await taskRepository.createTask(newTaskData);
+    const notifyAssignees = uniqueAssignees.filter((id) => id !== validCreatorId);
+    if (notifyAssignees.length) {
+      notificationService
+        .createTaskAssignmentNotifications({
+          task: createdTask,
+          assigneeIds: notifyAssignees,
+          assignedById: validCreatorId,
+          previousAssigneeIds: [],
+          currentAssigneeIds: uniqueAssignees,
+          notificationType: 'task_assignment'
+        })
+        .catch((err) => console.error('Failed to send task assignment notifications:', err));
+    }
+    return createdTask;
   }
   /**
    * Update task - supports both approaches
@@ -190,6 +220,7 @@ class TaskService {
       if (input.deadline !== undefined) patch.deadline = input.deadline || null;
       if (input.archived !== undefined) patch.archived = !!input.archived;
 
+      let previousAssigneeIds = null;
       if (input.assigned_to !== undefined) {
         // Accept number[], string[] of numbers, or null/empty
         const arr = Array.isArray(input.assigned_to) ? input.assigned_to : [];
@@ -199,8 +230,8 @@ class TaskService {
           .map(Number)
           .filter(Number.isFinite) // keep only valid numbers
           .map(n => Math.trunc(n)); // ensure integers
-
-        patch.assigned_to = normalized; // <-- Supabase column of type int4[]
+        previousAssigneeIds = await this._getTaskAssigneeIds(taskId);
+        patch.assigned_to = Array.from(new Set(normalized)); // <-- Supabase column of type int4[]
       }
 
       // Handle tags
@@ -223,16 +254,82 @@ class TaskService {
 
       if (taskRepository.updateById) {
         const updated = await taskRepository.updateById(id, patch);
-        console.log(updated)// hydrated task
+        if (patch.assigned_to !== undefined) {
+          const updatedAssignees = this._normalizeAssigneeIds(updated.assigned_to);
+          const previous = this._normalizeAssigneeIds(previousAssigneeIds);
+          const newlyAssigned = updatedAssignees.filter(id => !previous.includes(id));
+          const removedAssignees = previous.filter(id => !updatedAssignees.includes(id));
+          if (newlyAssigned.length) {
+            notificationService
+              .createTaskAssignmentNotifications({
+                task: updated,
+                assigneeIds: newlyAssigned,
+                assignedById: requestingUserId ?? null,
+                previousAssigneeIds: previous,
+                currentAssigneeIds: updatedAssignees,
+                notificationType: 'reassignment'
+              })
+              .catch((err) =>
+                console.error('Failed to send task assignment notifications:', err)
+              );
+          }
+          if (removedAssignees.length) {
+            notificationService
+              .createTaskRemovalNotifications({
+                task: updated,
+                assigneeIds: removedAssignees,
+                assignedById: requestingUserId ?? null,
+                previousAssigneeIds: previous,
+                currentAssigneeIds: updatedAssignees
+              })
+              .catch((err) =>
+                console.error('Failed to send task removal notifications:', err)
+              );
+          }
+        }
         return updated;
       } else {
         const updated = await taskRepository.updateTask(id, patch); // hydrated task
+        if (patch.assigned_to !== undefined) {
+          const updatedAssignees = this._normalizeAssigneeIds(updated.assigned_to);
+          const previous = this._normalizeAssigneeIds(previousAssigneeIds);
+          const newlyAssigned = updatedAssignees.filter(id => !previous.includes(id));
+          const removedAssignees = previous.filter(id => !updatedAssignees.includes(id));
+          if (newlyAssigned.length) {
+            notificationService
+              .createTaskAssignmentNotifications({
+                task: updated,
+                assigneeIds: newlyAssigned,
+                assignedById: requestingUserId ?? null,
+                previousAssigneeIds: previous,
+                currentAssigneeIds: updatedAssignees,
+                notificationType: 'reassignment'
+              })
+              .catch((err) =>
+                console.error('Failed to send task assignment notifications:', err)
+              );
+          }
+          if (removedAssignees.length) {
+            notificationService
+              .createTaskRemovalNotifications({
+                task: updated,
+                assigneeIds: removedAssignees,
+                assignedById: requestingUserId ?? null,
+                previousAssigneeIds: previous,
+                currentAssigneeIds: updatedAssignees
+              })
+              .catch((err) =>
+                console.error('Failed to send task removal notifications:', err)
+              );
+          }
+        }
         return updated;
       }
     }
 
     // Comprehensive approach with permissions
     const currentTask = await taskRepository.getTaskById(taskId);
+    const previousAssignees = this._normalizeAssigneeIds(currentTask?.assigned_to);
 
     // Check permissions if we have the method
     if (requestingUserId && this._canUserUpdateTask) {
@@ -252,7 +349,40 @@ class TaskService {
       updated_at: new Date()
     };
 
-    return await taskRepository.updateTask(taskId, updateData);
+    const updatedTask = await taskRepository.updateTask(taskId, updateData);
+    if (updates.assigned_to !== undefined) {
+      const updatedIds = this._normalizeAssigneeIds(updatedTask.assigned_to);
+      const newlyAssigned = updatedIds.filter((id) => !previousAssignees.includes(id));
+      const removedAssignees = previousAssignees.filter((id) => !updatedIds.includes(id));
+      if (newlyAssigned.length) {
+        notificationService
+          .createTaskAssignmentNotifications({
+            task: updatedTask,
+            assigneeIds: newlyAssigned,
+            assignedById: requestingUserId ?? null,
+            previousAssigneeIds: previousAssignees,
+            currentAssigneeIds: updatedIds,
+            notificationType: 'reassignment'
+          })
+          .catch((err) =>
+            console.error('Failed to send task assignment notifications:', err)
+          );
+      }
+      if (removedAssignees.length) {
+        notificationService
+          .createTaskRemovalNotifications({
+            task: updatedTask,
+            assigneeIds: removedAssignees,
+            assignedById: requestingUserId ?? null,
+            previousAssigneeIds: previousAssignees,
+            currentAssigneeIds: updatedIds
+          })
+          .catch((err) =>
+            console.error('Failed to send task removal notifications:', err)
+          );
+      }
+    }
+    return updatedTask;
   }
 
   /**
@@ -352,6 +482,28 @@ class TaskService {
       hasNext: page * limit < totalCount,
       hasPrev: page > 1
     };
+  }
+
+  _normalizeAssigneeIds(raw) {
+    const arr = Array.isArray(raw) ? raw : raw != null ? [raw] : [];
+    return Array.from(
+      new Set(
+        arr
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value))
+          .map((value) => Math.trunc(value))
+      )
+    );
+  }
+
+  async _getTaskAssigneeIds(taskId) {
+    try {
+      const existing = await taskRepository.getTaskById(taskId);
+      return this._normalizeAssigneeIds(existing?.assigned_to);
+    } catch (err) {
+      console.error(`Failed to fetch current assignees for task ${taskId}:`, err);
+      return [];
+    }
   }
 }
 
