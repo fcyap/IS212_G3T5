@@ -23,7 +23,14 @@ const list = async (req, res) => {
 const create = async (req, res) => {
   try {
     const creatorId = req.user?.id ?? req.body?.creator_id ?? req.body?.creatorId ?? null;
+
+    // Always use the old taskService for creation
     const task = await taskService.createTask({ ...req.body }, creatorId ?? null);
+
+    // Send deadline notifications regardless of project association
+    const projectTasksService = require('../services/projectTasksService');
+    await projectTasksService.sendDeadlineNotifications(task);
+
     res.status(201).json(task);
   } catch (e) {
     console.error("[POST /tasks]", e);
@@ -38,7 +45,14 @@ const update = async (req, res) => {
       return res.status(400).json({ error: "Invalid id" });
     }
     console.log("req.body:", req.body);
+
+    // Always use the old taskService for updates
     const task = await taskService.updateTask(id, req.body);
+
+    // Send deadline notifications regardless of project association
+    const projectTasksService = require('../services/projectTasksService');
+    await projectTasksService.sendDeadlineNotifications(task);
+
     res.json(task);
   } catch (e) {
     console.error("[PUT /tasks/:id]", e);

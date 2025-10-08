@@ -6,6 +6,7 @@ import { Toast } from "@/components/ui/toast"
 import { ProjectProvider } from "@/contexts/project-context"
 import { AuthProvider } from "@/hooks/useAuth"
 import { SessionProvider } from "@/components/session-provider"
+import { DeadlineNotificationToaster } from "@/components/deadline-notification-toaster"
 import "./globals.css"
 
 export const metadata = {
@@ -23,6 +24,7 @@ export default function RootLayout({ children }) {
             <ProjectProvider>
               <Suspense fallback={null}>{children}</Suspense>
               <Toast />
+              <DeadlineNotificationToaster />
             </ProjectProvider>
           </AuthProvider>
         </SessionProvider>
