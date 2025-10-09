@@ -466,6 +466,7 @@ router.put('/:projectId/tasks/:taskId', async (req, res) => {
   try {
     const { projectId, taskId } = req.params;
     const updateData = req.body;
+    const requestingUserId = req.user?.id ?? null;
 
     // Validate inputs
     const validatedProjectId = validatePositiveInteger(projectId, 'projectId');
@@ -474,14 +475,14 @@ router.put('/:projectId/tasks/:taskId', async (req, res) => {
     // Import the service
     const projectTasksService = require('../services/projectTasksService');
 
-    const result = await projectTasksService.updateTask(validatedTaskId, updateData);
+    const result = await projectTasksService.updateTask(validatedTaskId, updateData, requestingUserId);
 
     if (result.success) {
       return res.status(200).json(result);
-    } else {
-      const statusCode = result.error === 'Task not found' ? 404 : 400;
-      return res.status(statusCode).json(result);
     }
+
+    const statusCode = result.statusCode || (result.error === 'Task not found' ? 404 : 400);
+    return res.status(statusCode).json(result);
 
   } catch (error) {
     console.error('Error updating task:', error);

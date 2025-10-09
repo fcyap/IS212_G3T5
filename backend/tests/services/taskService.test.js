@@ -256,10 +256,22 @@ describe('TaskService', () => {
       expect(result).toEqual(mockCreatedTask);
     });
 
+    test('should reject when more than 5 assignees provided', async () => {
+      const taskData = {
+        title: 'Too Many',
+        assigned_to: [2, 3, 4, 5, 6, 7]
+      };
+
+      userRepository.getUserById.mockResolvedValue({ id: 1 });
+
+      await expect(taskService.createTask(taskData, 1)).rejects.toThrow('at most 5 assignees');
+    });
+
     test('should handle creation error', async () => {
       const taskData = {
         title: 'New Task',
-        description: 'Task description'
+        description: 'Task description',
+        assigned_to: [1]
       };
 
       taskRepository.insert = jest.fn().mockRejectedValue(new Error('Validation failed'));
@@ -395,6 +407,30 @@ describe('TaskService', () => {
         currentAssigneeIds: [1, 2]
       }));
       expect(notificationService.createTaskAssignmentNotifications).not.toHaveBeenCalled();
+    });
+
+    test('should reject update when exceeding assignee limit', async () => {
+      const taskId = 3;
+      const updateData = { assigned_to: [1, 2, 3, 4, 5, 6] };
+
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        assigned_to: [1, 2, 3]
+      });
+
+      await expect(taskService.updateTask(taskId, updateData)).rejects.toThrow('at most 5 assignees');
+    });
+
+    test('should reject update when requester not assigned', async () => {
+      const taskId = 4;
+      const updateData = { title: 'Cannot update' };
+
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        assigned_to: [1, 2]
+      });
+
+      await expect(taskService.updateTask(taskId, updateData, 99)).rejects.toThrow('assigned to the task');
     });
   });
 

@@ -374,6 +374,10 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
     Array.isArray(task.assignees) &&
     currentUserId != null &&
     task.assignees.some((a) => a.id === currentUserId);
+  const isManager = currentUser?.role?.toLowerCase?.() === 'manager';
+  const isCreator = task.creator_id != null && currentUserId === task.creator_id;
+  const canManageAssignees = canEdit && (isManager || isCreator);
+  const MAX_ASSIGNEES = 5
   const [title, setTitle] = useState(task.title || "");
   const [description, setDescription] = useState(task.description || "");
   const [priority, setPriority] = useState(task.priority || "Low");
@@ -388,17 +392,18 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
     loading: loadingUsers,
     search: searchUsers,
     clear: clearUserSearch,
-  } = useUserSearch({ canSearch: canEdit, minQueryLength: 1 })
+  } = useUserSearch({ canSearch: canManageAssignees, minQueryLength: 1 })
 
   function handleUserSearchInput(e) {
-    if (!canEdit) return;
+    if (!canManageAssignees || assignees.length >= MAX_ASSIGNEES) return;
     const value = e.target.value;
     console.log('[AssigneeSearch] (input onChange) value:', value);
     searchUsers(value);
   }
 
-const canSave = canEdit && title.trim().length > 0 && priority;
+  const canSave = canEdit && title.trim().length > 0 && priority && assignees.length <= MAX_ASSIGNEES;
   function addTagFromInput() {
+    if (!canEdit) return;
     const t = tagInput.trim();
     if (!t) return;
     if (!tags.includes(t)) setTags((prev) => [...prev, t]);
@@ -406,20 +411,25 @@ const canSave = canEdit && title.trim().length > 0 && priority;
   }
 
   function removeTagAt(idx) {
+    if (!canEdit) return;
     setTags((prev) => prev.filter((_, i) => i !== idx));
   }
 
   function addAssignee(user) {
-    if (!canEdit) return;
-    if (!assignees.some((a) => a.id === user.id)) {
-      setAssignees((prev) => [...prev, user]);
-    }
+    if (!canManageAssignees) return;
+    setAssignees((prev) => {
+      if (prev.length >= MAX_ASSIGNEES || prev.some((a) => a.id === user.id)) return prev;
+      return [...prev, user];
+    });
     clearUserSearch();
   }
 
   function removeAssignee(userId) {
-    if (!canEdit) return;
-    setAssignees((prev) => prev.filter((a) => a.id !== userId));
+    if (!canManageAssignees) return;
+    setAssignees((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((a) => a.id !== userId);
+    });
   }
 
   async function handleDelete() {
@@ -455,6 +465,12 @@ const canSave = canEdit && title.trim().length > 0 && priority;
           <h3 className="text-white text-lg font-semibold">Edit task</h3>
           <button onClick={onClose} className="text-gray-300 hover:text-white text-xl leading-none">×</button>
         </div>
+
+        {!canEdit && (
+          <div className="mb-4 rounded-md border border-amber-600/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            You are not assigned to this task, so the fields are read-only.
+          </div>
+        )}
 
         <div className="space-y-4">
           {/* Title */}
@@ -562,15 +578,15 @@ const canSave = canEdit && title.trim().length > 0 && priority;
             <div className="mb-2">
               <input
                 type="text"
-                className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-                placeholder="Search users by name or email..."
-                value={userSearch}
-                onChange={handleUserSearchInput}
-                aria-busy={loadingUsers ? 'true' : 'false'}
-                autoComplete="off"
-                disabled={!canEdit}
-              />
-              {canEdit && userSearchResults.length > 0 && (
+              className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500 disabled:opacity-60"
+              placeholder="Search users by name or email..."
+              value={userSearch}
+              onChange={handleUserSearchInput}
+              aria-busy={loadingUsers ? 'true' : 'false'}
+              autoComplete="off"
+              disabled={!canManageAssignees || assignees.length >= MAX_ASSIGNEES}
+            />
+            {canManageAssignees && assignees.length < MAX_ASSIGNEES && userSearchResults.length > 0 && (
                 <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
                   {userSearchResults.map((u) => (
                     <div
@@ -596,9 +612,10 @@ const canSave = canEdit && title.trim().length > 0 && priority;
                     {a.name}
                     <button
                       type="button"
-                      className="ml-1 text-gray-300 hover:text-white"
+                      className="ml-1 text-gray-300 hover:text-white disabled:opacity-60"
                       onClick={() => removeAssignee(a.id)}
                       aria-label={`Remove ${a.name}`}
+                      disabled={!canManageAssignees || assignees.length <= 1}
                     >
                       ×
                     </button>
@@ -607,6 +624,12 @@ const canSave = canEdit && title.trim().length > 0 && priority;
               </div>
             ) : (
               <span className="text-xs text-gray-500">No assignees</span>
+            )}
+            {canManageAssignees && assignees.length >= MAX_ASSIGNEES && (
+              <p className="text-xs text-red-400 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
+            )}
+            {canManageAssignees && assignees.length === 1 && (
+              <p className="text-xs text-amber-400 mt-2">At least one assignee is required. Add another member before removing the last one.</p>
             )}
           </div>
 
@@ -659,7 +682,8 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
   const [priority, setPriority] = useState("")
   const PRIORITIES = ["Low", "Medium", "High"]
   const canEdit = true
-  const canSave = title.trim().length > 0 && priority !== ""
+  const MAX_ASSIGNEES = 5
+  const canSave = title.trim().length > 0 && priority !== "" && assignees.length <= MAX_ASSIGNEES
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState([]);
 
@@ -682,18 +706,23 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
   }, [currentUser])
 
   function addAssignee(user) {
-    if (!assignees.some((a) => a.id === user.id)) {
-      setAssignees((prev) => [...prev, user]);
-    }
+    setAssignees((prev) => {
+      if (prev.length >= MAX_ASSIGNEES || prev.some((a) => a.id === user.id)) return prev
+      return [...prev, user]
+    });
     clearUserSearch();
   }
 
   function removeAssignee(userId) {
-    setAssignees((prev) => prev.filter((a) => a.id !== userId));
+    setAssignees((prev) => {
+      if (prev.length <= 1) return prev
+      return prev.filter((a) => a.id !== userId)
+    });
   }
 
   function handleUserSearchInput(e) {
     const value = e.target.value;
+    if (assignees.length >= MAX_ASSIGNEES) return;
     searchUsers(value);
   }
 
@@ -804,14 +833,15 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
         <label className="block text-xs text-gray-400 mb-1">Assignees</label>
         <input
           type="text"
-          className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+          className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500 disabled:opacity-60"
           placeholder="Search users by name or email..."
           value={userSearch}
           onChange={handleUserSearchInput}
           aria-busy={loadingUsers ? 'true' : 'false'}
           autoComplete="off"
+          disabled={assignees.length >= MAX_ASSIGNEES}
         />
-        {userSearchResults.length > 0 && (
+        {assignees.length < MAX_ASSIGNEES && userSearchResults.length > 0 && (
           <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
             {userSearchResults.map((u) => (
               <div
@@ -848,6 +878,12 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
           </div>
         ) : (
           <span className="mt-1 block text-xs text-gray-500">No assignees</span>
+        )}
+        {assignees.length === 1 && (
+          <p className="text-xs text-amber-400 mt-2">At least one assignee is required. Add another member before removing the last one.</p>
+        )}
+        {assignees.length >= MAX_ASSIGNEES && (
+          <p className="text-xs text-red-400 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
         )}
       </div>
 

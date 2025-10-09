@@ -138,6 +138,19 @@ class TaskService {
       assignees.push(validCreatorId);
     }
 
+    const MAX_ASSIGNEES = TaskService.MAX_ASSIGNEES;
+    if (assignees.length === 0) {
+      const err = new Error('A task must have at least one assignee.');
+      err.status = 400;
+      throw err;
+    }
+
+    if (assignees.length > MAX_ASSIGNEES) {
+      const err = new Error(`A task can have at most ${MAX_ASSIGNEES} assignees.`);
+      err.status = 400;
+      throw err;
+    }
+
     if (assignees.length > 0 && userRepository.getUsersByIds) {
       await userRepository.getUsersByIds(assignees);
     }
@@ -208,6 +221,21 @@ class TaskService {
    * Update task - supports both approaches
    */
   async updateTask(taskId, updates, requestingUserId) {
+    const hasRequestingUser = arguments.length >= 3 && requestingUserId != null;
+    const normalizedRequesterId = hasRequestingUser ? Math.trunc(Number(requestingUserId)) : null;
+    let existingTask = null;
+    let existingAssignees = [];
+
+    if (normalizedRequesterId != null) {
+      existingTask = await taskRepository.getTaskById(taskId);
+      existingAssignees = this._normalizeAssigneeIds(existingTask?.assigned_to);
+      if (!existingAssignees.includes(normalizedRequesterId)) {
+        const err = new Error('You must be assigned to the task to update it.');
+        err.status = 403;
+        throw err;
+      }
+    }
+
     if (arguments.length === 2) {
       const id = taskId;
       const input = updates;
@@ -231,7 +259,19 @@ class TaskService {
           .filter(Number.isFinite) // keep only valid numbers
           .map(n => Math.trunc(n)); // ensure integers
         previousAssigneeIds = await this._getTaskAssigneeIds(taskId);
-        patch.assigned_to = Array.from(new Set(normalized)); // <-- Supabase column of type int4[]
+        const uniqueAssignees = Array.from(new Set(normalized));
+        if (uniqueAssignees.length === 0) {
+          const err = new Error('A task must have at least one assignee.');
+          err.status = 400;
+          throw err;
+        }
+
+        if (uniqueAssignees.length > TaskService.MAX_ASSIGNEES) {
+          const err = new Error(`A task can have at most ${TaskService.MAX_ASSIGNEES} assignees.`);
+          err.status = 400;
+          throw err;
+        }
+        patch.assigned_to = uniqueAssignees; // <-- Supabase column of type int4[]
       }
 
       // Handle tags
@@ -264,7 +304,7 @@ class TaskService {
               .createTaskAssignmentNotifications({
                 task: updated,
                 assigneeIds: newlyAssigned,
-                assignedById: requestingUserId ?? null,
+                assignedById: normalizedRequesterId ?? null,
                 previousAssigneeIds: previous,
                 currentAssigneeIds: updatedAssignees,
                 notificationType: 'reassignment'
@@ -278,7 +318,7 @@ class TaskService {
               .createTaskRemovalNotifications({
                 task: updated,
                 assigneeIds: removedAssignees,
-                assignedById: requestingUserId ?? null,
+                assignedById: normalizedRequesterId ?? null,
                 previousAssigneeIds: previous,
                 currentAssigneeIds: updatedAssignees
               })
@@ -300,7 +340,7 @@ class TaskService {
               .createTaskAssignmentNotifications({
                 task: updated,
                 assigneeIds: newlyAssigned,
-                assignedById: requestingUserId ?? null,
+                assignedById: normalizedRequesterId ?? null,
                 previousAssigneeIds: previous,
                 currentAssigneeIds: updatedAssignees,
                 notificationType: 'reassignment'
@@ -314,7 +354,7 @@ class TaskService {
               .createTaskRemovalNotifications({
                 task: updated,
                 assigneeIds: removedAssignees,
-                assignedById: requestingUserId ?? null,
+                assignedById: normalizedRequesterId ?? null,
                 previousAssigneeIds: previous,
                 currentAssigneeIds: updatedAssignees
               })
@@ -328,12 +368,12 @@ class TaskService {
     }
 
     // Comprehensive approach with permissions
-    const currentTask = await taskRepository.getTaskById(taskId);
-    const previousAssignees = this._normalizeAssigneeIds(currentTask?.assigned_to);
+    const currentTask = existingTask ?? await taskRepository.getTaskById(taskId);
+    const previousAssignees = existingAssignees.length ? existingAssignees : this._normalizeAssigneeIds(currentTask?.assigned_to);
 
     // Check permissions if we have the method
-    if (requestingUserId && this._canUserUpdateTask) {
-      const canUpdate = await this._canUserUpdateTask(currentTask.project_id, requestingUserId);
+    if (normalizedRequesterId != null && this._canUserUpdateTask) {
+      const canUpdate = await this._canUserUpdateTask(currentTask.project_id, normalizedRequesterId);
       if (!canUpdate) {
         throw new Error('You do not have permission to update this task');
       }
@@ -341,6 +381,16 @@ class TaskService {
 
     // Validate assigned users exist (if updating assignments)
     if (updates.assigned_to && updates.assigned_to.length > 0 && userRepository.getUsersByIds) {
+      if (updates.assigned_to.length > TaskService.MAX_ASSIGNEES) {
+        const err = new Error(`A task can have at most ${TaskService.MAX_ASSIGNEES} assignees.`);
+        err.status = 400;
+        throw err;
+      }
+      if (updates.assigned_to.length === 0) {
+        const err = new Error('A task must have at least one assignee.');
+        err.status = 400;
+        throw err;
+      }
       await userRepository.getUsersByIds(updates.assigned_to);
     }
 
@@ -352,6 +402,17 @@ class TaskService {
     const updatedTask = await taskRepository.updateTask(taskId, updateData);
     if (updates.assigned_to !== undefined) {
       const updatedIds = this._normalizeAssigneeIds(updatedTask.assigned_to);
+      if (updatedIds.length > TaskService.MAX_ASSIGNEES) {
+        const err = new Error(`A task can have at most ${TaskService.MAX_ASSIGNEES} assignees.`);
+        err.status = 400;
+        throw err;
+      }
+      if (updatedIds.length === 0) {
+        const err = new Error('A task must have at least one assignee.');
+        err.status = 400;
+        throw err;
+      }
+
       const newlyAssigned = updatedIds.filter((id) => !previousAssignees.includes(id));
       const removedAssignees = previousAssignees.filter((id) => !updatedIds.includes(id));
       if (newlyAssigned.length) {
@@ -359,7 +420,7 @@ class TaskService {
           .createTaskAssignmentNotifications({
             task: updatedTask,
             assigneeIds: newlyAssigned,
-            assignedById: requestingUserId ?? null,
+            assignedById: normalizedRequesterId ?? null,
             previousAssigneeIds: previousAssignees,
             currentAssigneeIds: updatedIds,
             notificationType: 'reassignment'
@@ -373,7 +434,7 @@ class TaskService {
           .createTaskRemovalNotifications({
             task: updatedTask,
             assigneeIds: removedAssignees,
-            assignedById: requestingUserId ?? null,
+            assignedById: normalizedRequesterId ?? null,
             previousAssigneeIds: previousAssignees,
             currentAssigneeIds: updatedIds
           })
@@ -506,5 +567,7 @@ class TaskService {
     }
   }
 }
+
+TaskService.MAX_ASSIGNEES = 5;
 
 module.exports = new TaskService();

@@ -39,6 +39,31 @@ class ProjectTasksService {
   }
 
   /**
+   * Normalize Supabase assigned_to payloads into an array of integers
+   * @param {Array<any>} assigned - Raw assigned_to values
+   * @returns {number[]} Normalized integer user IDs
+   */
+  _normalizeAssigneeIds(assigned) {
+    if (!Array.isArray(assigned)) {
+      return [];
+    }
+
+    return assigned
+      .map((value) => {
+        if (value === null || value === undefined) {
+          return null;
+        }
+        const raw = typeof value === 'string' ? value.trim() : value;
+        if (raw === '') {
+          return null;
+        }
+        const num = Number(raw);
+        return Number.isFinite(num) ? Math.trunc(num) : null;
+      })
+      .filter((value) => value !== null);
+  }
+
+  /**
    * Validate and clean filters
    * @param {Object} filters - Raw filters
    * @returns {Object} Cleaned filters
@@ -397,9 +422,29 @@ class ProjectTasksService {
    * @param {Object} updateData - The data to update
    * @returns {Object} Updated task data or error
    */
-  async updateTask(taskId, updateData) {
+  async updateTask(taskId, updateData, requestingUserId = null) {
     try {
       const validatedTaskId = this.validatePositiveInteger(taskId, 'taskId');
+      const normalizedRequesterId = requestingUserId !== null && requestingUserId !== undefined
+        ? this.validatePositiveInteger(requestingUserId, 'requestingUserId')
+        : null;
+      let existingTask = null;
+
+      if (normalizedRequesterId !== null) {
+        existingTask = await projectTasksRepository.findById(validatedTaskId);
+        if (!existingTask) {
+          const notFoundError = new Error('Task not found');
+          notFoundError.statusCode = 404;
+          throw notFoundError;
+        }
+
+        const assigneeIds = this._normalizeAssigneeIds(existingTask.assigned_to);
+        if (!assigneeIds.includes(normalizedRequesterId)) {
+          const permissionError = new Error('You must be assigned to the task to update it.');
+          permissionError.statusCode = 403;
+          throw permissionError;
+        }
+      }
 
       // Filter out undefined values
       const filteredUpdateData = Object.fromEntries(
@@ -427,7 +472,9 @@ class ProjectTasksService {
       const updatedTask = await projectTasksRepository.update(validatedTaskId, filteredUpdateData);
 
       if (!updatedTask) {
-        throw new Error('Task not found');
+        const notFoundError = new Error('Task not found');
+        notFoundError.statusCode = 404;
+        throw notFoundError;
       }
 
       // Send immediate deadline notifications if task deadline was updated to today/tomorrow
@@ -486,7 +533,8 @@ class ProjectTasksService {
       return {
         success: false,
         error: error.message,
-        message: 'Failed to update task'
+        message: 'Failed to update task',
+        statusCode: error.statusCode || error.status
       };
     }
   }
