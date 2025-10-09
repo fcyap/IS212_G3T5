@@ -229,11 +229,13 @@ class TaskService {
     if (normalizedRequesterId != null) {
       existingTask = await taskRepository.getTaskById(taskId);
       existingAssignees = this._normalizeAssigneeIds(existingTask?.assigned_to);
-      if (!existingAssignees.includes(normalizedRequesterId)) {
+      const requesterWasAssignee = existingAssignees.includes(normalizedRequesterId);
+      if (!requesterWasAssignee) {
         const err = new Error('You must be assigned to the task to update it.');
         err.status = 403;
         throw err;
       }
+      existingTask.requesterWasAssignee = requesterWasAssignee;
     }
 
     if (arguments.length === 2) {
@@ -374,7 +376,10 @@ class TaskService {
     // Check permissions if we have the method
     if (normalizedRequesterId != null && this._canUserUpdateTask) {
       const canUpdate = await this._canUserUpdateTask(currentTask.project_id, normalizedRequesterId);
-      if (!canUpdate) {
+      const requesterIsAssignee =
+        currentTask.requesterWasAssignee ||
+        previousAssignees.includes(normalizedRequesterId);
+      if (!canUpdate && !requesterIsAssignee) {
         throw new Error('You do not have permission to update this task');
       }
     }

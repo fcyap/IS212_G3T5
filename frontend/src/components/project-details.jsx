@@ -332,8 +332,22 @@ export function ProjectDetails({ projectId, onBack }) {
   const handleUpdateTask = async (taskData) => {
     try {
       const normalizedAssignees = Array.isArray(taskData.assignees)
-        ? Array.from(new Set(taskData.assignees.map((value) => Number(value)).filter(Number.isFinite)))
+        ? Array.from(
+            new Set(
+              taskData.assignees
+                .map((value) => {
+                  const raw =
+                    value && typeof value === 'object'
+                      ? value.id ?? value.user_id ?? value.userId ?? null
+                      : value;
+                  const numeric = Number(raw);
+                  return Number.isFinite(numeric) ? Math.trunc(numeric) : null;
+                })
+                .filter((value) => value !== null)
+            )
+          )
         : undefined;
+      const hasValidAssignees = Array.isArray(normalizedAssignees) && normalizedAssignees.length > 0;
       const csrfToken = await getCsrfToken();
       const response = await fetch(`http://localhost:3001/api/tasks/${editingTask.id}`, {
         method: 'PUT',
@@ -349,7 +363,7 @@ export function ProjectDetails({ projectId, onBack }) {
           status: taskData.status,
           deadline: taskData.deadline || null,
           tags: taskData.tags || [],
-          ...(normalizedAssignees ? { assigned_to: normalizedAssignees } : {}),
+          ...(hasValidAssignees ? { assigned_to: normalizedAssignees } : {}),
         })
       })
 
@@ -1259,10 +1273,6 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
       .slice(0, 8)
   }, [assigneeQuery, memberOptions, assignees])
 
-  const taskCreatorId = Number(task.creator_id ?? task.created_by ?? task.owner_id ?? null)
-  const currentUserId = user?.id ?? null
-  const currentUserProjectRole = projectMembers.find((member) => member.user_id === currentUserId)?.member_role
-
   const addAssignee = (member) => {
     if (!canManageAssignees) return
     setAssignees((prev) => {
@@ -1515,7 +1525,11 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   const taskCreatorId = Number(task.creator_id ?? task.created_by ?? task.owner_id ?? null)
   const currentUserId = user?.id ?? null
   const currentUserProjectRole = projectMembers.find((member) => member.user_id === currentUserId)?.member_role
-  const isProjectManager = typeof currentUserProjectRole === 'string' && currentUserProjectRole.toLowerCase() === 'manager'
+  const globalRole = user?.role?.toLowerCase?.() ?? ''
+  const isManagerRole = globalRole === 'manager'
+  const isProjectManager =
+    (typeof currentUserProjectRole === 'string' && currentUserProjectRole.toLowerCase() === 'manager') ||
+    isManagerRole
   const isCreator = currentUserId != null && currentUserId === taskCreatorId
 
   const userIsAssignee = useMemo(() => {
@@ -1543,9 +1557,10 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   }, [assignees, currentUserId, task])
 
   const canEditTask = userIsAssignee
-  const canManageAssignees = canEditTask && (isCreator || isProjectManager)
+  const canAddAssignees = canEditTask
+  const canRemoveAssignees = isProjectManager || (canEditTask && isCreator)
 
-  const canSave = canEditTask && assignees.length <= MAX_ASSIGNEES
+  const canSave = (canEditTask || isProjectManager || isManagerRole) && assignees.length <= MAX_ASSIGNEES
 
   const memberOptions = useMemo(() => {
     if (!Array.isArray(projectMembers)) return []
@@ -1609,7 +1624,7 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   }, [initialAssignees])
 
   const availableAssigneeResults = useMemo(() => {
-    if (!canManageAssignees) return []
+    if (!canAddAssignees) return []
     const search = assigneeQuery.trim().toLowerCase()
     if (!search || assignees.length >= MAX_ASSIGNEES) return []
     return memberOptions
@@ -1620,7 +1635,7 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
         return name.includes(search) || email.includes(search)
       })
       .slice(0, 8)
-  }, [assigneeQuery, memberOptions, assignees, canManageAssignees])
+  }, [assigneeQuery, memberOptions, assignees, canAddAssignees])
 
   function addTagFromInput() {
     if (!canEditTask) return
@@ -1636,7 +1651,7 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   }
 
   const addAssignee = (member) => {
-    if (!canManageAssignees) return
+    if (!canAddAssignees) return
     setAssignees((prev) => {
       if (prev.length >= MAX_ASSIGNEES || prev.some((assignee) => assignee.id === member.id)) return prev
       return [...prev, member]
@@ -1645,7 +1660,7 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   }
 
   const canRemoveAssignee = (assigneeId) => {
-    return canManageAssignees && assignees.length > 1
+    return canRemoveAssignees && assignees.length > 1
   }
 
   const removeAssignee = (userId) => {
@@ -1654,7 +1669,7 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   }
 
   const handleAssigneeInputKeyDown = (event) => {
-    if (!canManageAssignees) return
+    if (!canAddAssignees) return
     if (event.key === "Enter" && availableAssigneeResults.length > 0 && assignees.length < MAX_ASSIGNEES) {
       event.preventDefault()
       addAssignee(availableAssigneeResults[0])
@@ -1665,7 +1680,7 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   }
 
   const showNoAssigneeResults =
-    assigneeQuery.trim().length > 0 && availableAssigneeResults.length === 0
+    canAddAssignees && assigneeQuery.trim().length > 0 && availableAssigneeResults.length === 0
 
   const handleDelete = () => {
     if (window.confirm('Are you sure you want to delete this task?')) {
@@ -1816,9 +1831,9 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
                   onChange={(event) => setAssigneeQuery(event.target.value)}
                   onKeyDown={handleAssigneeInputKeyDown}
                   autoComplete="off"
-                  disabled={!canManageAssignees || assignees.length >= MAX_ASSIGNEES}
+                  disabled={!canAddAssignees || assignees.length >= MAX_ASSIGNEES}
                 />
-                {canManageAssignees && assigneeQuery && (
+                {canAddAssignees && assigneeQuery && assignees.length < MAX_ASSIGNEES && (
                   <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
                       {availableAssigneeResults.map((member) => (
                         <button
@@ -1848,7 +1863,7 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
                     title={assignee.name}
                   >
                         {assignee.name}
-                        {canManageAssignees && (
+                        {canRemoveAssignees && (
                       <button
                         type="button"
                         className="ml-1 text-gray-300 hover:text-white disabled:opacity-60"
@@ -1865,10 +1880,10 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
             ) : (
               <span className="text-xs text-gray-500 mt-2 block">No assignees</span>
             )}
-            {canManageAssignees && assignees.length === 1 && (
+            {canRemoveAssignees && assignees.length === 1 && (
               <p className="text-xs text-amber-400 mt-2">At least one assignee is required. Add another member before removing the last one.</p>
             )}
-            {canManageAssignees && assignees.length >= MAX_ASSIGNEES && (
+            {canAddAssignees && assignees.length >= MAX_ASSIGNEES && (
               <p className="text-xs text-red-400 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
             )}
               </div>

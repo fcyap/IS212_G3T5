@@ -320,8 +320,22 @@ export function KanbanBoard({ projectId = null }) {
             try {
               // Convert assignees (array of user objects) to assigned_to (array of user IDs)
               const assigned_to = Array.isArray(patch.assignees)
-                ? patch.assignees.map(a => a.id)
+                ? Array.from(
+                    new Set(
+                      patch.assignees
+                        .map((assignee) => {
+                          const raw =
+                            assignee && typeof assignee === 'object'
+                              ? assignee.id ?? assignee.user_id ?? assignee.userId ?? null
+                              : assignee;
+                          const numeric = Number(raw);
+                          return Number.isFinite(numeric) ? Math.trunc(numeric) : null;
+                        })
+                        .filter((value) => value !== null)
+                    )
+                  )
                 : [];
+              const hasValidAssignees = assigned_to.length > 0;
               const payload = {
                 title: patch.title,
                 description: patch.description || null,
@@ -329,7 +343,7 @@ export function KanbanBoard({ projectId = null }) {
                 status: patch.status,
                 deadline: patch.deadline || null,
                 tags: patch.tags || [],
-                assigned_to,
+                ...(hasValidAssignees ? { assigned_to } : {}),
               };
               console.log('[KanbanBoard] Sending payload to backend:', payload);
               const csrfToken = await getCsrfToken();
@@ -376,7 +390,8 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
     task.assignees.some((a) => a.id === currentUserId);
   const isManager = currentUser?.role?.toLowerCase?.() === 'manager';
   const isCreator = task.creator_id != null && currentUserId === task.creator_id;
-  const canManageAssignees = canEdit && (isManager || isCreator);
+  const canAddAssignees = canEdit;
+  const canRemoveAssignees = isManager || (canEdit && isCreator);
   const MAX_ASSIGNEES = 5
   const [title, setTitle] = useState(task.title || "");
   const [description, setDescription] = useState(task.description || "");
@@ -392,16 +407,16 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
     loading: loadingUsers,
     search: searchUsers,
     clear: clearUserSearch,
-  } = useUserSearch({ canSearch: canManageAssignees, minQueryLength: 1 })
+  } = useUserSearch({ canSearch: canAddAssignees, minQueryLength: 1 })
 
   function handleUserSearchInput(e) {
-    if (!canManageAssignees || assignees.length >= MAX_ASSIGNEES) return;
+    if (!canAddAssignees || assignees.length >= MAX_ASSIGNEES) return;
     const value = e.target.value;
     console.log('[AssigneeSearch] (input onChange) value:', value);
     searchUsers(value);
   }
 
-  const canSave = canEdit && title.trim().length > 0 && priority && assignees.length <= MAX_ASSIGNEES;
+  const canSave = (canEdit || isManager) && title.trim().length > 0 && priority && assignees.length <= MAX_ASSIGNEES;
   function addTagFromInput() {
     if (!canEdit) return;
     const t = tagInput.trim();
@@ -416,7 +431,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
   }
 
   function addAssignee(user) {
-    if (!canManageAssignees) return;
+    if (!canAddAssignees) return;
     setAssignees((prev) => {
       if (prev.length >= MAX_ASSIGNEES || prev.some((a) => a.id === user.id)) return prev;
       return [...prev, user];
@@ -425,7 +440,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
   }
 
   function removeAssignee(userId) {
-    if (!canManageAssignees) return;
+    if (!canRemoveAssignees) return;
     setAssignees((prev) => {
       if (prev.length <= 1) return prev;
       return prev.filter((a) => a.id !== userId);
@@ -584,9 +599,9 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
               onChange={handleUserSearchInput}
               aria-busy={loadingUsers ? 'true' : 'false'}
               autoComplete="off"
-              disabled={!canManageAssignees || assignees.length >= MAX_ASSIGNEES}
+              disabled={!canAddAssignees || assignees.length >= MAX_ASSIGNEES}
             />
-            {canManageAssignees && assignees.length < MAX_ASSIGNEES && userSearchResults.length > 0 && (
+            {canAddAssignees && assignees.length < MAX_ASSIGNEES && userSearchResults.length > 0 && (
                 <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
                   {userSearchResults.map((u) => (
                     <div
@@ -610,25 +625,27 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
                     title={a.name}
                   >
                     {a.name}
-                    <button
-                      type="button"
-                      className="ml-1 text-gray-300 hover:text-white disabled:opacity-60"
-                      onClick={() => removeAssignee(a.id)}
-                      aria-label={`Remove ${a.name}`}
-                      disabled={!canManageAssignees || assignees.length <= 1}
-                    >
-                      ×
-                    </button>
+                    {canRemoveAssignees && (
+                      <button
+                        type="button"
+                        className="ml-1 text-gray-300 hover:text-white disabled:opacity-60"
+                        onClick={() => removeAssignee(a.id)}
+                        aria-label={`Remove ${a.name}`}
+                        disabled={assignees.length <= 1}
+                      >
+                        ×
+                      </button>
+                    )}
                   </Badge>
                 ))}
               </div>
             ) : (
               <span className="text-xs text-gray-500">No assignees</span>
             )}
-            {canManageAssignees && assignees.length >= MAX_ASSIGNEES && (
+            {canAddAssignees && assignees.length >= MAX_ASSIGNEES && (
               <p className="text-xs text-red-400 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
             )}
-            {canManageAssignees && assignees.length === 1 && (
+            {canRemoveAssignees && assignees.length === 1 && (
               <p className="text-xs text-amber-400 mt-2">At least one assignee is required. Add another member before removing the last one.</p>
             )}
           </div>
