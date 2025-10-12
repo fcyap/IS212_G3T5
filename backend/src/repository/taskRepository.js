@@ -276,6 +276,30 @@ class TaskRepository {
 
     return count || 0;
   }
+    // Get all direct subtasks for a task
+  async getSubtasks(parentId) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('parent_id', parentId)
+      .eq('archived', false)
+      .order('created_at', { ascending: true });
+
+    if (error) throw new Error(error.message);
+    return data || [];
+  }
+
+  // Insert many (returns inserted rows)
+  async insertMany(payloads) {
+    if (!Array.isArray(payloads) || payloads.length === 0) return [];
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert(payloads)
+      .select();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
 }
 
 module.exports = new TaskRepository();

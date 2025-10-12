@@ -165,7 +165,7 @@ const getTaskById = async (req, res) => {
 
 const createTask = async (req, res) => {
   try {
-    const { title, description, project_id, assigned_to, status, priority, deadline, parent_id  } = req.body;
+    const { title, description, project_id, assigned_to, status, priority, deadline, parent_id, recurrence   } = req.body;
     const creatorId = req.user?.id || 1;
 
     if (!title || title.trim() === '') {
@@ -212,7 +212,7 @@ const updateTask = async (req, res) => {
     // Log the full request body for debugging
     console.log('[TaskController] Full req.body:', req.body);
     const { taskId } = req.params;
-    const { title, description, assigned_to, status, priority, deadline, tags } = req.body;
+    const { title, description, assigned_to, status, priority, deadline, tags, recurrence } = req.body;
     const requestingUserId = req.user?.id || 1;
 
     if (!taskId || isNaN(taskId)) {
@@ -228,6 +228,7 @@ const updateTask = async (req, res) => {
       updates.assigned_to = assigned_to;
       console.log(`[TaskController] Received update for task_id=${taskId}, assigned_to:`, assigned_to);
     }
+    if (recurrence !== undefined) updates.recurrence = recurrence; // {freq, interval} or null
 
     if (status !== undefined) {
       const validStatuses = ['pending', 'in_progress', 'completed', 'cancelled', 'blocked'];

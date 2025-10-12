@@ -41,6 +41,11 @@ function rowToCard(r) {
       : Array.isArray(r.assigned_to) ? r.assigned_to.map(id => ({ id }))
         : [];
 
+  const recurrence =
+    r.recurrence_freq
+      ? { freq: r.recurrence_freq, interval: r.recurrence_interval || 1 }
+      : null;
+
   return {
     id: r.id,
     title: r.title ?? '',
@@ -50,11 +55,76 @@ function rowToCard(r) {
     deadline: r.deadline || null,
     assignees: normalizedAssignees,  // <-- use this
     tags: Array.isArray(r.tags) ? r.tags : [],
+    recurrence,
   };
 }
 
-export function KanbanBoard() {
-  async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees }) {
+// --- RecurrencePicker --------------------------------------------
+function RecurrencePicker({ value, onChange, disabled = false }) {
+  const freq = value?.freq ?? "none";
+  const interval = value?.interval ?? 1;
+
+  function setFreq(next) {
+    if (next === "none") onChange(null);
+    else onChange({ freq: next, interval: interval || 1 });
+  }
+  function setInterval(next) {
+    const n = Math.max(1, Number(next) || 1);
+    if (!value) onChange({ freq: "daily", interval: n });
+    else onChange({ ...value, interval: n });
+  }
+
+  const label =
+    freq === "none"
+      ? "Does not repeat"
+      : `Repeats every ${interval} ${freq === "daily" ? (interval > 1 ? "days" : "day")
+        : freq === "weekly" ? (interval > 1 ? "weeks" : "week")
+          : (interval > 1 ? "months" : "month")}`;
+
+  return (
+    <div className={disabled ? "opacity-60 pointer-events-none" : ""}>
+      <label className="block text-xs text-gray-400 mb-1 mt-2">Repeat</label>
+      <div className="grid grid-cols-2 gap-2">
+        <Select
+          value={freq}
+          onValueChange={setFreq}
+          disabled={disabled}
+        >
+          <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+            <SelectValue placeholder="Repeat" />
+          </SelectTrigger>
+          <SelectContent className="bg-white">
+            <SelectItem value="none">None</SelectItem>
+            <SelectItem value="daily">Daily</SelectItem>
+            <SelectItem value="weekly">Weekly</SelectItem>
+            <SelectItem value="monthly">Monthly</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Input
+          type="number"
+          min={1}
+          value={interval}
+          onChange={(e) => setInterval(e.target.value)}
+          className="bg-transparent text-gray-100 border-gray-700"
+          disabled={disabled || freq === "none"}
+          placeholder="Interval"
+        />
+      </div>
+      <div className="mt-1 text-xs text-gray-400">{label}</div>
+    </div>
+  );
+}
+// ------------------------------------------------------------------
+
+
+export function KanbanBoard({ projectId = null }) {
+  // const { user: currentUser } = useAuth()
+  async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees, recurrence }) {
+    if (!CurrentUser?.id) {
+      console.error('[KanbanBoard] Cannot create task without an authenticated user')
+      return
+    }
     try {
       const res = await fetch(`${API}/tasks?archived=false&parent_id=null`, {
         method: "POST",
@@ -68,6 +138,7 @@ export function KanbanBoard() {
           project_id: projectId,
           assigned_to: Array.isArray(assignees) && assignees.length > 0 ? assignees.map(a => a.id) : [CurrentUser.id],
           tags,
+          recurrence: recurrence ?? null,
         }),
       })
       if (!res.ok) {
@@ -336,6 +407,7 @@ export function KanbanBoard() {
                 deadline: patch.deadline || null,
                 tags: patch.tags || [],
                 assigned_to,
+                recurrence: patch.recurrence ?? null,
               };
               console.log('[KanbanBoard] Sending payload to backend:', payload);
               const res = await fetch(`${API}/tasks/${panelTask.id}`, {
@@ -368,7 +440,7 @@ export function KanbanBoard() {
 }
 
 
-function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false  }) {
+function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
   const [childPanelTask, setChildPanelTask] = useState(null);
   const canEdit =
     Array.isArray(task.assignees) &&
@@ -384,6 +456,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false  }) {
   const [userSearch, setUserSearch] = useState("");
   const [userSearchResults, setUserSearchResults] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [recurrence, setRecurrence] = useState(task.recurrence ?? null);
 
   // Fetch user suggestions from backend on each keydown
   // Debounce timer for user search
@@ -503,7 +576,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false  }) {
   }
 
   return (
-        <>
+    <>
       {childPanelTask && (
         <TaskSidePanel
           task={childPanelTask}
@@ -520,6 +593,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false  }) {
               deadline: patch.deadline || null,
               tags: patch.tags || [],
               assigned_to,
+              recurrence: patch.recurrence ?? null,
             };
             try {
               const res = await fetch(`${API}/tasks/${childPanelTask.id}`, {
@@ -546,270 +620,273 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false  }) {
           nested
         />
       )}
-    <div className={nested ? "fixed inset-0 z-50" : "fixed inset-0 z-40"}>
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      {/* Panel */}
-      <div className="absolute right-0 top-0 h-full w-[420px] bg-[#1f2023] border-l border-gray-700 p-6 overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-white text-lg font-semibold">Edit task</h3>
-          <button onClick={onClose} className="text-gray-300 hover:text-white text-xl leading-none">×</button>
-        </div>
-
-        <div className="space-y-4">
-          {/* Title */}
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Title</label>
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="bg-transparent text-gray-100 border-gray-700"
-              disabled={!canEdit}
-            />
+      <div className={nested ? "fixed inset-0 z-50" : "fixed inset-0 z-40"}>
+        {/* Backdrop */}
+        <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+        {/* Panel */}
+        <div className="absolute right-0 top-0 h-full w-[420px] bg-[#1f2023] border-l border-gray-700 p-6 overflow-y-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-white text-lg font-semibold">Edit task</h3>
+            <button onClick={onClose} className="text-gray-300 hover:text-white text-xl leading-none">×</button>
           </div>
 
-          {/* Description */}
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Description</label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
-              className="bg-transparent text-gray-100 border-gray-700"
-              disabled={!canEdit}
-            />
-          </div>
-
-          {/* Priority */}
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Priority</label>
-            <Select value={priority} onValueChange={setPriority} disabled={!canEdit}>
-              <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
-                <SelectValue placeholder="Select priority" />
-              </SelectTrigger>
-              <SelectContent className="bg-white">
-                {["Low", "Medium", "High"].map((p) => (
-                  <SelectItem key={p} value={p}>
-                    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>{p}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {/* Tags */}
-          <div>
-            <label className="block text-xs text-gray-400">Tags</label>
-
-            {tags.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {tags.map((t, i) => (
-                  <span
-                    key={`${t}-${i}`}
-                    className="inline-flex items-center rounded-md px-2 py-0.5 mb-1 text-xs font-medium bg-gray-700 text-gray-200"
-                  >
-                    {t}
-                    <button
-                      type="button"
-                      className="ml-1 text-gray-300 hover:text-white disabled:opacity-50"
-                      onClick={() => canEdit && removeTagAt(i)}
-                      disabled={!canEdit}
-                      aria-label={`Remove ${t}`}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-
-            )}
-
-            <input
-              className="mt-1 w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === ",") {
-                  e.preventDefault()
-                  addTagFromInput()
-                }
-                if (e.key === "Backspace" && tagInput === "" && tags.length) {
-                  removeTagAt(tags.length - 1)
-                }
-              }}
-              disabled={!canEdit}
-              placeholder="Type a tag and press Enter (or comma)"
-            />
-          </div>
-
-          {/* Status */}
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Status</label>
-            <Select value={status} onValueChange={setStatus} disabled={!canEdit}>
-              <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
-                <SelectValue placeholder="Select status" />
-              </SelectTrigger>
-              <SelectContent className="bg-white">
-                <SelectItem value="pending">To do</SelectItem>
-                <SelectItem value="in_progress">Doing</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="blocked">Blocked</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {/* Assignees */}
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Assignees</label>
-            <div className="mb-2">
-              <input
-                type="text"
-                className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-                placeholder="Search users by name or email..."
-                value={userSearch}
-                onChange={handleUserSearchInput}
-                aria-busy={loadingUsers ? 'true' : 'false'}
-                autoComplete="off"
+          <div className="space-y-4">
+            {/* Title */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Title</label>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="bg-transparent text-gray-100 border-gray-700"
                 disabled={!canEdit}
               />
-              {canEdit && userSearchResults.length > 0 && (
-                <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
-                  {userSearchResults.map((u) => (
-                    <div
-                      key={u.id}
-                      className="px-3 py-2 hover:bg-gray-700 cursor-pointer text-gray-100"
-                      onClick={() => addAssignee(u)}
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Description</label>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={4}
+                className="bg-transparent text-gray-100 border-gray-700"
+                disabled={!canEdit}
+              />
+            </div>
+
+            {/* Priority */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Priority</label>
+              <Select value={priority} onValueChange={setPriority} disabled={!canEdit}>
+                <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent className="bg-white">
+                  {["Low", "Medium", "High"].map((p) => (
+                    <SelectItem key={p} value={p}>
+                      <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>{p}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Tags */}
+            <div>
+              <label className="block text-xs text-gray-400">Tags</label>
+
+              {tags.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {tags.map((t, i) => (
+                    <span
+                      key={`${t}-${i}`}
+                      className="inline-flex items-center rounded-md px-2 py-0.5 mb-1 text-xs font-medium bg-gray-700 text-gray-200"
                     >
-                      <span className="font-medium">{u.name}</span>
-                      <span className="ml-2 text-xs text-gray-400">{u.email}</span>
-                    </div>
+                      {t}
+                      <button
+                        type="button"
+                        className="ml-1 text-gray-300 hover:text-white disabled:opacity-50"
+                        onClick={() => canEdit && removeTagAt(i)}
+                        disabled={!canEdit}
+                        aria-label={`Remove ${t}`}
+                      >
+                        ×
+                      </button>
+                    </span>
                   ))}
                 </div>
+
+              )}
+
+              <input
+                className="mt-1 w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === ",") {
+                    e.preventDefault()
+                    addTagFromInput()
+                  }
+                  if (e.key === "Backspace" && tagInput === "" && tags.length) {
+                    removeTagAt(tags.length - 1)
+                  }
+                }}
+                disabled={!canEdit}
+                placeholder="Type a tag and press Enter (or comma)"
+              />
+            </div>
+
+            {/* Status */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Status</label>
+              <Select value={status} onValueChange={setStatus} disabled={!canEdit}>
+                <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent className="bg-white">
+                  <SelectItem value="pending">To do</SelectItem>
+                  <SelectItem value="in_progress">Doing</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="blocked">Blocked</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Assignees */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Assignees</label>
+              <div className="mb-2">
+                <input
+                  type="text"
+                  className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                  placeholder="Search users by name or email..."
+                  value={userSearch}
+                  onChange={handleUserSearchInput}
+                  aria-busy={loadingUsers ? 'true' : 'false'}
+                  autoComplete="off"
+                  disabled={!canEdit}
+                />
+                {canEdit && userSearchResults.length > 0 && (
+                  <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
+                    {userSearchResults.map((u) => (
+                      <div
+                        key={u.id}
+                        className="px-3 py-2 hover:bg-gray-700 cursor-pointer text-gray-100"
+                        onClick={() => addAssignee(u)}
+                      >
+                        <span className="font-medium">{u.name}</span>
+                        <span className="ml-2 text-xs text-gray-400">{u.email}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {assignees.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {assignees.map((a) => (
+                    <Badge
+                      key={a.id}
+                      className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200 flex items-center"
+                      title={a.name}
+                    >
+                      {a.name}
+                      <button
+                        type="button"
+                        className="ml-1 text-gray-300 hover:text-white"
+                        onClick={() => removeAssignee(a.id)}
+                        aria-label={`Remove ${a.name}`}
+                      >
+                        ×
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-xs text-gray-500">No assignees</span>
               )}
             </div>
-            {assignees.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {assignees.map((a) => (
-                  <Badge
-                    key={a.id}
-                    className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200 flex items-center"
-                    title={a.name}
-                  >
-                    {a.name}
-                    <button
-                      type="button"
-                      className="ml-1 text-gray-300 hover:text-white"
-                      onClick={() => removeAssignee(a.id)}
-                      aria-label={`Remove ${a.name}`}
-                    >
-                      ×
-                    </button>
-                  </Badge>
-                ))}
+            {/* Subtasks */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs text-gray-400">Subtasks</label>
+                <Button
+                  type="button"
+                  className="bg-gray-700 hover:bg-gray-600 text-white h-8 px-3"
+                  onClick={() => setIsSubtaskOpen(true)}
+                  disabled={!canEdit}
+                >
+                  + Add subtask
+                </Button>
               </div>
-            ) : (
-              <span className="text-xs text-gray-500">No assignees</span>
-            )}
-          </div>
-          {/* Subtasks */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs text-gray-400">Subtasks</label>
-              <Button
-                type="button"
-                className="bg-gray-700 hover:bg-gray-600 text-white h-8 px-3"
-                onClick={() => setIsSubtaskOpen(true)}
-                disabled={!canEdit}
-              >
-                + Add subtask
-              </Button>
+
+              {/* Table: Name + Status */}
+              {subtasks.length > 0 ? (
+                <div className="overflow-hidden rounded-md border border-gray-700">
+                  <table className="w-full text-sm">
+                    <thead className="bg-[#222428] text-gray-300">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium">Name</th>
+                        <th className="text-left px-3 py-2 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-700">
+                      {subtasks.map((st) => (
+                        <tr key={st.id} className="hover:bg-[#25272c]">
+                          <td className="px-3 py-2">
+                            <button
+                              type="button"
+                              className="text-left text-gray-100 hover:underline"
+                              onClick={() => setChildPanelTask(st)}
+                              title="Open subtask"
+                            >
+                              {st.title}
+                            </button>
+                          </td>                        <td className="px-3 py-2 text-gray-300">
+                            {prettyStatus(st.workflow || st.status || "pending")}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500">No subtasks yet.</div>
+              )}
+
+              {/* Modal */}
+              {isSubtaskOpen && (
+                <SubtaskDialog
+                  parentId={task.id}
+                  parentDeadline={deadline}
+                  onClose={() => setIsSubtaskOpen(false)}
+                  onCreated={(row) => {
+                    setSubtasks((prev) => [rowToCard(row), ...prev]);
+                    setIsSubtaskOpen(false);
+                  }}
+                />
+              )}
             </div>
 
-            {/* Table: Name + Status */}
-            {subtasks.length > 0 ? (
-              <div className="overflow-hidden rounded-md border border-gray-700">
-                <table className="w-full text-sm">
-                  <thead className="bg-[#222428] text-gray-300">
-                    <tr>
-                      <th className="text-left px-3 py-2 font-medium">Name</th>
-                      <th className="text-left px-3 py-2 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-700">
-                    {subtasks.map((st) => (
-                      <tr key={st.id} className="hover:bg-[#25272c]">
-                        <td className="px-3 py-2">
-                          <button
-                            type="button"
-                            className="text-left text-gray-100 hover:underline"
-                            onClick={() => setChildPanelTask(st)}
-                            title="Open subtask"
-                          >
-                            {st.title}
-                          </button>
-                        </td>                        <td className="px-3 py-2 text-gray-300">
-                          {prettyStatus(st.workflow || st.status || "pending")}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="text-xs text-gray-500">No subtasks yet.</div>
-            )}
-
-            {/* Modal */}
-            {isSubtaskOpen && (
-              <SubtaskDialog
-                parentId={task.id}
-                parentDeadline={deadline}
-                onClose={() => setIsSubtaskOpen(false)}
-                onCreated={(row) => {
-                  setSubtasks((prev) => [rowToCard(row), ...prev]);
-                  setIsSubtaskOpen(false);
-                }}
+            {/* Deadline */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Deadline</label>
+              <Input
+                type="date"
+                value={deadline || ""}
+                onChange={(e) => setDeadline(e.target.value)}
+                className="bg-transparent text-gray-100 border-gray-700"
+                disabled={!canEdit}
               />
-            )}
+            </div>
           </div>
 
-          {/* Deadline */}
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Deadline</label>
-            <Input
-              type="date"
-              value={deadline || ""}
-              onChange={(e) => setDeadline(e.target.value)}
-              className="bg-transparent text-gray-100 border-gray-700"
-              disabled={!canEdit}
-            />
+          <RecurrencePicker value={recurrence} onChange={setRecurrence} disabled={!canEdit} />
+
+
+          {/* Actions */}
+          <div className="mt-6 flex gap-2">
+            <Button
+              onClick={() => onSave({ title: title.trim(), description: description.trim(), priority, status, deadline, tags, assignees, recurrence })}
+              disabled={!canSave}
+              className="bg-white/90 text-black"
+            >
+              Save
+            </Button>
+            <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDelete}
+              className="bg-red-400 hover:bg-red-700 text-white ml-auto"
+              type="button" disabled={!canEdit}>
+              <Trash className="w-4 h-4 mr-1" /> Delete
+            </Button>
           </div>
-        </div>
 
-        {/* Actions */}
-        <div className="mt-6 flex gap-2">
-          <Button
-            onClick={() => onSave({ title: title.trim(), description: description.trim(), priority, status, deadline, tags, assignees })}
-            disabled={!canSave}
-            className="bg-white/90 text-black"
-          >
-            Save
-          </Button>
-          <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleDelete}
-            className="bg-red-400 hover:bg-red-700 text-white ml-auto"
-            type="button" disabled={!canEdit}>
-            <Trash className="w-4 h-4 mr-1" /> Delete
-          </Button>
-        </div>
-
-        {/* Comment Section */}
-        <div className="mt-8">
-          <CommentSection taskId={task.id} />
+          {/* Comment Section */}
+          <div className="mt-8">
+            <CommentSection taskId={task.id} />
+          </div>
         </div>
       </div>
-    </div>
     </>
   )
 }
@@ -822,6 +899,7 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
   const canSave = title.trim().length > 0 && priority !== ""
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState([]);
+  const [recurrence, setRecurrence] = useState(null);
 
   // --- Assignees & user search (copied from TaskSidePanel, trimmed) ---
   const [assignees, setAssignees] = useState([]);
@@ -1046,6 +1124,9 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
           </Select>
         </div>
       </div>
+      <div className="col-span-2 mt-1">
+        <RecurrencePicker value={recurrence} onChange={setRecurrence} />
+      </div>
 
       {/* Actions */}
       <div className="mt-4 flex items-center gap-2">
@@ -1067,7 +1148,8 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
               dueDate: dueDate || undefined,
               priority,
               tags,
-              assignees
+              assignees,
+              recurrence,
             })
           }
           disabled={!canSave}
@@ -1162,7 +1244,7 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
         return;
       }
       const assignedTo =
-     assignees.length > 0 ? assignees.map(a => a.id) : [CurrentUser.id];
+        assignees.length > 0 ? assignees.map(a => a.id) : [CurrentUser.id];
       const payload = {
         title: title.trim(),
         description: description.trim() || null,

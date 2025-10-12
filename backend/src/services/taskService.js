@@ -1,6 +1,7 @@
 ﻿const taskRepository = require('../repository/taskRepository');
 const projectRepository = require('../repository/projectRepository');
 const userRepository = require('../repository/userRepository');
+const crypto = require('crypto');
 
 /**
  * Task Service - Contains business logic for task operations
@@ -17,6 +18,28 @@ const userRepository = require('../repository/userRepository');
     .filter(Number.isFinite)
     .map(n => Math.trunc(n)); // int4[]
 }
+// Safely add days/weeks/months to a YYYY-MM-DD or ISO date
+function addIntervalFromBase(baseDate, freq, interval = 1) {
+  if (!baseDate) return null; // if there's no baseline, we won't set a due date
+  const d = new Date(baseDate);
+  if (isNaN(d)) return null;
+
+  if (freq === 'daily') d.setDate(d.getDate() + interval);
+  else if (freq === 'weekly') d.setDate(d.getDate() + 7 * interval);
+  else if (freq === 'monthly') {
+    const day = d.getDate();
+    d.setMonth(d.getMonth() + interval);
+    // JS handles month rollovers (e.g., Jan 31 -> Mar 2 for +1 month). That's OK for most task systems.
+  }
+
+  // return YYYY-MM-DD (same format you use for `deadline`)
+  return d.toISOString().slice(0, 10);
+}
+
+function isCompleted(status) {
+  return String(status || '').toLowerCase() === 'completed';
+}
+
 class TaskService {
   
   async listWithAssignees({ archived = false, parentId } = {}) {
@@ -110,6 +133,7 @@ class TaskService {
       assigned_to,
       tags,
       parent_id = null,  
+      recurrence 
     } = taskData;
 
     if (!title || title.trim() === '') {
@@ -165,7 +189,10 @@ class TaskService {
      ? null
      : Number(parent_id),
       created_at: new Date(),
-      updated_at: new Date()
+      updated_at: new Date(),
+      recurrence_freq: (recurrence && ['daily','weekly','monthly'].includes(recurrence.freq)) ? recurrence.freq : null,
+   recurrence_interval: recurrence?.interval ? Math.max(1, Number(recurrence.interval)) : 1,
+   recurrence_series_id: recurrence ? (crypto.randomUUID?.() || null) : null,
     };
 
     if (taskRepository.insert) {
@@ -177,78 +204,157 @@ class TaskService {
   /**
    * Update task - supports both approaches
    */
-  async updateTask(taskId, updates, requestingUserId) {
-    if (arguments.length === 2) {
-      const id = taskId;
-      const input = updates;
+    async updateTask(taskId, updates, requestingUserId) {
+    // ---- Always fetch current to detect the transition & read recurrence ----
+    const currentTask = await taskRepository.getTaskById(
+      typeof taskId === 'number' ? taskId : Number(taskId)
+    );
 
-      const patch = {};
-      if (input.title !== undefined) patch.title = input.title;
-      if (input.description !== undefined) patch.description = input.description;
-      if (input.priority !== undefined) patch.priority = String(input.priority).toLowerCase();
-      if (input.status !== undefined) patch.status = input.status;
-      if (input.deadline !== undefined) patch.deadline = input.deadline || null;
-      if (input.archived !== undefined) patch.archived = !!input.archived;
+    const twoArgOverload = (arguments.length === 2);
+    const input = twoArgOverload ? updates : updates;
 
-      if (input.assigned_to !== undefined) {
-        patch.assigned_to = normalizeAssignedTo(input.assigned_to);
-      }
-
-      // Handle tags
-      if (input.tags !== undefined) {
-        const tagsArr = Array.isArray(input.tags)
-          ? input.tags
-          : typeof input.tags === "string"
-            ? input.tags.split(",")
-            : [];
-        patch.tags = Array.from(
-          new Set(
-            tagsArr
-              .map((t) => String(t).trim())
-              .filter(Boolean)
-          )
-        );
-      }
-
-      patch.updated_at = new Date().toISOString();
-
-      if (taskRepository.updateById) {
-        const updated = await taskRepository.updateById(id, patch);
-        console.log(updated)// hydrated task
-        return updated;
-      } else {
-        const updated = await taskRepository.updateTask(id, patch); // hydrated task
-        return updated;
-      }
+    // Normalize patch (your existing logic, trimmed to keep the important bits)
+    const patch = {};
+    if (input.title !== undefined) patch.title = input.title;
+    if (input.description !== undefined) patch.description = input.description;
+    if (input.priority !== undefined) patch.priority = String(input.priority).toLowerCase();
+    if (input.status !== undefined) patch.status = input.status;
+    if (input.deadline !== undefined) patch.deadline = input.deadline || null;
+    if (input.archived !== undefined) patch.archived = !!input.archived;
+    if (input.tags !== undefined) {
+      const tagsArr = Array.isArray(input.tags)
+        ? input.tags
+        : typeof input.tags === "string" ? input.tags.split(",") : [];
+      patch.tags = Array.from(new Set(tagsArr.map(t => String(t).trim()).filter(Boolean)));
+    }
+    if (input.assigned_to !== undefined) {
+      const arr = Array.isArray(input.assigned_to) ? input.assigned_to : [];
+      patch.assigned_to = arr
+        .map(v => (typeof v === 'string' ? v.trim() : v))
+        .filter(v => v !== '' && v !== null && v !== undefined)
+        .map(Number)
+        .filter(Number.isFinite)
+        .map(n => Math.trunc(n));
     }
 
-    // Comprehensive approach with permissions
-    const currentTask = await taskRepository.getTaskById(taskId);
+    // Allow updating recurrence fields from the UI (optional)
+    if (input.recurrence) {
+      const { freq, interval } = input.recurrence || {};
+      patch.recurrence_freq = (freq === 'daily' || freq === 'weekly' || freq === 'monthly') ? freq : null;
+      patch.recurrence_interval = Math.max(1, Number(interval || 1));
+    } else if (input.recurrence === null) {
+      patch.recurrence_freq = null;
+      patch.recurrence_interval = 1;
+    }
 
-    // Check permissions if we have the method
-    if (requestingUserId && this._canUserUpdateTask) {
+    patch.updated_at = new Date().toISOString();
+
+    // ---- Optional permission check (comprehensive path) ----
+    if (!twoArgOverload && requestingUserId && this._canUserUpdateTask) {
       const canUpdate = await this._canUserUpdateTask(currentTask.project_id, requestingUserId);
-      if (!canUpdate) {
-        throw new Error('You do not have permission to update this task');
-      }
+      if (!canUpdate) throw new Error('You do not have permission to update this task');
     }
 
-    // Validate assigned users exist (if updating assignments)
- if (updates.assigned_to !== undefined) {
-   updates.assigned_to = normalizeAssignedTo(updates.assigned_to);
-   // Optional: validate users exist
-   if (updates.assigned_to.length > 0 && userRepository.getUsersByIds) {
-     await userRepository.getUsersByIds(updates.assigned_to);
-   }
- }
+    // ---- Do the update ----
+    const updated = taskRepository.updateById
+      ? await taskRepository.updateById(Number(taskId), patch)
+      : await taskRepository.updateTask(Number(taskId), patch);
 
-    const updateData = {
-      ...updates,
+    // ---- Recurrence: spawn a next instance only on transition -> completed ----
+    const beforeCompleted = isCompleted(currentTask.status);
+    const afterCompleted  = isCompleted(updated.status);
+
+    const hasRecurrence = !!currentTask.recurrence_freq;
+    const shouldSpawn = !beforeCompleted && afterCompleted && hasRecurrence;
+
+    if (!shouldSpawn) {
+      return updated; // nothing else to do
+    }
+
+    // Compute the next due date from the PREVIOUS due date (+ interval)
+    const freq = currentTask.recurrence_freq;
+    const interval = Math.max(1, Number(currentTask.recurrence_interval || 1));
+    const baseDue = currentTask.deadline; // NOTE: "previous due date", not completion time.
+    const nextDue = addIntervalFromBase(baseDue, freq, interval);
+
+    // Create the new instance (reset status, keep assignments/tags/etc.)
+    const seriesId = currentTask.recurrence_series_id || crypto.randomUUID?.() || null;
+
+    const newTaskPayload = {
+      title: currentTask.title,
+      description: currentTask.description,
+      priority: currentTask.priority,
+      status: 'pending',
+      deadline: nextDue,                   // critical: based on prev due date
+      project_id: currentTask.project_id,
+      assigned_to: Array.isArray(currentTask.assigned_to) ? currentTask.assigned_to : [],
+      tags: Array.isArray(currentTask.tags) ? currentTask.tags : [],
+      parent_id: null,                     // new root instance
+      archived: false,
+
+      // carry recurrence forward
+      recurrence_freq: currentTask.recurrence_freq,
+      recurrence_interval: interval,
+      recurrence_series_id: seriesId,
+
+      created_at: new Date(),
       updated_at: new Date()
     };
 
-    return await taskRepository.updateTask(taskId, updateData);
+    const newParent = await taskRepository.insert(newTaskPayload);
+
+    // Ensure the whole chain shares a series id
+    if (!currentTask.recurrence_series_id && seriesId) {
+      try {
+        await taskRepository.updateById(currentTask.id, { recurrence_series_id: seriesId });
+      } catch {/* non-blocking */}
+    }
+
+    // ---- Clone subtasks when a parent recurs ----
+    // “When a main task is recurring, the attached sub tasks also recur”
+    try {
+      const children = await taskRepository.getSubtasks(currentTask.id);
+
+      if (children.length) {
+        const childPayloads = children.map(ch => {
+          // subtask due date: (subtask.deadline || parent.deadline) + interval
+          const base = ch.deadline || baseDue;
+          const nextChildDue = addIntervalFromBase(base, freq, interval);
+
+          return {
+            title: ch.title,
+            description: ch.description,
+            priority: ch.priority,
+            status: 'pending',
+            deadline: nextChildDue,
+            project_id: ch.project_id ?? currentTask.project_id,
+            assigned_to: Array.isArray(ch.assigned_to) ? ch.assigned_to : [],
+            tags: Array.isArray(ch.tags) ? ch.tags : [],
+            parent_id: newParent.id,        // attach to the new parent
+            archived: false,
+
+            // inherit the parent’s recurrence chain
+            recurrence_freq: freq,
+            recurrence_interval: interval,
+            recurrence_series_id: seriesId,
+
+            created_at: new Date(),
+            updated_at: new Date()
+          };
+        });
+
+        await taskRepository.insertMany(childPayloads);
+      }
+    } catch (e) {
+      console.error('[recurrence] cloning subtasks failed:', e);
+      // Non-blocking – parent already created
+    }
+
+    // You may return the updated (completed) one or the new instance as well.
+    // Most UIs expect the response for the update call to be the item they updated:
+    return updated;
   }
+
 
   /**
    * Delete task
