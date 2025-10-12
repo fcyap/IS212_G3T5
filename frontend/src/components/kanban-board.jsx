@@ -907,6 +907,7 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
   const [userSearchResults, setUserSearchResults] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [userSearchDebounce, setUserSearchDebounce] = useState(null);
+  const canEdit = true;
 
   function addAssignee(user) {
     if (!assignees.some((a) => a.id === user.id)) {

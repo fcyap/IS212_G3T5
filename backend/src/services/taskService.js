@@ -18,9 +18,9 @@ const crypto = require('crypto');
     .filter(Number.isFinite)
     .map(n => Math.trunc(n)); // int4[]
 }
-// Safely add days/weeks/months to a YYYY-MM-DD or ISO date
+
 function addIntervalFromBase(baseDate, freq, interval = 1) {
-  if (!baseDate) return null; // if there's no baseline, we won't set a due date
+  if (!baseDate) return null; 
   const d = new Date(baseDate);
   if (isNaN(d)) return null;
 
@@ -29,7 +29,6 @@ function addIntervalFromBase(baseDate, freq, interval = 1) {
   else if (freq === 'monthly') {
     const day = d.getDate();
     d.setMonth(d.getMonth() + interval);
-    // JS handles month rollovers (e.g., Jan 31 -> Mar 2 for +1 month). That's OK for most task systems.
   }
 
   // return YYYY-MM-DD (same format you use for `deadline`)
@@ -268,7 +267,7 @@ class TaskService {
     const shouldSpawn = !beforeCompleted && afterCompleted && hasRecurrence;
 
     if (!shouldSpawn) {
-      return updated; // nothing else to do
+      return updated; 
     }
 
     // Compute the next due date from the PREVIOUS due date (+ interval)
@@ -285,14 +284,13 @@ class TaskService {
       description: currentTask.description,
       priority: currentTask.priority,
       status: 'pending',
-      deadline: nextDue,                   // critical: based on prev due date
+      deadline: nextDue,                
       project_id: currentTask.project_id,
       assigned_to: Array.isArray(currentTask.assigned_to) ? currentTask.assigned_to : [],
       tags: Array.isArray(currentTask.tags) ? currentTask.tags : [],
-      parent_id: null,                     // new root instance
+      parent_id: null,                   
       archived: false,
 
-      // carry recurrence forward
       recurrence_freq: currentTask.recurrence_freq,
       recurrence_interval: interval,
       recurrence_series_id: seriesId,
@@ -311,13 +309,11 @@ class TaskService {
     }
 
     // ---- Clone subtasks when a parent recurs ----
-    // “When a main task is recurring, the attached sub tasks also recur”
     try {
       const children = await taskRepository.getSubtasks(currentTask.id);
 
       if (children.length) {
         const childPayloads = children.map(ch => {
-          // subtask due date: (subtask.deadline || parent.deadline) + interval
           const base = ch.deadline || baseDue;
           const nextChildDue = addIntervalFromBase(base, freq, interval);
 
@@ -350,8 +346,6 @@ class TaskService {
       // Non-blocking – parent already created
     }
 
-    // You may return the updated (completed) one or the new instance as well.
-    // Most UIs expect the response for the update call to be the item they updated:
     return updated;
   }
 
