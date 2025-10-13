@@ -1077,12 +1077,9 @@ export function ProjectDetails({ projectId, onBack }) {
         <ProjectTimeline
           tasks={tasks}
           allUsers={allUsers}
-          onTaskUpdate={(updatedTask) => {
-            setTasks(prev => prev.map(task => task.id === updatedTask.id ? updatedTask : task))
-          }}
-          onTaskDelete={(taskId) => {
-            setTasks(prev => prev.filter(task => task.id !== taskId))
-          }}
+          projectMembers={members}
+          onUpdateTask={handleUpdateTask}
+          onDeleteTask={handleDeleteTask}
         />
       )}
       </div>
@@ -2028,7 +2025,7 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   )
 }
 
-function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
+function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDeleteTask }) {
   const scrollContainerRef = useRef(null)
   const headerScrollRef = useRef(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -2307,64 +2304,6 @@ function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
   }
 
   const todayPosition = getDatePosition(today)
-
-  const handleUpdateTask = async (taskData) => {
-    try {
-      const response = await fetch(`http://localhost:3001/api/tasks/${editingTask.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: taskData.title,
-          description: taskData.description || null,
-          priority: taskData.priority.toLowerCase(),
-          status: taskData.status,
-          deadline: taskData.deadline || null,
-          tags: taskData.tags || [],
-        })
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || `Failed to update task: ${response.status}`)
-      }
-
-      const updatedTask = await response.json()
-      // Call parent callback to update tasks
-      if (onTaskUpdate) {
-        onTaskUpdate(updatedTask)
-      }
-      setEditingTask(null)
-      toast.success('Task updated successfully!')
-    } catch (error) {
-      console.error('Error updating task:', error)
-      toast.error(`Error updating task: ${error.message}`)
-    }
-  }
-
-  const handleDeleteTask = async (taskId) => {
-    try {
-      const response = await fetch(`http://localhost:3001/api/tasks/${taskId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ archived: true }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || `Failed to delete task: ${response.status}`)
-      }
-
-      // Call parent callback to update tasks
-      if (onTaskDelete) {
-        onTaskDelete(taskId)
-      }
-      setEditingTask(null)
-      toast.success('Task deleted successfully!')
-    } catch (error) {
-      console.error('Error deleting task:', error)
-      toast.error(`Error deleting task: ${error.message}`)
-    }
-  }
 
   // Helper function to zoom while maintaining center point
   const zoomWithAnchor = useCallback((zoomFactor) => {
@@ -2882,9 +2821,10 @@ function ProjectTimeline({ tasks, allUsers, onTaskUpdate, onTaskDelete }) {
       <TaskEditingSidePanel
         task={editingTask}
         onClose={() => setEditingTask(null)}
-        onSave={handleUpdateTask}
-        onDelete={() => handleDeleteTask(editingTask.id)}
+        onSave={onUpdateTask}
+        onDelete={() => onDeleteTask(editingTask.id)}
         allUsers={allUsers}
+        projectMembers={projectMembers}
       />
     )}
     </>
