@@ -14,6 +14,7 @@ describe('TaskService', () => {
     jest.clearAllMocks();
     notificationService.createTaskAssignmentNotifications.mockResolvedValue({ notificationsSent: 0 });
     notificationService.createTaskRemovalNotifications = jest.fn().mockResolvedValue({ notificationsSent: 0 });
+    notificationService.createTaskUpdateNotifications = jest.fn().mockResolvedValue({ notificationsSent: 0 });
   });
 
   describe('listWithAssignees', () => {
@@ -302,8 +303,16 @@ describe('TaskService', () => {
         id: taskId,
         title: 'Updated Task',
         status: 'completed',
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        assigned_to: [1, 2]
       };
+
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        title: 'Original Task',
+        status: 'pending',
+        assigned_to: [1, 2]
+      });
 
       // Mock updateById method since service checks for it first
       taskRepository.updateById = jest.fn().mockResolvedValue(mockUpdatedTask);
@@ -316,26 +325,50 @@ describe('TaskService', () => {
         updated_at: expect.any(String)
       }));
       expect(result).toEqual(mockUpdatedTask);
+      expect(notificationService.createTaskUpdateNotifications).toHaveBeenCalledWith(expect.objectContaining({
+        task: mockUpdatedTask,
+        updatedById: null,
+        changes: expect.arrayContaining([
+          expect.objectContaining({ field: 'title' }),
+          expect.objectContaining({ field: 'status' })
+        ])
+      }));
     });
 
     test('should handle task not found', async () => {
       const taskId = 999;
       const updateData = { title: 'Updated Task' };
 
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        title: 'Existing Title',
+        status: 'pending',
+        assigned_to: [1]
+      });
+
       taskRepository.updateById = jest.fn().mockRejectedValue(new Error('Task not found'));
 
       await expect(taskService.updateTask(taskId, updateData))
         .rejects.toThrow('Task not found');
+      expect(notificationService.createTaskUpdateNotifications).not.toHaveBeenCalled();
     });
 
     test('should handle validation error', async () => {
       const taskId = 1;
       const updateData = { status: 'invalid_status' };
 
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        title: 'Existing Title',
+        status: 'pending',
+        assigned_to: [1]
+      });
+
       taskRepository.updateById = jest.fn().mockRejectedValue(new Error('Invalid status'));
 
       await expect(taskService.updateTask(taskId, updateData))
         .rejects.toThrow('Invalid status');
+      expect(notificationService.createTaskUpdateNotifications).not.toHaveBeenCalled();
     });
 
     test('should notify newly assigned users when assignees change', async () => {
@@ -372,6 +405,7 @@ describe('TaskService', () => {
         notificationType: 'reassignment'
       }));
       expect(notificationService.createTaskRemovalNotifications).not.toHaveBeenCalled();
+      expect(notificationService.createTaskUpdateNotifications).not.toHaveBeenCalled();
     });
 
     test('should notify removed users when assignees are removed', async () => {
@@ -407,6 +441,7 @@ describe('TaskService', () => {
         currentAssigneeIds: [1, 2]
       }));
       expect(notificationService.createTaskAssignmentNotifications).not.toHaveBeenCalled();
+      expect(notificationService.createTaskUpdateNotifications).not.toHaveBeenCalled();
     });
 
     test('should reject update when exceeding assignee limit', async () => {

@@ -319,7 +319,7 @@ describe('ProjectTasksController', () => {
 
       await projectTasksController.updateTask(req, res);
 
-      expect(projectTasksService.updateTask).toHaveBeenCalledWith('123', req.body);
+      expect(projectTasksService.updateTask).toHaveBeenCalledWith('123', req.body, null);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(mockResult);
     });

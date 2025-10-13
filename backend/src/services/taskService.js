@@ -241,6 +241,12 @@ class TaskService {
     if (arguments.length === 2) {
       const id = taskId;
       const input = updates;
+      let previousTask = null;
+      try {
+        previousTask = await taskRepository.getTaskById(id);
+      } catch (err) {
+        console.warn(`Unable to fetch existing task ${id} before update:`, err);
+      }
 
       const patch = {};
       if (input.title !== undefined) patch.title = input.title;
@@ -329,6 +335,12 @@ class TaskService {
               );
           }
         }
+        await this._sendTaskUpdateNotifications({
+          previousTask,
+          updatedTask: updated,
+          updatedFields: Object.keys(patch),
+          actorId: normalizedRequesterId ?? null
+        });
         return updated;
       } else {
         const updated = await taskRepository.updateTask(id, patch); // hydrated task
@@ -365,6 +377,12 @@ class TaskService {
               );
           }
         }
+        await this._sendTaskUpdateNotifications({
+          previousTask,
+          updatedTask: updated,
+          updatedFields: Object.keys(patch),
+          actorId: normalizedRequesterId ?? null
+        });
         return updated;
       }
     }
@@ -448,6 +466,12 @@ class TaskService {
           );
       }
     }
+    await this._sendTaskUpdateNotifications({
+      previousTask: currentTask,
+      updatedTask,
+      updatedFields: Object.keys(updates || {}),
+      actorId: normalizedRequesterId ?? null
+    });
     return updatedTask;
   }
 
@@ -571,8 +595,157 @@ class TaskService {
       return [];
     }
   }
+
+  async _sendTaskUpdateNotifications({ previousTask, updatedTask, updatedFields = [], actorId = null }) {
+    if (!previousTask || !updatedTask) {
+      return;
+    }
+
+    const changeDetails = this._calculateTaskUpdateChanges(previousTask, updatedTask, updatedFields);
+    if (!Array.isArray(changeDetails) || changeDetails.length === 0) {
+      return;
+    }
+
+    const assigneeIds = this._normalizeAssigneeIds(
+      updatedTask.assigned_to != null ? updatedTask.assigned_to : previousTask.assigned_to
+    );
+
+    if (assigneeIds.length === 0) {
+      return;
+    }
+
+    notificationService
+      .createTaskUpdateNotifications({
+        task: updatedTask,
+        changes: changeDetails,
+        updatedById: actorId,
+        assigneeIds
+      })
+      .catch((err) => console.error('Failed to send task update notifications:', err));
+  }
+
+  _calculateTaskUpdateChanges(previousTask, updatedTask, updatedFields = []) {
+    const trackedFields = TaskService.TRACKED_UPDATE_FIELDS;
+    const fieldsToEvaluate = trackedFields.filter((field) =>
+      updatedFields.length === 0 || updatedFields.includes(field)
+    );
+
+    const changes = [];
+    for (const field of fieldsToEvaluate) {
+      const before = this._normalizeFieldValue(field, previousTask?.[field]);
+      const after = this._normalizeFieldValue(field, updatedTask?.[field]);
+
+      if (this._areValuesEqual(before, after)) {
+        continue;
+      }
+
+      changes.push({
+        field,
+        label: TaskService.FIELD_LABELS[field] || field,
+        before: this._formatFieldValueForChange(field, previousTask?.[field]),
+        after: this._formatFieldValueForChange(field, updatedTask?.[field])
+      });
+    }
+    return changes;
+  }
+
+  _normalizeFieldValue(field, value) {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    switch (field) {
+      case 'title':
+      case 'description':
+        return value == null ? '' : String(value).trim();
+      case 'priority':
+      case 'status':
+        return value == null ? null : String(value).toLowerCase();
+      case 'deadline': {
+        if (!value) return null;
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
+      }
+      case 'project_id':
+        return value == null ? null : Number(value);
+      case 'archived':
+        return Boolean(value);
+      case 'tags': {
+        const arr = Array.isArray(value)
+          ? value
+          : typeof value === 'string'
+            ? value.split(',')
+            : [];
+        return arr
+          .map((t) => String(t).trim())
+          .filter(Boolean)
+          .map((t) => t.toLowerCase())
+          .sort()
+          .join('|');
+      }
+      default:
+        return value;
+    }
+  }
+
+  _areValuesEqual(a, b) {
+    return a === b;
+  }
+
+  _formatFieldValueForChange(field, value) {
+    if (value === undefined || value === null) {
+      return 'None';
+    }
+
+    switch (field) {
+      case 'deadline': {
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+      }
+      case 'archived':
+        return value ? 'Archived' : 'Active';
+      case 'tags': {
+        const arr = Array.isArray(value)
+          ? value
+          : typeof value === 'string'
+            ? value.split(',')
+            : [];
+        const normalized = arr
+          .map((t) => String(t).trim())
+          .filter(Boolean);
+        return normalized.length ? normalized.join(', ') : 'None';
+      }
+      case 'description': {
+        const text = String(value).trim();
+        if (!text) return 'None';
+        return text.length > 120 ? `${text.slice(0, 117)}...` : text;
+      }
+      default:
+        return String(value);
+    }
+  }
 }
 
 TaskService.MAX_ASSIGNEES = 5;
+TaskService.TRACKED_UPDATE_FIELDS = [
+  'title',
+  'description',
+  'priority',
+  'status',
+  'deadline',
+  'project_id',
+  'archived',
+  'tags'
+];
+TaskService.FIELD_LABELS = {
+  title: 'Title',
+  description: 'Description',
+  priority: 'Priority',
+  status: 'Status',
+  deadline: 'Deadline',
+  project_id: 'Project',
+  archived: 'Archived',
+  tags: 'Tags'
+};
 
 module.exports = new TaskService();
