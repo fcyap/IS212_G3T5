@@ -456,6 +456,119 @@ class NotificationService {
   }
 
   /**
+   * Create notifications when a task is updated
+   * @param {Object} params - Task update notification parameters
+   * @param {Object} params.task - Updated task object
+   * @param {Array<Object>} params.changes - List of change descriptors
+   * @param {number|null} params.updatedById - User ID of the actor (if available)
+   * @param {Array<number>} params.assigneeIds - Current task assignee IDs
+   */
+  async createTaskUpdateNotifications({
+    task,
+    changes,
+    updatedById = null,
+    assigneeIds = []
+  }) {
+    try {
+      if (!task || !task.id) {
+        console.warn('Task details missing for update notification, skipping');
+        return { notificationsSent: 0 };
+      }
+
+      if (!Array.isArray(changes) || changes.length === 0) {
+        return { notificationsSent: 0 };
+      }
+
+      const normalizedAssigneeIds = Array.from(
+        new Set(
+          (Array.isArray(assigneeIds) && assigneeIds.length
+            ? assigneeIds
+            : Array.isArray(task.assigned_to)
+              ? task.assigned_to
+              : []
+          )
+            .map((value) => Number(value))
+            .filter((value) => Number.isFinite(value))
+            .map((value) => Math.trunc(value))
+        )
+      );
+
+      if (normalizedAssigneeIds.length === 0) {
+        console.log('No assignees found for task update notification');
+        return { notificationsSent: 0 };
+      }
+
+      const recipientIds = normalizedAssigneeIds.filter(
+        (id) => updatedById == null || id !== updatedById
+      );
+      if (recipientIds.length === 0) {
+        console.log('No recipients for task update notification after filtering actor');
+        return { notificationsSent: 0 };
+      }
+
+      const userMap = await this._fetchUsersByIds([
+        ...recipientIds,
+        updatedById != null ? updatedById : undefined
+      ]);
+
+      const updaterUser = updatedById != null ? userMap.get(updatedById) : null;
+      const updaterName = updaterUser?.name || 'A team member';
+
+      const changeLines = changes
+        .map((change) => this._formatTaskChangeLine(change))
+        .filter(Boolean);
+
+      if (changeLines.length === 0) {
+        console.log('No formatted change lines for task update notification');
+        return { notificationsSent: 0 };
+      }
+
+      const notifications = [];
+      for (const recipientId of recipientIds) {
+        const recipient = userMap.get(recipientId);
+        if (!recipient?.email) {
+          console.warn(`Skipping task update notification for user ${recipientId} due to missing email`);
+          continue;
+        }
+
+        const messageLines = [
+          `${updaterName} updated "${task.title}".`,
+          ...changeLines.map((line) => `- ${line}`)
+        ];
+
+        const notificationData = {
+          notif_types: 'task_modif',
+          message: messageLines.join('\n'),
+          creator_id: updatedById || null,
+          recipient_emails: recipient.email,
+          created_at: new Date().toISOString()
+        };
+
+        const notification = await this._createNotificationWithFallback(notificationData);
+        notifications.push(notification);
+
+        await this.sendTaskUpdateEmail({
+          recipient,
+          task,
+          updaterName,
+          changeLines
+        });
+      }
+
+      console.log(
+        `Created ${notifications.length} task update notifications for task ${task.id}`
+      );
+      return {
+        notificationsSent: notifications.length,
+        notifications
+      };
+    } catch (error) {
+      console.error('Error creating task update notifications:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Send comment notification email via SendGrid
    */
   async sendCommentEmail(recipient, task, commenterName, commentPreview, commentId) {
@@ -524,7 +637,7 @@ class NotificationService {
 
       const isReassignment = notificationType === 'reassignment';
       const subject = isReassignment
-        ? `Task updated: ${task.title}`
+        ? `Task reassignment: ${task.title}`
         : `You have been assigned to "${task.title}"`;
 
       const msg = {
@@ -622,6 +735,69 @@ class NotificationService {
     }
   }
 
+  /**
+   * Send task update email via SendGrid
+   * @param {Object} params
+   * @param {Object} params.recipient - Recipient user object
+   * @param {Object} params.task - Task details
+   * @param {String} params.updaterName - Name of the user updating the task
+   * @param {Array<String>} params.changeLines - Formatted change descriptions
+   */
+  async sendTaskUpdateEmail({ recipient, task, updaterName, changeLines = [] }) {
+    try {
+      if (!process.env.SENDGRID_API_KEY) {
+        console.warn('SendGrid API key not configured, skipping email notification');
+        return;
+      }
+
+      const changesHtml = changeLines.length
+        ? `
+          <ul>
+            ${changeLines.map((line) => `<li>${line}</li>`).join('')}
+          </ul>
+        `
+        : '<p>Changes were applied to this task.</p>';
+
+      const msg = {
+        to: recipient.email,
+        from: process.env.FROM_EMAIL || 'noreply@yourapp.com',
+        subject: `Task updated: ${task.title}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">Task Updated</h2>
+            <p>Hello ${recipient.name},</p>
+            <p><strong>${updaterName}</strong> updated the task <strong>"${task.title}"</strong>.</p>
+            ${changesHtml}
+            ${
+              task.description
+                ? `<div style="background-color: #f8f9fa; padding: 15px; border-left: 4px solid #17a2b8; margin: 20px 0;">
+                     ${task.description}
+                   </div>`
+                : ''
+            }
+            <div style="margin: 30px 0;">
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tasks/${task.id}"
+                 style="background-color: #17a2b8; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                View Task
+              </a>
+            </div>
+            <p>Please review the updates at your earliest convenience.</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+            <p style="color: #666; font-size: 12px;">
+              This is an automated message. Please do not reply to this email.
+            </p>
+          </div>
+        `
+      };
+
+      const result = await sgMail.send(msg);
+      console.log('Task update email sent via SendGrid:', result[0]?.headers?.['x-message-id']);
+    } catch (error) {
+      console.error('Error sending task update email via SendGrid:', error);
+      // Don't throw error for email failures - notification is still created
+    }
+  }
+
   async _createNotificationWithFallback(notificationData) {
     try {
       return await notificationRepository.create(notificationData);
@@ -697,6 +873,30 @@ class NotificationService {
     } catch (err) {
       return deadline;
     }
+  }
+
+  _formatTaskChangeLine(change) {
+    if (!change) {
+      return null;
+    }
+
+    const label = change.label || change.field || 'Field';
+    const before = change.before ?? 'None';
+    const after = change.after ?? 'None';
+
+    if (before === after) {
+      return null;
+    }
+
+    if (before === 'None' && after !== 'None') {
+      return `${label}: set to ${after}`;
+    }
+
+    if (after === 'None' && before !== 'None') {
+      return `${label}: cleared (was ${before})`;
+    }
+
+    return `${label}: ${before} → ${after}`;
   }
 
   /**

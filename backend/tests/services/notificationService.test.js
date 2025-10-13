@@ -249,6 +249,95 @@ describe('notificationService', () => {
     });
   });
 
+  describe('createTaskUpdateNotifications', () => {
+    const task = {
+      id: 42,
+      title: 'Refine Requirements',
+      description: 'Align with stakeholder feedback',
+      assigned_to: [300, 301, 302]
+    };
+
+    const changes = [
+      { field: 'status', label: 'Status', before: 'pending', after: 'in_progress' },
+      { field: 'deadline', label: 'Deadline', before: 'None', after: '2025-09-01T00:00:00.000Z' }
+    ];
+
+    let fallbackSpy;
+    let updateEmailSpy;
+
+    beforeEach(() => {
+      userRepository.getUsersByIds.mockResolvedValue([
+        { id: 300, name: 'Actor', email: 'actor@example.com' },
+        { id: 301, name: 'Casey', email: 'casey@example.com' },
+        { id: 302, name: 'Drew', email: 'drew@example.com' }
+      ]);
+      fallbackSpy = jest
+        .spyOn(notificationService, '_createNotificationWithFallback')
+        .mockImplementation(async (payload) => ({ id: Date.now(), ...payload }));
+      updateEmailSpy = jest
+        .spyOn(notificationService, 'sendTaskUpdateEmail')
+        .mockResolvedValue();
+    });
+
+    afterEach(() => {
+      fallbackSpy.mockRestore();
+      updateEmailSpy.mockRestore();
+    });
+
+    it('creates notifications for assignees excluding the actor', async () => {
+      const result = await notificationService.createTaskUpdateNotifications({
+        task,
+        changes,
+        updatedById: 300,
+        assigneeIds: [300, 301, 302]
+      });
+
+      expect(result.notificationsSent).toBe(2);
+      expect(userRepository.getUsersByIds).toHaveBeenCalledWith(expect.arrayContaining([300, 301, 302]));
+      expect(fallbackSpy).toHaveBeenCalledTimes(2);
+      expect(updateEmailSpy).toHaveBeenCalledTimes(2);
+      expect(fallbackSpy.mock.calls[0][0]).toMatchObject({
+        notif_types: 'task_modif',
+        recipient_emails: 'casey@example.com',
+        creator_id: 300
+      });
+      expect(fallbackSpy.mock.calls[0][0].message).toContain('updated "Refine Requirements"');
+      expect(fallbackSpy.mock.calls[0][0].message).toContain('- Status');
+    });
+
+    it('returns zero notifications when no changes are provided', async () => {
+      const result = await notificationService.createTaskUpdateNotifications({
+        task,
+        changes: [],
+        updatedById: 300,
+        assigneeIds: [300, 301]
+      });
+
+      expect(result.notificationsSent).toBe(0);
+      expect(fallbackSpy).not.toHaveBeenCalled();
+      expect(updateEmailSpy).not.toHaveBeenCalled();
+    });
+
+    it('skips recipients without email addresses', async () => {
+      userRepository.getUsersByIds.mockResolvedValue([
+        { id: 300, name: 'Actor', email: 'actor@example.com' },
+        { id: 301, name: 'Casey' }, // missing email
+        { id: 302, name: 'Drew', email: 'drew@example.com' }
+      ]);
+
+      const result = await notificationService.createTaskUpdateNotifications({
+        task,
+        changes,
+        updatedById: 300,
+        assigneeIds: [300, 301, 302]
+      });
+
+      expect(result.notificationsSent).toBe(1);
+      expect(fallbackSpy).toHaveBeenCalledTimes(1);
+      expect(fallbackSpy.mock.calls[0][0].recipient_emails).toBe('drew@example.com');
+    });
+  });
+
   describe('_createNotificationWithFallback', () => {
     it('retries with general type when enum error is thrown', async () => {
       notificationRepository.create
