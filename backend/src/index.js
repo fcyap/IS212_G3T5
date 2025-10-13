@@ -8,7 +8,6 @@ const jwt = require('jsonwebtoken');
 
 const { csrf } = require('lusca');
 // Import UAA modules
-const { sql } = require('./db');
 const { authRoutes } = require('./routes/auth');
 const { authMiddleware } = require('./middleware/auth');
 
@@ -153,10 +152,11 @@ async function initializeApp() {
     });
   // Build a single auth middleware that either enforces session
   // or (when AUTH_BYPASS=true) fakes req.user if no session.
-  const authMw = devBypass(requireSession);
+  // Use UAA authentication middleware instead of JWT-based auth
+  const authMw = authMiddleware();
 
   // UAA Auth endpoints (unprotected)
-  app.use('/auth', authRoutes(sql));
+  app.use('/auth', authRoutes());
 
   // -------------------- Dev session routes --------------------
   app.post('/dev/session/start', (req, res) => {
@@ -189,7 +189,7 @@ async function initializeApp() {
   app.use('/tasks', authMw, tasksRouter);
 
   // UAA Protected route example
-  app.get('/protected/ping', authMiddleware(sql), (req, res) => {
+  app.get('/protected/ping', authMiddleware(), (req, res) => {
     res.json({ ok: true, at: new Date().toISOString(), user: res.locals.session });
   });
 

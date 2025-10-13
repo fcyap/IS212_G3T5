@@ -1,15 +1,21 @@
 /*path: backend/src/auth.roles*/
+const { supabase } = require('../supabase-client');
 
-const getEffectiveRole = async (sql, userId) => {
+const getEffectiveRole = async (userId) => {
   try {
     // Get user role from the users table directly
-    const users = await sql/*sql*/`
-      select role, hierarchy, division, department from public.users
-      where id = ${userId}
-      limit 1
-    `;
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('role, hierarchy, division, department')
+      .eq('id', userId)
+      .limit(1);
     
-    const user = users[0];
+    if (error) {
+      console.error('Database query error:', error);
+      return { label: 'Staff', level: 1, hierarchy: 1, division: null, department: null };
+    }
+    
+    const user = users?.[0];
     if (!user) {
       return { label: 'Staff', level: 1, hierarchy: 1, division: null, department: null };
     }

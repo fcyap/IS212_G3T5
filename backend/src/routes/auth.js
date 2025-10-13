@@ -6,8 +6,9 @@ const { createSession, deleteSession } = require('../auth/sessions');
 const { getEffectiveRole } = require('../auth/roles');
 const { cookieName } = require('../middleware/auth');
 const { authMiddleware } = require('../middleware/auth'); // <-- add this
+const { supabase } = require('../supabase-client');
 
-function authRoutes(sql) {
+function authRoutes() {
   const router = express.Router();
 
   router.post('/login', async (req, res) => {
@@ -20,13 +21,18 @@ function authRoutes(sql) {
     }
 
     console.log('Querying database for user...');
-    const users = await sql/*sql*/`
-      select id, email, password_hash, name, role, hierarchy, division, department
-      from public.users
-      where lower(email) = lower(${email})
-      limit 1
-    `;
-    const user = users[0];
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('id, email, password_hash, name, role, hierarchy, division, department')
+      .ilike('email', email)
+      .limit(1);
+    
+    if (error) {
+      console.error('Database query error:', error);
+      return res.status(500).json({ error: 'Database query failed' });
+    }
+    
+    const user = users?.[0];
     console.log('User found:', user ? 'Yes' : 'No');
 
     // Important guard: if no user OR no bcrypt hash, return 401 (not 500)
@@ -43,7 +49,7 @@ function authRoutes(sql) {
     }
 
     console.log('Creating session...');
-    const { token, expiresAt } = await createSession(sql, user.id);
+    const { token, expiresAt } = await createSession(user.id);
     res.cookie(cookieName, token, {
       httpOnly: true,
       sameSite: 'lax',
@@ -91,21 +97,23 @@ function authRoutes(sql) {
       console.log('DEBUG: Testing database connection...');
       
       // Test database connection first
-      const testQuery = await sql`SELECT 1 as test`;
+      const { data: testQuery, error: testError } = await supabase
+        .from('users')
+        .select('id')
+        .limit(1);
       console.log('DEBUG: Database connection OK:', testQuery);
       
       // Try to find user
       console.log('DEBUG: Looking for user with email:', email);
-      const users = await sql`
-        SELECT id, email, password_hash, role
-        FROM public.users
-        WHERE lower(email) = lower(${email})
-        LIMIT 1
-      `;
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id, email, password_hash, role')
+        .ilike('email', email)
+        .limit(1);
       
       console.log('DEBUG: User query result:', users);
       
-      if (users.length === 0) {
+      if (!users || users.length === 0) {
         console.log('DEBUG: No user found');
         return res.status(401).json({ error: 'User not found' });
       }
@@ -148,7 +156,7 @@ function authRoutes(sql) {
 
   router.post('/logout', async (req, res) => {
     const token = req.cookies?.[cookieName];
-    if (token) await deleteSession(sql, token);
+    if (token) await deleteSession(token);
     res.clearCookie(cookieName, { path: '/' });
     return res.json({ ok: true });
   });
@@ -245,24 +253,28 @@ function authRoutes(sql) {
   });
 
   // PROTECT THIS:
-  router.get('/me', authMiddleware(sql), async (req, res) => {
+  router.get('/me', authMiddleware(), async (req, res) => {
     try {
       const { session } = res.locals;
       
       // Get complete user information
-      const users = await sql/*sql*/`
-        select id, email, name, role, hierarchy, division, department
-        from public.users
-        where id = ${session.user_id}
-        limit 1
-      `;
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('id, email, name, role, hierarchy, division, department')
+        .eq('id', session.user_id)
+        .limit(1);
       
-      const user = users[0];
+      if (error) {
+        console.error('Database query error:', error);
+        return res.status(500).json({ error: 'Database query failed' });
+      }
+      
+      const user = users?.[0];
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
       
-      const role = await getEffectiveRole(sql, session.user_id);
+      const role = await getEffectiveRole(session.user_id);
       return res.json({
         user: {
           id: user.id,

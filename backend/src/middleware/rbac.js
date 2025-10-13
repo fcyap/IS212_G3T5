@@ -1,38 +1,71 @@
 // src/middleware/rbac.js
 const { canCreateProject, canEditProject, canAddProjectMembers, canViewUserData } = require('../auth/roles');
+const { supabase } = require('../supabase-client');
 
 /**
  * Middleware to check if user can create projects
  */
-const requireProjectCreation = (req, res, next) => {
-  const user = res.locals.session || req.user;
+const requireProjectCreation = async (req, res, next) => {
+  const session = res.locals.session || req.user;
   
-  if (!user) {
+  console.log('requireProjectCreation middleware - session:', session);
+  
+  if (!session) {
+    console.log('No session found');
     return res.status(401).json({ error: 'Authentication required' });
   }
   
-  // Get user data from database to ensure we have latest role/hierarchy info
-  const userData = {
-    id: user.user_id || user.id,
-    role: user.role || 'staff',
-    hierarchy: user.hierarchy || 1,
-    division: user.division
-  };
-  
-  if (!canCreateProject(userData)) {
-    return res.status(403).json({ 
-      error: 'Access denied', 
-      message: 'Only managers and admins can create projects' 
-    });
+  try {
+    // Get full user data from database using session user_id
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('id, role, hierarchy, division, department')
+      .eq('id', session.user_id)
+      .limit(1);
+    
+    if (error) {
+      console.error('Database query error:', error);
+      return res.status(500).json({ error: 'Database query failed' });
+    }
+    
+    const user = users?.[0];
+    if (!user) {
+      console.log('User not found in database:', session.user_id);
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    console.log('requireProjectCreation - user from database:', user);
+    
+    // Build user data for RBAC check
+    const userData = {
+      id: user.id,
+      role: user.role || 'staff',
+      hierarchy: user.hierarchy || 1,
+      division: user.division
+    };
+    
+    console.log('requireProjectCreation - userData for RBAC:', userData);
+    
+    if (!canCreateProject(userData)) {
+      console.log('canCreateProject returned false for user:', userData);
+      return res.status(403).json({ 
+        error: 'Access denied', 
+        message: 'Only managers can create projects' 
+      });
+    }
+    
+    console.log('canCreateProject passed, proceeding to next()');
+    next();
+  } catch (error) {
+    console.error('Error in requireProjectCreation:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-  
-  next();
 };
 
 /**
  * Middleware to check if user can edit projects
  */
-const requireProjectEdit = async (sql) => {
+const requireProjectEdit = () => {
   return async (req, res, next) => {
     try {
       const user = res.locals.session || req.user;
@@ -43,15 +76,22 @@ const requireProjectEdit = async (sql) => {
       }
       
       // Get project and creator info
-      const projects = await sql/*sql*/`
-        select p.id, p.creator_id, u.role, u.hierarchy, u.division
-        from public.projects p
-        left join public.users u on u.id = p.creator_id
-        where p.id = ${projectId}
-        limit 1
-      `;
+      const { data: projects, error } = await supabase
+        .from('projects')
+        .select(`
+          id, 
+          creator_id,
+          users!inner (role, hierarchy, division)
+        `)
+        .eq('id', projectId)
+        .limit(1);
       
-      if (!projects.length) {
+      if (error) {
+        console.error('Database query error:', error);
+        return res.status(500).json({ error: 'Database query failed' });
+      }
+      
+      if (!projects?.length) {
         return res.status(404).json({ error: 'Project not found' });
       }
       
@@ -64,9 +104,9 @@ const requireProjectEdit = async (sql) => {
       };
       
       const projectCreator = {
-        role: project.role,
-        hierarchy: project.hierarchy,
-        division: project.division
+        role: project.users.role,
+        hierarchy: project.users.hierarchy,
+        division: project.users.division
       };
       
       if (!canEditProject(userData, project, projectCreator)) {
@@ -87,7 +127,7 @@ const requireProjectEdit = async (sql) => {
 /**
  * Middleware to check if user can add members to projects
  */
-const requireAddProjectMembers = async (sql) => {
+const requireAddProjectMembers = () => {
   return async (req, res, next) => {
     try {
       const user = res.locals.session || req.user;
@@ -98,14 +138,18 @@ const requireAddProjectMembers = async (sql) => {
       }
       
       // Get project info
-      const projects = await sql/*sql*/`
-        select id, creator_id
-        from public.projects
-        where id = ${projectId}
-        limit 1
-      `;
+      const { data: projects, error } = await supabase
+        .from('projects')
+        .select('id, creator_id')
+        .eq('id', projectId)
+        .limit(1);
       
-      if (!projects.length) {
+      if (error) {
+        console.error('Database query error:', error);
+        return res.status(500).json({ error: 'Database query failed' });
+      }
+      
+      if (!projects?.length) {
         return res.status(404).json({ error: 'Project not found' });
       }
       
@@ -135,7 +179,7 @@ const requireAddProjectMembers = async (sql) => {
 /**
  * Middleware to filter projects based on user hierarchy and division
  */
-const filterVisibleProjects = async (sql) => {
+const filterVisibleProjects = () => {
   return async (req, res, next) => {
     try {
       const user = res.locals.session || req.user;
@@ -145,14 +189,18 @@ const filterVisibleProjects = async (sql) => {
       }
       
       // Get current user's complete info
-      const users = await sql/*sql*/`
-        select id, role, hierarchy, division, department
-        from public.users
-        where id = ${user.user_id || user.id}
-        limit 1
-      `;
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('id, role, hierarchy, division, department')
+        .eq('id', user.user_id || user.id)
+        .limit(1);
       
-      if (!users.length) {
+      if (error) {
+        console.error('Database query error:', error);
+        return res.status(500).json({ error: 'Database query failed' });
+      }
+      
+      if (!users?.length) {
         return res.status(404).json({ error: 'User not found' });
       }
       

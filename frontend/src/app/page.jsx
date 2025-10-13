@@ -10,6 +10,7 @@ import { ProjectDetails } from "@/components/project-details"
 import { CommentBox } from "@/components/task-comment/task-comment"
 import { CommentItem } from "@/components/task-comment/task-comment-item"
 import { KanbanProvider } from "@/components/kanban-context"
+import { SessionDebug } from "@/components/session-debug"
 
 function RoleBadge() {
   const { role } = useSession() || {};
@@ -110,6 +111,7 @@ function ProtectedProjectTimelinePage() {
           )}
         </KanbanProvider>
       </div>
+      <SessionDebug />
     </div>
   );
 }
