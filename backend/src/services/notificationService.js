@@ -906,12 +906,12 @@ class NotificationService {
    * @param {Number} offset - Number of notifications to skip
    * @returns {Array} List of notifications
    */
-  async getUserNotifications(userEmail, limit = 50, offset = 0) {
+  async getUserNotifications(userEmail, limit = 50, offset = 0, includeDismissed = true) {
     if (!userEmail) {
       throw new Error('User email is required');
     }
 
-    const filters = { limit, offset };
+    const filters = { limit, offset, includeDismissed };
     return await notificationRepository.getByRecipientEmail(userEmail, filters);
   }
 
@@ -1307,6 +1307,24 @@ class NotificationService {
 
     } catch (error) {
       console.error('Error sending deadline email notification:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mark a notification as dismissed
+   * @param {Number} notifId - Notification ID
+   * @returns {Object} Updated notification
+   */
+  async markAsDismissed(notifId) {
+    try {
+      if (!notifId) {
+        throw new Error('Notification ID is required');
+      }
+
+      return await notificationRepository.markAsDismissed(notifId);
+    } catch (error) {
+      console.error('Error marking notification as dismissed:', error);
       throw error;
     }
   }

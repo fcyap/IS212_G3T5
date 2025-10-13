@@ -15,6 +15,7 @@ const supabase = require('../utils/supabase');
  */
 class NotificationRepository {
 
+
     /**
      * Create a new notification
      * @param {Object} notificationData - Notification details
@@ -114,7 +115,7 @@ class NotificationRepository {
     /**
      * Get notifications for a specific recipient email
      * @param {String} recipientEmail - Recipient's email address
-     * @param {Object} filters - Optional filters (limit, offset)
+     * @param {Object} filters - Optional filters (limit, offset, includeDismissed)
      * @returns {Array} List of notifications
      */
     async getByRecipientEmail(recipientEmail, filters = {}) {
@@ -129,6 +130,11 @@ class NotificationRepository {
             .like('recipient_emails', `%${recipientEmail}%`)
             .gte('created_at', ninetyDaysAgo.toISOString()) // Only get notifications from last 90 days
             .order('created_at', { ascending: false });
+
+        // Only filter out dismissed notifications if explicitly requested
+        if (filters.includeDismissed === false) {
+            query = query.eq('dismissed', false);
+        }
 
         if (filters.limit) {
             query = query.limit(filters.limit);
@@ -324,6 +330,26 @@ class NotificationRepository {
         }
 
         return data || [];
+    }
+
+    /**
+     * Mark a notification as dismissed
+     * @param {Number} notifId - Notification ID
+     * @returns {Object} Updated notification
+     */
+    async markAsDismissed(notifId) {
+        const { data, error } = await supabase
+            .from('notifications')
+            .update({ dismissed: true })
+            .eq('notif_id', notifId)
+            .select('*')
+            .single();
+
+        if (error) {
+            throw new Error(`Database error: ${error.message}`);
+        }
+
+        return data;
     }
 }
 

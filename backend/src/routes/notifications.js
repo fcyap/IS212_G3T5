@@ -3,7 +3,8 @@ const router = express.Router();
 const {
   getUserNotifications,
   getNotificationsByCreator,
-  createTestNotification
+  createTestNotification,
+  dismissNotification
 } = require('../controllers/notificationController');
 
 // Get user notifications
@@ -14,5 +15,8 @@ router.get('/created', getNotificationsByCreator);
 
 // Create a test notification (for testing purposes)
 router.post('/test', createTestNotification);
+
+// Dismiss a notification
+router.patch('/:notifId/dismiss', dismissNotification);
 
 module.exports = router;
