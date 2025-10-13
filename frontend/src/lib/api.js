@@ -368,8 +368,8 @@ class UserService {
 }
 
 class NotificationService {
-  async getUserNotifications(limit = 50, offset = 0) {
-    const response = await fetch(`${API_BASE_URL}/api/notifications?limit=${limit}&offset=${offset}`, {
+  async getUserNotifications(limit = 50, offset = 0, includeDismissed = true) {
+    const response = await fetch(`${API_BASE_URL}/api/notifications?limit=${limit}&offset=${offset}&includeDismissed=${includeDismissed}`, {
       credentials: 'include',
     });
     if (!response.ok) {
@@ -392,6 +392,26 @@ class NotificationService {
     const data = await response.json();
     if (!data.success) {
       throw new Error(data.message || 'Failed to fetch created notifications');
+    }
+    return data;
+  }
+
+  async dismissNotification(notifId) {
+    const csrfToken = await getCsrfToken();
+    const response = await fetch(`${API_BASE_URL}/api/notifications/${notifId}/dismiss`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken,
+      },
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to dismiss notification: ${response.statusText}`);
+    }
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to dismiss notification');
     }
     return data;
   }

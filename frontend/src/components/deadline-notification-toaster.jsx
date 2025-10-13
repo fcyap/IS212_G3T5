@@ -20,46 +20,6 @@ export function DeadlineNotificationToaster() {
   const { user } = useAuth()
   const router = useRouter()
   const [lastChecked, setLastChecked] = useState(null)
-  const [dismissedNotifications, setDismissedNotifications] = useState(new Set())
-
-  // Load dismissed notifications from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem('dismissedInAppNotifications')
-    if (stored) {
-      try {
-        const dismissedIds = JSON.parse(stored)
-        // Ensure all IDs are numbers for consistent comparison
-        const normalizedIds = dismissedIds.map(id => Number(id))
-        console.log('Loading dismissed IDs from localStorage:', normalizedIds)
-        setDismissedNotifications(new Set(normalizedIds))
-      } catch (error) {
-        console.error('Error parsing dismissed notifications:', error)
-      }
-    }
-  }, [])
-
-  // Save dismissed notifications to localStorage whenever it changes
-  useEffect(() => {
-    // Don't save on initial empty set to avoid overwriting existing data
-    if (dismissedNotifications.size === 0) {
-      console.log('Skipping save - empty dismissed set (probably initial state)')
-      return
-    }
-    
-    const dismissedArray = [...dismissedNotifications]
-    console.log('Saving dismissed notifications to localStorage:', dismissedArray)
-    
-    try {
-      localStorage.setItem('dismissedInAppNotifications', JSON.stringify(dismissedArray))
-      console.log('Successfully saved to localStorage')
-      
-      // Verify it was saved
-      const verification = localStorage.getItem('dismissedInAppNotifications')
-      console.log('Verification - localStorage now contains:', verification)
-    } catch (error) {
-      console.error('Error saving to localStorage:', error)
-    }
-  }, [dismissedNotifications])
 
   useEffect(() => {
     if (!user?.email) return
@@ -77,7 +37,8 @@ export function DeadlineNotificationToaster() {
     if (!user?.email) return
 
     try {
-      const data = await notificationService.getUserNotifications(10, 0)
+      // Fetch only non-dismissed notifications for toaster display
+      const data = await notificationService.getUserNotifications(10, 0, false)
       console.log('Raw notifications data:', data.notifications.slice(0, 3)) // Log first 3 notifications
       const eligibleTypes = new Set([
         'deadline',
@@ -95,34 +56,28 @@ export function DeadlineNotificationToaster() {
         const isForUser = recipients.includes(user.email)
         const notifType = notification.notif_types || 'general'
         const isEligible = eligibleTypes.has(notifType)
-        const notificationId = notification.notif_id || notification.id
-        
-        // Ensure consistent types - convert to number for comparison
-        const normalizedId = Number(notificationId)
-        const isDismissed = dismissedNotifications.has(normalizedId)
 
         console.log('Filtering notification:', {
-          id: normalizedId,
+          id: notification.notif_id,
           isForUser,
           notifType,
           isEligible,
-          isDismissed,
-          dismissedSet: [...dismissedNotifications],
-          willShow: isForUser && isEligible && !isDismissed
+          dismissed: notification.dismissed,
+          willShow: isForUser && isEligible
         })
 
-        // Only show notifications that are for this user, match eligible types, and haven't been dismissed
-        return isForUser && isEligible && !isDismissed
+        // Only show notifications that are for this user and match eligible types
+        // Backend already filtered out dismissed notifications
+        return isForUser && isEligible
       })
 
-      console.log('Filtered deadline notifications:', relevantNotifications.length)
+      console.log('Filtered notifications:', relevantNotifications.length)
 
-      // Show toast for each new deadline notification
+      // Show toast for each new notification
       relevantNotifications.forEach(notification => {
         console.log('Showing toast for notification:', {
           id: notification.notif_id,
-          id_alt: notification.id,
-          all_keys: Object.keys(notification)
+          type: notification.notif_types
         })
         showNotificationToast(notification)
       })
@@ -134,6 +89,24 @@ export function DeadlineNotificationToaster() {
 
     } catch (error) {
       console.error('Error checking for notifications:', error)
+    }
+  }
+
+  const handleDismiss = async (notification, toastId) => {
+    const notificationId = notification.notif_id || notification.id
+    console.log('Dismissing notification:', notificationId)
+
+    try {
+      // Call API to mark notification as dismissed
+      await notificationService.dismissNotification(notificationId)
+      console.log('Successfully dismissed notification:', notificationId)
+      
+      // Dismiss the toast
+      toast.dismiss(toastId)
+    } catch (error) {
+      console.error('Error dismissing notification:', error)
+      // Still dismiss the toast even if API call fails
+      toast.dismiss(toastId)
     }
   }
 
@@ -249,28 +222,7 @@ export function DeadlineNotificationToaster() {
               </div>
             </div>
             <button
-              onClick={() => {
-                console.log('Dismissing notification:', {
-                  notif_id: notification.notif_id,
-                  id: notification.id,
-                  all_keys: Object.keys(notification)
-                })
-                // Mark this notification as dismissed
-                const notificationId = notification.notif_id || notification.id;
-                const normalizedId = Number(notificationId)
-                console.log('Dismissing notification:', {
-                  originalId: notificationId,
-                  normalizedId,
-                  type: typeof normalizedId
-                })
-                setDismissedNotifications(prev => {
-                  const newSet = new Set([...prev, normalizedId])
-                  console.log('Updated dismissed set:', [...newSet])
-                  console.log('Set size:', newSet.size)
-                  return newSet
-                })
-                toast.dismiss(t.id)
-              }}
+              onClick={() => handleDismiss(notification, t.id)}
               className="flex-shrink-0 ml-3 p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-white/30"
             >
               <X className="w-4 h-4" />
