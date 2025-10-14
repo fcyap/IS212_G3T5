@@ -3,14 +3,19 @@ const taskService = require('../../src/services/taskService');
 const taskRepository = require('../../src/repository/taskRepository');
 const projectRepository = require('../../src/repository/projectRepository');
 const userRepository = require('../../src/repository/userRepository');
+const notificationService = require('../../src/services/notificationService');
 
 jest.mock('../../src/repository/taskRepository');
 jest.mock('../../src/repository/projectRepository');
 jest.mock('../../src/repository/userRepository');
+jest.mock('../../src/services/notificationService');
 
 describe('TaskService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    notificationService.createTaskAssignmentNotifications.mockResolvedValue({ notificationsSent: 0 });
+    notificationService.createTaskRemovalNotifications = jest.fn().mockResolvedValue({ notificationsSent: 0 });
+    notificationService.createTaskUpdateNotifications = jest.fn().mockResolvedValue({ notificationsSent: 0 });
   });
 
   describe('listWithAssignees', () => {
@@ -202,6 +207,7 @@ describe('TaskService', () => {
 
       // Mock insert method since service checks for it first
       taskRepository.insert = jest.fn().mockResolvedValue(mockCreatedTask);
+      userRepository.getUsersByIds.mockResolvedValue({ data: [], error: null });
 
       const result = await taskService.createTask(taskData);
 
@@ -216,12 +222,58 @@ describe('TaskService', () => {
         updated_at: expect.any(Date)
       }));
       expect(result).toEqual(mockCreatedTask);
+      expect(notificationService.createTaskAssignmentNotifications).toHaveBeenCalledWith(expect.objectContaining({
+        task: mockCreatedTask,
+        assigneeIds: [1, 2],
+        assignedById: null,
+        previousAssigneeIds: [],
+        currentAssigneeIds: [1, 2],
+        notificationType: 'task_assignment'
+      }));
+      expect(notificationService.createTaskRemovalNotifications).not.toHaveBeenCalled();
+    });
+
+    test('should ensure creator is assigned when missing', async () => {
+      const taskData = {
+        title: 'Creator Task',
+        description: 'Task description',
+        assigned_to: []
+      };
+
+      const mockCreatedTask = {
+        id: 2,
+        title: 'Creator Task',
+        assigned_to: [5]
+      };
+
+      taskRepository.insert = jest.fn().mockResolvedValue(mockCreatedTask);
+      userRepository.getUserById.mockResolvedValue({ id: 5 });
+      userRepository.getUsersByIds.mockResolvedValue({ data: [{ id: 5 }], error: null });
+
+      const result = await taskService.createTask(taskData, 5);
+
+      expect(taskRepository.insert).toHaveBeenCalledWith(expect.objectContaining({
+        assigned_to: [5]
+      }));
+      expect(result).toEqual(mockCreatedTask);
+    });
+
+    test('should reject when more than 5 assignees provided', async () => {
+      const taskData = {
+        title: 'Too Many',
+        assigned_to: [2, 3, 4, 5, 6, 7]
+      };
+
+      userRepository.getUserById.mockResolvedValue({ id: 1 });
+
+      await expect(taskService.createTask(taskData, 1)).rejects.toThrow('at most 5 assignees');
     });
 
     test('should handle creation error', async () => {
       const taskData = {
         title: 'New Task',
-        description: 'Task description'
+        description: 'Task description',
+        assigned_to: [1]
       };
 
       taskRepository.insert = jest.fn().mockRejectedValue(new Error('Validation failed'));
@@ -327,17 +379,21 @@ describe('TaskService', () => {
         id: taskId,
         title: 'Updated Task',
         status: 'completed',
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        assigned_to: [1, 2]
       };
 
       taskRepository.getTaskById.mockResolvedValue({
         id: taskId,
+        title: 'Original Task',
         status: 'pending',
         recurrence_freq: null,
         recurrence_interval: 1,
-        assigned_to: [],
+        assigned_to: [1, 2],
         tags: []
       });
+
+
       // Mock updateById method since service checks for it first
       taskRepository.updateById = jest.fn().mockResolvedValue(mockUpdatedTask);
 
@@ -349,6 +405,14 @@ describe('TaskService', () => {
         updated_at: expect.any(String)
       }));
       expect(result).toEqual(mockUpdatedTask);
+      expect(notificationService.createTaskUpdateNotifications).toHaveBeenCalledWith(expect.objectContaining({
+        task: mockUpdatedTask,
+        updatedById: null,
+        changes: expect.arrayContaining([
+          expect.objectContaining({ field: 'title' }),
+          expect.objectContaining({ field: 'status' })
+        ])
+      }));
     });
 
     test('should handle task not found', async () => {
@@ -357,16 +421,19 @@ describe('TaskService', () => {
 
       taskRepository.getTaskById.mockResolvedValue({
         id: taskId,
+        title: 'Existing Title',
         status: 'pending',
         recurrence_freq: null,
         recurrence_interval: 1,
-        assigned_to: [],
+        assigned_to: [1],
         tags: []
       });
+
       taskRepository.updateById = jest.fn().mockRejectedValue(new Error('Task not found'));
 
       await expect(taskService.updateTask(taskId, updateData))
         .rejects.toThrow('Task not found');
+      expect(notificationService.createTaskUpdateNotifications).not.toHaveBeenCalled();
     });
 
     test('should handle validation error', async () => {
@@ -375,16 +442,116 @@ describe('TaskService', () => {
 
       taskRepository.getTaskById.mockResolvedValue({
         id: taskId,
+        title: 'Existing Title',
         status: 'pending',
         recurrence_freq: null,
         recurrence_interval: 1,
-        assigned_to: [],
+        assigned_to: [1],
         tags: []
       });
+
       taskRepository.updateById = jest.fn().mockRejectedValue(new Error('Invalid status'));
 
       await expect(taskService.updateTask(taskId, updateData))
         .rejects.toThrow('Invalid status');
+      expect(notificationService.createTaskUpdateNotifications).not.toHaveBeenCalled();
+    });
+
+    test('should notify newly assigned users when assignees change', async () => {
+      const taskId = 1;
+      const updateData = { assigned_to: [1, 2, 3] };
+
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        assigned_to: [1, 2]
+      });
+
+      const mockUpdatedTask = {
+        id: taskId,
+        title: 'Updated Task',
+        assigned_to: [1, 2, 3],
+        updated_at: new Date().toISOString()
+      };
+
+      taskRepository.updateById = jest.fn().mockResolvedValue(mockUpdatedTask);
+
+      const result = await taskService.updateTask(taskId, updateData);
+
+      expect(taskRepository.updateById).toHaveBeenCalledWith(taskId, expect.objectContaining({
+        assigned_to: [1, 2, 3],
+        updated_at: expect.any(String)
+      }));
+      expect(result).toEqual(mockUpdatedTask);
+      expect(notificationService.createTaskAssignmentNotifications).toHaveBeenCalledWith(expect.objectContaining({
+        task: mockUpdatedTask,
+        assigneeIds: [3],
+        assignedById: null,
+        previousAssigneeIds: [1, 2],
+        currentAssigneeIds: [1, 2, 3],
+        notificationType: 'reassignment'
+      }));
+      expect(notificationService.createTaskRemovalNotifications).not.toHaveBeenCalled();
+      expect(notificationService.createTaskUpdateNotifications).not.toHaveBeenCalled();
+    });
+
+    test('should notify removed users when assignees are removed', async () => {
+      const taskId = 2;
+      const updateData = { assigned_to: [1, 2] };
+
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        assigned_to: [1, 2, 3]
+      });
+
+      const mockUpdatedTask = {
+        id: taskId,
+        title: 'Updated Task',
+        assigned_to: [1, 2],
+        updated_at: new Date().toISOString()
+      };
+
+      taskRepository.updateById = jest.fn().mockResolvedValue(mockUpdatedTask);
+
+      const result = await taskService.updateTask(taskId, updateData);
+
+      expect(taskRepository.updateById).toHaveBeenCalledWith(taskId, expect.objectContaining({
+        assigned_to: [1, 2],
+        updated_at: expect.any(String)
+      }));
+      expect(result).toEqual(mockUpdatedTask);
+      expect(notificationService.createTaskRemovalNotifications).toHaveBeenCalledWith(expect.objectContaining({
+        task: mockUpdatedTask,
+        assigneeIds: [3],
+        assignedById: null,
+        previousAssigneeIds: [1, 2, 3],
+        currentAssigneeIds: [1, 2]
+      }));
+      expect(notificationService.createTaskAssignmentNotifications).not.toHaveBeenCalled();
+      expect(notificationService.createTaskUpdateNotifications).not.toHaveBeenCalled();
+    });
+
+    test('should reject update when exceeding assignee limit', async () => {
+      const taskId = 3;
+      const updateData = { assigned_to: [1, 2, 3, 4, 5, 6] };
+
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        assigned_to: [1, 2, 3]
+      });
+
+      await expect(taskService.updateTask(taskId, updateData)).rejects.toThrow('at most 5 assignees');
+    });
+
+    test('should reject update when requester not assigned', async () => {
+      const taskId = 4;
+      const updateData = { title: 'Cannot update' };
+
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        assigned_to: [1, 2]
+      });
+
+      await expect(taskService.updateTask(taskId, updateData, 99)).rejects.toThrow('assigned to the task');
     });
 
     test('should normalize patch fields including tags, assignees and recurrence updates', async () => {
@@ -1029,8 +1196,4 @@ describe('TaskService', () => {
       });
     });
   });
-
-
-
-
 });

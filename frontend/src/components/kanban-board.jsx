@@ -1,5 +1,4 @@
 "use client"
-import { CurrentUser } from "@/components/task-comment/test-task-comments";
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { TaskCard } from "./task-card"
@@ -13,6 +12,8 @@ import { Trash, Check, X, Plus } from "lucide-react"
 import { useKanban } from "@/components/kanban-context"
 import { Badge } from "@/components/ui/badge"
 import { CommentSection } from "./task-comment/task-comment-section"
+import { useUserSearch } from "@/hooks/useUserSearch"
+import { useAuth } from "@/hooks/useAuth"
 
 const priorityChipClasses = {
   Low: "bg-teal-200 text-teal-900",
@@ -120,9 +121,9 @@ function RecurrencePicker({ value, onChange, disabled = false }) {
 
 
 export function KanbanBoard({ projectId = null }) {
-  // const { user: currentUser } = useAuth()
+  const { user: currentUser } = useAuth()
   async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees, recurrence }) {
-    if (!CurrentUser?.id) {
+    if (!currentUser?.id) {
       console.error('[KanbanBoard] Cannot create task without an authenticated user')
       return
     }
@@ -139,7 +140,7 @@ export function KanbanBoard({ projectId = null }) {
           status: editorLane,
           deadline: dueDate || null,
           project_id: projectId,
-          assigned_to: Array.isArray(assignees) && assignees.length > 0 ? assignees.map(a => a.id) : [CurrentUser.id],
+          assigned_to: Array.isArray(assignees) && assignees.length > 0 ? assignees.map(a => a.id) : [currentUser.id],
           tags,
           recurrence: recurrence ?? null,
         }),
@@ -150,14 +151,9 @@ export function KanbanBoard({ projectId = null }) {
       }
       const row = await res.json()
       const card = rowToCard(row)
-      const withAssignees = {
-        ...card,
-        assignees: [{ id: CurrentUser.id, name: CurrentUser.name }],
-      }
 
-      // setTasks(prev => editorPosition === "top" ? [card, ...prev] : [...prev, card])
       setTasks(prev =>
-        editorPosition === "top" ? [withAssignees, ...prev] : [...prev, withAssignees]
+        editorPosition === "top" ? [card, ...prev] : [...prev, card]
       )
       setBanner("Task Successfully Created")
       cancelAddTask()
@@ -180,7 +176,9 @@ export function KanbanBoard({ projectId = null }) {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`${API}/tasks?archived=false&parent_id=null`)
+        const res = await fetch(`${API}/tasks?archived=false&parent_id=null`, {
+          credentials: 'include',
+        })
         if (!res.ok) throw new Error(`GET /tasks ${res.status}`)
         const rows = await res.json()
         setTasks(rows.map(rowToCard))
@@ -400,7 +398,20 @@ export function KanbanBoard({ projectId = null }) {
             try {
               // Convert assignees (array of user objects) to assigned_to (array of user IDs)
               const assigned_to = Array.isArray(patch.assignees)
-                ? patch.assignees.map(a => a.id)
+                ? Array.from(
+                    new Set(
+                      patch.assignees
+                        .map((assignee) => {
+                          const raw =
+                            assignee && typeof assignee === 'object'
+                              ? assignee.id ?? assignee.user_id ?? assignee.userId ?? null
+                              : assignee;
+                          const numeric = Number(raw);
+                          return Number.isFinite(numeric) ? Math.trunc(numeric) : null;
+                        })
+                        .filter((value) => value !== null)
+                    )
+                  )
                 : [];
               const payload = {
                 title: patch.title,
@@ -447,9 +458,17 @@ export function KanbanBoard({ projectId = null }) {
 
 function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
   const [childPanelTask, setChildPanelTask] = useState(null);
+  const { user: currentUser } = useAuth()
+  const currentUserId = currentUser?.id
   const canEdit =
     Array.isArray(task.assignees) &&
-    task.assignees.some((a) => a.id === CurrentUser.id);
+    currentUserId != null &&
+    task.assignees.some((a) => a.id === currentUserId);
+  const isManager = currentUser?.role?.toLowerCase?.() === 'manager';
+  const isCreator = task.creator_id != null && currentUserId === task.creator_id;
+  const canAddAssignees = canEdit;
+  const canRemoveAssignees = isManager || (canEdit && isCreator);
+  const MAX_ASSIGNEES = 5
   const [title, setTitle] = useState(task.title || "");
   const [description, setDescription] = useState(task.description || "");
   const [priority, setPriority] = useState(task.priority || "Low");
@@ -458,14 +477,8 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
   const [tags, setTags] = useState(Array.isArray(task.tags) ? task.tags : []);
   const [tagInput, setTagInput] = useState("");
   const [assignees, setAssignees] = useState(Array.isArray(task.assignees) ? task.assignees : []);
-  const [userSearch, setUserSearch] = useState("");
-  const [userSearchResults, setUserSearchResults] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
   const [recurrence, setRecurrence] = useState(task.recurrence ?? null);
 
-  // Fetch user suggestions from backend on each keydown
-  // Debounce timer for user search
-  const [userSearchDebounce, setUserSearchDebounce] = useState(null);
   // Subtasks
   const [subtasks, setSubtasks] = useState([]);
   const [isSubtaskOpen, setIsSubtaskOpen] = useState(false);
@@ -507,37 +520,24 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
     }
   }
 
+  const {
+    query: userSearch,
+    results: userSearchResults,
+    loading: loadingUsers,
+    search: searchUsers,
+    clear: clearUserSearch,
+  } = useUserSearch({ canSearch: canAddAssignees, minQueryLength: 1 })
 
   function handleUserSearchInput(e) {
-    if (!canEdit) return;
+    if (!canAddAssignees || assignees.length >= MAX_ASSIGNEES) return;
     const value = e.target.value;
     console.log('[AssigneeSearch] (input onChange) value:', value);
-    setUserSearch(value);
-    if (userSearchDebounce) clearTimeout(userSearchDebounce);
-    if (!value.trim()) {
-      setUserSearchResults([]);
-      return;
-    }
-    setLoadingUsers(true);
-    const timer = setTimeout(async () => {
-      const apiUrl = `${API}/users/search?q=${encodeURIComponent(value)}&limit=8`;
-      console.log('[AssigneeSearch] Fetching:', apiUrl);
-      try {
-        const res = await fetch(apiUrl);
-        const data = await res.json();
-        setUserSearchResults(data.users || []);
-      } catch (err) {
-        console.log('[AssigneeSearch] Fetch error:', err);
-        setUserSearchResults([]);
-      } finally {
-        setLoadingUsers(false);
-      }
-    }, 250);
-    setUserSearchDebounce(timer);
+    searchUsers(value);
   }
 
-  const canSave = canEdit && title.trim().length > 0 && priority;
+  const canSave = (canEdit || isManager) && title.trim().length > 0 && priority && assignees.length <= MAX_ASSIGNEES;
   function addTagFromInput() {
+    if (!canEdit) return;
     const t = tagInput.trim();
     if (!t) return;
     if (!tags.includes(t)) setTags((prev) => [...prev, t]);
@@ -545,21 +545,25 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
   }
 
   function removeTagAt(idx) {
+    if (!canEdit) return;
     setTags((prev) => prev.filter((_, i) => i !== idx));
   }
 
   function addAssignee(user) {
-    if (!canEdit) return;
-    if (!assignees.some((a) => a.id === user.id)) {
-      setAssignees((prev) => [...prev, user]);
-    }
-    setUserSearch("");
-    setUserSearchResults([]);
+    if (!canAddAssignees) return;
+    setAssignees((prev) => {
+      if (prev.length >= MAX_ASSIGNEES || prev.some((a) => a.id === user.id)) return prev;
+      return [...prev, user];
+    });
+    clearUserSearch();
   }
 
   function removeAssignee(userId) {
-    if (!canEdit) return;
-    setAssignees((prev) => prev.filter((a) => a.id !== userId));
+    if (!canRemoveAssignees) return;
+    setAssignees((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((a) => a.id !== userId);
+    });
   }
 
   async function handleDelete() {
@@ -636,6 +640,12 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
             <h3 className="text-white text-lg font-semibold">Edit task</h3>
             <button onClick={onClose} className="text-gray-300 hover:text-white text-xl leading-none">×</button>
           </div>
+
+          {!canEdit && (
+            <div className="mb-4 rounded-md border border-amber-600/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              You are not assigned to this task, so the fields are read-only.
+            </div>
+          )}
 
           <div className="space-y-4">
             {/* Title */}
@@ -743,15 +753,15 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
               <div className="mb-2">
                 <input
                   type="text"
-                  className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                  className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500 disabled:opacity-60"
                   placeholder="Search users by name or email..."
                   value={userSearch}
                   onChange={handleUserSearchInput}
                   aria-busy={loadingUsers ? 'true' : 'false'}
                   autoComplete="off"
-                  disabled={!canEdit}
+                  disabled={!canAddAssignees || assignees.length >= MAX_ASSIGNEES}
                 />
-                {canEdit && userSearchResults.length > 0 && (
+                {canAddAssignees && assignees.length < MAX_ASSIGNEES && userSearchResults.length > 0 && (
                   <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
                     {userSearchResults.map((u) => (
                       <div
@@ -775,19 +785,28 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
                       title={a.name}
                     >
                       {a.name}
-                      <button
-                        type="button"
-                        className="ml-1 text-gray-300 hover:text-white"
-                        onClick={() => removeAssignee(a.id)}
-                        aria-label={`Remove ${a.name}`}
-                      >
-                        ×
-                      </button>
+                      {canRemoveAssignees && (
+                        <button
+                          type="button"
+                          className="ml-1 text-gray-300 hover:text-white disabled:opacity-60"
+                          onClick={() => removeAssignee(a.id)}
+                          aria-label={`Remove ${a.name}`}
+                          disabled={assignees.length <= 1}
+                        >
+                          ×
+                        </button>
+                      )}
                     </Badge>
                   ))}
                 </div>
               ) : (
                 <span className="text-xs text-gray-500">No assignees</span>
+              )}
+              {canAddAssignees && assignees.length >= MAX_ASSIGNEES && (
+                <p className="text-xs text-red-400 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
+              )}
+              {canRemoveAssignees && assignees.length === 1 && (
+                <p className="text-xs text-amber-400 mt-2">At least one assignee is required. Add another member before removing the last one.</p>
               )}
             </div>
             {/* Subtasks */}
@@ -863,34 +882,34 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
                 disabled={!canEdit}
               />
             </div>
-          </div>
 
-          <RecurrencePicker value={recurrence} onChange={setRecurrence} disabled={!canEdit} />
+            <RecurrencePicker value={recurrence} onChange={setRecurrence} disabled={!canEdit} />
 
 
-          {/* Actions */}
-          <div className="mt-6 flex gap-2">
-            <Button
-              onClick={() => onSave({ title: title.trim(), description: description.trim(), priority, status, deadline, tags, assignees, recurrence })}
-              disabled={!canSave}
-              className="bg-white/90 text-black"
-            >
-              Save
-            </Button>
-            <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleDelete}
-              className="bg-red-400 hover:bg-red-700 text-white ml-auto"
-              type="button" disabled={!canEdit}>
-              <Trash className="w-4 h-4 mr-1" /> Delete
-            </Button>
-          </div>
+            {/* Actions */}
+            <div className="mt-6 flex gap-2">
+              <Button
+                onClick={() => onSave({ title: title.trim(), description: description.trim(), priority, status, deadline, tags, assignees, recurrence })}
+                disabled={!canSave}
+                className="bg-white/90 text-black"
+              >
+                Save
+              </Button>
+              <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleDelete}
+                className="bg-red-400 hover:bg-red-700 text-white ml-auto"
+                type="button" disabled={!canEdit}>
+                <Trash className="w-4 h-4 mr-1" /> Delete
+              </Button>
+            </div>
 
-          {/* Comment Section */}
-          <div className="mt-8">
-            <CommentSection taskId={task.id} />
+            {/* Comment Section */}
+            <div className="mt-8">
+              <CommentSection taskId={task.id} />
+            </div>
           </div>
         </div>
       </div>
@@ -898,58 +917,57 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
   )
 }
 function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
+  const { user: currentUser } = useAuth()
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
   const [priority, setPriority] = useState("")
   const PRIORITIES = ["Low", "Medium", "High"]
-  const canSave = title.trim().length > 0 && priority !== ""
+  const canEdit = true
+  const MAX_ASSIGNEES = 5
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState([]);
   const [recurrence, setRecurrence] = useState(null);
 
   // --- Assignees & user search (copied from TaskSidePanel, trimmed) ---
   const [assignees, setAssignees] = useState([]);
-  const [userSearch, setUserSearch] = useState("");
-  const [userSearchResults, setUserSearchResults] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [userSearchDebounce, setUserSearchDebounce] = useState(null);
-  const canEdit = true;
+  const {
+    query: userSearch,
+    results: userSearchResults,
+    loading: loadingUsers,
+    search: searchUsers,
+    clear: clearUserSearch,
+  } = useUserSearch({ canSearch: true, minQueryLength: 1 })
+
+  useEffect(() => {
+    if (!currentUser?.id) return
+    setAssignees(prev => {
+      if (prev.some(a => a.id === currentUser.id)) return prev
+      return [...prev, { id: currentUser.id, name: currentUser.name ?? 'You' }]
+    })
+  }, [currentUser])
+
+  const canSave = title.trim().length > 0 && priority !== "" && assignees.length <= MAX_ASSIGNEES
 
   function addAssignee(user) {
-    if (!assignees.some((a) => a.id === user.id)) {
-      setAssignees((prev) => [...prev, user]);
-    }
-    setUserSearch("");
-    setUserSearchResults([]);
+    setAssignees((prev) => {
+      if (prev.length >= MAX_ASSIGNEES || prev.some((a) => a.id === user.id)) return prev
+      return [...prev, user]
+    });
+    clearUserSearch();
   }
 
   function removeAssignee(userId) {
-    setAssignees((prev) => prev.filter((a) => a.id !== userId));
+    setAssignees((prev) => {
+      if (prev.length <= 1) return prev
+      return prev.filter((a) => a.id !== userId)
+    });
   }
 
   function handleUserSearchInput(e) {
     const value = e.target.value;
-    setUserSearch(value);
-    if (userSearchDebounce) clearTimeout(userSearchDebounce);
-    if (!value.trim()) {
-      setUserSearchResults([]);
-      return;
-    }
-    setLoadingUsers(true);
-    const timer = setTimeout(async () => {
-      const apiUrl = `${API}/users/search?q=${encodeURIComponent(value)}&limit=8`;
-      try {
-        const res = await fetch(apiUrl);
-        const data = await res.json();
-        setUserSearchResults(data.users || []);
-      } catch {
-        setUserSearchResults([]);
-      } finally {
-        setLoadingUsers(false);
-      }
-    }, 250);
-    setUserSearchDebounce(timer);
+    if (assignees.length >= MAX_ASSIGNEES) return;
+    searchUsers(value);
   }
 
   function addTagFromInput() {
@@ -1056,14 +1074,15 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
         <label className="block text-xs text-gray-400 mb-1">Assignees</label>
         <input
           type="text"
-          className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+          className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500 disabled:opacity-60"
           placeholder="Search users by name or email..."
           value={userSearch}
           onChange={handleUserSearchInput}
           aria-busy={loadingUsers ? 'true' : 'false'}
           autoComplete="off"
+          disabled={assignees.length >= MAX_ASSIGNEES}
         />
-        {userSearchResults.length > 0 && (
+        {assignees.length < MAX_ASSIGNEES && userSearchResults.length > 0 && (
           <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
             {userSearchResults.map((u) => (
               <div
@@ -1100,6 +1119,12 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
           </div>
         ) : (
           <span className="mt-1 block text-xs text-gray-500">No assignees</span>
+        )}
+        {assignees.length === 1 && (
+          <p className="text-xs text-amber-400 mt-2">At least one assignee is required. Add another member before removing the last one.</p>
+        )}
+        {assignees.length >= MAX_ASSIGNEES && (
+          <p className="text-xs text-red-400 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
         )}
       </div>
 
@@ -1176,6 +1201,7 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
   )
 }
 function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
+  const { user: currentUser } = useAuth()
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("Low");
@@ -1254,7 +1280,7 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
         return;
       }
       const assignedTo =
-        assignees.length > 0 ? assignees.map(a => a.id) : [CurrentUser.id];
+        assignees.length > 0 ? assignees.map(a => a.id) : [currentUser.id];
       const payload = {
         title: title.trim(),
         description: description.trim() || null,

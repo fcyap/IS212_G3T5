@@ -34,6 +34,7 @@ import { useProjects } from "@/contexts/project-context"
 import { useAuth } from "@/hooks/useAuth"
 import { EditProjectDialog } from "./edit-project-dialog"
 import { CreateProjectDialog } from "./create-project"
+import { NotificationBell } from "./notification-bell"
 
 export function ProjectHeader({ currentView }) {
   const { startAddTask } = useKanban()
@@ -41,6 +42,15 @@ export function ProjectHeader({ currentView }) {
   const { canEditProject, user } = useAuth()
   const [showDropdown, setShowDropdown] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
+
+  const displayName = user?.name || user?.email || 'Unknown User'
+  const initials = (user?.name || user?.email || 'U')
+    .split(/\s+/)
+    .map(part => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+  const roleLabel = user?.role?.label || user?.role_label || 'No Role'
 
   return (
     <div className="bg-[#1f1f23] text-white">
@@ -76,15 +86,21 @@ export function ProjectHeader({ currentView }) {
               New Project
             </Button>
           </CreateProjectDialog>
-          <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-            <HelpCircle className="w-4 h-4" />
-          </Button>
+          <NotificationBell />
           <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
             <Settings className="w-4 h-4" />
           </Button>
-          <Avatar className="w-8 h-8">
-            <AvatarFallback className="bg-yellow-500 text-black text-sm font-medium">WK</AvatarFallback>
-          </Avatar>
+          <div className="flex items-center gap-3 bg-[#23232a] px-3 py-2 rounded-lg border border-white/10">
+            <Avatar className="w-8 h-8">
+              <AvatarFallback className="bg-blue-500 text-white text-sm font-medium">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col">
+              <span className="text-sm font-medium text-white">{displayName}</span>
+              <span className="text-xs text-gray-400">{roleLabel}</span>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -10,90 +10,21 @@ const { csrf } = require('lusca');
 // Import UAA modules
 const { sql } = require('./db');
 const { authRoutes } = require('./routes/auth');
-const { authMiddleware } = require('./middleware/auth');
+const { authMiddleware, cookieName } = require('./middleware/auth');
+const { createSession, deleteSession } = require('./auth/sessions');
 
 // Import existing routes and middleware
 const apiRoutes = require('./routes');
-const tasksRouter = require('./routes/tasks.js');
+const tasksRouter = require('./routes/tasks');
 const projectTasksRoutes = require('./routes/projectTasks');
 const taskCommentRoutes = require('./routes/tasks/taskCommentRoute');
-const teamMembersRoutes = require('./routes/users');
 const projectRoutes = require('./routes/projects');
 const userRoutes = require('./routes/users');
+const notificationRoutes = require('./routes/notifications');
 const { createLoggerMiddleware, logError } = require('./middleware/logger');
+const cron = require('node-cron');
+const notificationService = require('./services/notificationService');
 
-// -------------------- Session helpers (backend-only) --------------------
-const COOKIE = 'sid';
-const ACCESS_TTL = 15 * 60; // 15min autologout
-
-function signAccess(payload, { maxAge = ACCESS_TTL } = {}) {
-  const now = Math.floor(Date.now() / 1000);
-  return jwt.sign(
-    { iat: now, nbf: now, exp: now + maxAge, ...payload },
-    process.env.JWT_SECRET || 'dev_only_change_me',
-    {
-      issuer: process.env.JWT_ISSUER || 'kanban',
-      audience: process.env.JWT_AUDIENCE || 'kanban-web',
-      algorithm: 'HS256',
-    }
-  );
-}
-
-function setSessionCookie(res, token, { maxAge = ACCESS_TTL } = {}) {
-  res.cookie(COOKIE, token, {
-    httpOnly: true,
-    secure: false,      // set true behind HTTPS
-    sameSite: 'Lax',
-    maxAge: maxAge * 1000,
-    path: '/',
-  });
-}
-
-function clearSessionCookie(res) {
-  res.clearCookie(COOKIE, { path: '/' });
-}
-
-function extractToken(req) {
-  const c = req.cookies?.[COOKIE];
-  if (c) return c;
-  const h = req.headers.authorization || '';
-  const m = h.match(/^Bearer\s+(.+)$/i);
-  return m ? m[1] : null;
-}
-
-function requireSession(req, res, next) {
-  const token = extractToken(req);
-  if (!token) return res.status(401).json({ error: 'Unauthenticated' });
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_only_change_me', {
-      issuer: process.env.JWT_ISSUER || 'kanban',
-      audience: process.env.JWT_AUDIENCE || 'kanban-web',
-      algorithms: ['HS256'],
-    });
-    req.user = { id: payload.sub, role: payload.role, email: payload.email };
-    next();
-  } catch (e) {
-    return res.status(401).json({ error: 'Invalid/expired session' });
-  }
-}
-
-// Soft attach – if token exists attach req.user, else continue
-function attachSessionIfAny(req, res, next) {
-  const token = extractToken(req);
-  if (!token) return next();
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_only_change_me', {
-      issuer: process.env.JWT_ISSUER || 'kanban',
-      audience: process.env.JWT_AUDIENCE || 'kanban-web',
-      algorithms: ['HS256'],
-    });
-    req.user = { id: payload.sub, role: payload.role, email: payload.email };
-  } catch {}
-  next();
-}
-// -----------------------------------------------------------------------
-
-const devBypass = require('./middleware/devAuthBypass'); // your bypass helper
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -147,45 +78,67 @@ async function initializeApp() {
       credentials: true,
     })
   );
-
     app.get("/csrf-token", (req, res) => {
         res.json({ csrfToken: req.csrfToken() });
     });
-  // Build a single auth middleware that either enforces session
-  // or (when AUTH_BYPASS=true) fakes req.user if no session.
-  const authMw = devBypass(requireSession);
+  const authMw = authMiddleware(sql);
 
   // UAA Auth endpoints (unprotected)
   app.use('/auth', authRoutes(sql));
 
   // -------------------- Dev session routes --------------------
-  app.post('/dev/session/start', (req, res) => {
-    const { userId, email, role = 'dev' } = req.body || {};
+  app.post('/dev/session/start', async (req, res) => {
+    const { userId, email } = req.body || {};
     if (!userId && !email) return res.status(400).json({ error: 'userId or email required' });
-    const token = signAccess({ sub: userId || email, email, role });
-    setSessionCookie(res, token);
-    res.status(200).json({ ok: true, token });
+
+    let targetId = userId;
+    try {
+      if (!targetId && email) {
+        const rows = await sql`select id from users where lower(email) = lower(${email}) limit 1`;
+        if (!rows.length) return res.status(404).json({ error: 'User not found' });
+        targetId = rows[0].id;
+      }
+
+      const { token, expiresAt } = await createSession(sql, targetId);
+      res.cookie(cookieName, token, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: (Number(process.env.SESSION_IDLE_MINUTES || 15)) * 60 * 1000,
+        path: '/',
+      });
+      res.status(200).json({ ok: true, expiresAt });
+    } catch (err) {
+      console.error('/dev/session/start error', err);
+      res.status(500).json({ error: 'Failed to create session' });
+    }
   });
 
-  app.post('/session/end', (req, res) => {
-    clearSessionCookie(res);
+  app.post('/session/end', async (req, res) => {
+    const token = req.cookies?.[cookieName];
+    if (token) await deleteSession(sql, token).catch(() => {});
+    res.clearCookie(cookieName, { path: '/' });
     res.status(200).json({ ok: true });
   });
 
-  app.get('/me', requireSession, (req, res) => {
-    res.json({ user: req.user });
+  app.get('/me', authMw, (req, res) => {
+    res.json({
+      user: req.user,
+      expiresAt: res.locals.newExpiry,
+    });
   });
   // ------------------------------------------------------------
 
-  // Routes (flip attachSessionIfAny -> requireSession later if you want)
-  app.use('/api', attachSessionIfAny, apiRoutes);
-  app.use('/users', attachSessionIfAny, teamMembersRoutes);
+  // Routes that require an authenticated session
+  app.use('/api', authMw, apiRoutes);
+  app.use('/users', authMw, userRoutes);
+  app.use('/api/notifications', authMw, notificationRoutes);
 
   // Data APIs using the bypass wrapper during dev
   app.use('/api/tasks', authMw, taskCommentRoutes);
   app.use('/api/projects', authMw, projectTasksRoutes);
   app.use('/api/projects', authMw, projectRoutes);
-  app.use('/api/users', authMw, userRoutes);
+  app.use('/api/notifications', authMw, notificationRoutes);
   app.use('/tasks', authMw, tasksRouter);
 
   // UAA Protected route example
@@ -218,6 +171,43 @@ async function initializeApp() {
           ? err.message
           : 'Something went wrong',
     });
+  });
+
+  // ... existing code ...
+
+// Add this temporary test route (remove after testing)
+app.get('/test-email', async (req, res) => {
+  try {
+    const sgMail = require('@sendgrid/mail');
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+    const msg = {
+      to: 'yapfengcheng.yfc@gmail.com', // Replace with your actual email
+      from: process.env.FROM_EMAIL,
+      subject: 'Test SendGrid Email',
+      text: 'This is a test email from your app!',
+      html: '<strong>This is a test email from your app!</strong>',
+    };
+
+    await sgMail.send(msg);
+    res.send('Email sent successfully!');
+  } catch (error) {
+    console.error('SendGrid error:', error);
+    res.status(500).send(`Failed to send email: ${error.message}`);
+  }
+});
+
+// ... existing code (your other routes and app.listen) ...
+
+  // Schedule deadline notification checks to run daily at 8am
+  cron.schedule('0 8 * * *', async () => {
+    console.log('Running scheduled deadline notification check at 8am...');
+    try {
+      const result = await notificationService.checkAndSendDeadlineNotifications();
+      console.log(`Deadline notification check completed. Sent ${result.notificationsSent} notifications for ${result.tasksChecked} tasks.`);
+    } catch (error) {
+      console.error('Error during scheduled deadline notification check:', error);
+    }
   });
 
   app.listen(PORT, () => {

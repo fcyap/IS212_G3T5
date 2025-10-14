@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { CommentBox } from './task-comment';
 import { CommentItem } from './task-comment-item';
-import { CurrentUser } from './test-task-comments';
-import { fetchWithCsrf } from '@/lib/csrf';
+import { fetchWithCsrf, getCsrfToken } from '@/lib/csrf';
+import { useAuth } from '@/hooks/useAuth';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ;
 const API = `${API_BASE_URL}/api/tasks`;
 
-export const CommentSection = ({ taskId: propTaskId, currentUser = CurrentUser }) => {
+export const CommentSection = ({ taskId: propTaskId, currentUser: overrideUser = null }) => {
+  const { user: authUser } = useAuth();
+  const currentUser = overrideUser ?? authUser;
+  if (!currentUser) {
+    console.warn('[CommentSection] No authenticated user available; comment actions disabled');
+  }
   const taskId = propTaskId;
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -103,7 +108,7 @@ const toViewModel = (row) => ({
       console.error('Failed to reload comments after update:', e);
     }
   };
-  
+
   return (
     <div className="max-w-3xl mx-auto p-6 rounded-lg">
       <div className="mb-8">
