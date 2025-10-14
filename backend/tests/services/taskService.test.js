@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const taskService = require('../../src/services/taskService');
 const taskRepository = require('../../src/repository/taskRepository');
 const projectRepository = require('../../src/repository/projectRepository');
@@ -200,7 +201,7 @@ describe('TaskService', () => {
       };
 
       // Mock insert method since service checks for it first
-      taskRepository.insert = jest.fn().mockResolvedValue({ data: mockCreatedTask, error: null });
+      taskRepository.insert = jest.fn().mockResolvedValue(mockCreatedTask);
 
       const result = await taskService.createTask(taskData);
 
@@ -223,7 +224,7 @@ describe('TaskService', () => {
         description: 'Task description'
       };
 
-      taskRepository.insert = jest.fn().mockResolvedValue({ data: null, error: new Error('Validation failed') });
+      taskRepository.insert = jest.fn().mockRejectedValue(new Error('Validation failed'));
 
       await expect(taskService.createTask(taskData))
         .rejects.toThrow('Validation failed');
@@ -236,6 +237,81 @@ describe('TaskService', () => {
 
       await expect(taskService.createTask(taskData))
         .rejects.toThrow('title is required');
+    });
+
+    test('should normalize assigned_to and tags while validating related entities', async () => {
+      const taskData = {
+        title: 'Normalize me',
+        description: '  keep me  ',
+        project_id: 10,
+        assigned_to: ['1', ' 2 ', null, 'abc', 3],
+        tags: 'alpha, beta , ,gamma',
+        priority: 'HIGH',
+        status: 'IN_PROGRESS',
+        parent_id: '5'
+      };
+
+      userRepository.getUserById = jest.fn().mockResolvedValue({ id: 42 });
+      projectRepository.getProjectById = jest.fn().mockResolvedValue({ id: 10 });
+      userRepository.getUsersByIds = jest.fn().mockResolvedValue([{ id: 1 }, { id: 2 }, { id: 3 }]);
+
+      const normalizedInsertResult = {
+        id: 77,
+        ...taskData,
+        description: 'keep me',
+        assigned_to: [1, 2, 3],
+        tags: ['alpha', 'beta', 'gamma'],
+        priority: 'high',
+        status: 'in_progress',
+        parent_id: 5,
+        created_at: new Date(),
+        updated_at: new Date()
+      };
+      taskRepository.insert = jest.fn().mockResolvedValue(normalizedInsertResult);
+
+      const result = await taskService.createTask(taskData, 42);
+
+      expect(userRepository.getUserById).toHaveBeenCalledWith(42);
+      expect(projectRepository.getProjectById).toHaveBeenCalledWith(10);
+      expect(userRepository.getUsersByIds).toHaveBeenCalledWith(taskData.assigned_to);
+
+      const insertPayload = taskRepository.insert.mock.calls[0][0];
+      expect(insertPayload.assigned_to).toEqual([1, 2, 3]);
+      expect(insertPayload.tags).toEqual(['alpha', 'beta', 'gamma']);
+      expect(insertPayload.priority).toBe('high');
+      expect(insertPayload.status).toBe('in_progress');
+      expect(insertPayload.parent_id).toBe(5);
+      expect(result).toEqual(normalizedInsertResult);
+    });
+
+    test('should fall back to repository.createTask when insert is unavailable', async () => {
+      const originalInsert = taskRepository.insert;
+      const originalCreateTask = taskRepository.createTask;
+      delete taskRepository.insert;
+      const fallbackCreated = {
+        id: 90,
+        title: 'Legacy path',
+        description: null,
+        priority: 'medium',
+        status: 'pending',
+        assigned_to: [],
+        tags: [],
+        parent_id: null,
+        created_at: new Date(),
+        updated_at: new Date()
+      };
+      taskRepository.createTask = jest.fn().mockResolvedValue(fallbackCreated);
+
+      const taskData = { title: 'Legacy path' };
+      const result = await taskService.createTask(taskData);
+
+      expect(taskRepository.createTask).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Legacy path'
+      }));
+      expect(result).toEqual(fallbackCreated);
+
+      taskRepository.insert = originalInsert;
+      taskRepository.createTask = originalCreateTask;
     });
   });
 
@@ -254,6 +330,14 @@ describe('TaskService', () => {
         updated_at: new Date().toISOString()
       };
 
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        status: 'pending',
+        recurrence_freq: null,
+        recurrence_interval: 1,
+        assigned_to: [],
+        tags: []
+      });
       // Mock updateById method since service checks for it first
       taskRepository.updateById = jest.fn().mockResolvedValue(mockUpdatedTask);
 
@@ -271,6 +355,14 @@ describe('TaskService', () => {
       const taskId = 999;
       const updateData = { title: 'Updated Task' };
 
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        status: 'pending',
+        recurrence_freq: null,
+        recurrence_interval: 1,
+        assigned_to: [],
+        tags: []
+      });
       taskRepository.updateById = jest.fn().mockRejectedValue(new Error('Task not found'));
 
       await expect(taskService.updateTask(taskId, updateData))
@@ -281,10 +373,435 @@ describe('TaskService', () => {
       const taskId = 1;
       const updateData = { status: 'invalid_status' };
 
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        status: 'pending',
+        recurrence_freq: null,
+        recurrence_interval: 1,
+        assigned_to: [],
+        tags: []
+      });
       taskRepository.updateById = jest.fn().mockRejectedValue(new Error('Invalid status'));
 
       await expect(taskService.updateTask(taskId, updateData))
         .rejects.toThrow('Invalid status');
+    });
+
+    test('should normalize patch fields including tags, assignees and recurrence updates', async () => {
+      const taskId = 11;
+      const updateData = {
+        title: '  Trimmed Title ',
+        description: 'Keep description',
+        priority: 'HIGH',
+        status: 'in_progress',
+        deadline: '',
+        archived: true,
+        tags: ' foo ,bar,, baz ',
+        assigned_to: ['1', ' 2 ', null, 3],
+        recurrence: { freq: 'monthly', interval: '3' }
+      };
+
+      const currentTask = {
+        id: taskId,
+        project_id: 5,
+        status: 'pending',
+        recurrence_freq: null,
+        recurrence_interval: 1,
+        assigned_to: [],
+        tags: []
+      };
+
+      taskRepository.getTaskById.mockResolvedValue(currentTask);
+      taskRepository.updateById = jest.fn().mockResolvedValue({
+        ...currentTask,
+        ...updateData,
+        title: 'Trimmed Title',
+        deadline: null,
+        assigned_to: [1, 2, 3],
+        tags: ['foo', 'bar', 'baz'],
+        recurrence_freq: 'monthly',
+        recurrence_interval: 3
+      });
+
+      await taskService.updateTask(taskId, updateData);
+
+      const patch = taskRepository.updateById.mock.calls[0][1];
+      expect(patch.title).toBe('  Trimmed Title ');
+      expect(patch.description).toBe('Keep description');
+      expect(patch.priority).toBe('high');
+      expect(patch.status).toBe('in_progress');
+      expect(patch.deadline).toBeNull();
+      expect(patch.archived).toBe(true);
+      expect(patch.tags).toEqual(['foo', 'bar', 'baz']);
+      expect(patch.assigned_to).toEqual([1, 2, 3]);
+      expect(patch.recurrence_freq).toBe('monthly');
+      expect(patch.recurrence_interval).toBe(3);
+    });
+
+    test('should clear recurrence when explicitly set to null', async () => {
+      const taskId = 12;
+      const currentTask = {
+        id: taskId,
+        project_id: 9,
+        status: 'pending',
+        recurrence_freq: 'weekly',
+        recurrence_interval: 4,
+        assigned_to: [],
+        tags: []
+      };
+
+      taskRepository.getTaskById.mockResolvedValue(currentTask);
+      taskRepository.updateById = jest.fn().mockResolvedValue(currentTask);
+
+      await taskService.updateTask(taskId, { recurrence: null });
+
+      const patch = taskRepository.updateById.mock.calls[0][1];
+      expect(patch.recurrence_freq).toBeNull();
+      expect(patch.recurrence_interval).toBe(1);
+    });
+
+    test('should enforce permission checks when requesting user provided', async () => {
+      const taskId = 13;
+      const updates = { title: 'Permission update' };
+      const currentTask = {
+        id: taskId,
+        project_id: 20,
+        status: 'pending',
+        recurrence_freq: null,
+        recurrence_interval: 1,
+        assigned_to: [],
+        tags: []
+      };
+
+      taskRepository.getTaskById.mockResolvedValue(currentTask);
+      taskRepository.updateById = jest.fn().mockResolvedValue({ ...currentTask, ...updates });
+
+      const canUpdateSpy = jest.spyOn(taskService, '_canUserUpdateTask').mockResolvedValue(true);
+
+      await taskService.updateTask(taskId, updates, 200);
+
+      expect(canUpdateSpy).toHaveBeenCalledWith(currentTask.project_id, 200);
+      canUpdateSpy.mockRestore();
+    });
+
+    test('should deny update when permission check fails', async () => {
+      const taskId = 14;
+      const updates = { title: 'Permission denied' };
+      const currentTask = {
+        id: taskId,
+        project_id: 30,
+        status: 'pending',
+        recurrence_freq: null,
+        recurrence_interval: 1,
+        assigned_to: [],
+        tags: []
+      };
+
+      taskRepository.getTaskById.mockResolvedValue(currentTask);
+      taskRepository.updateById = jest.fn();
+
+      const canUpdateSpy = jest.spyOn(taskService, '_canUserUpdateTask').mockResolvedValue(false);
+
+      await expect(taskService.updateTask(taskId, updates, 300))
+        .rejects.toThrow('You do not have permission to update this task');
+
+      expect(taskRepository.updateById).not.toHaveBeenCalled();
+      canUpdateSpy.mockRestore();
+    });
+
+    test('should clone subtasks when recurring task completes', async () => {
+      const taskId = 7;
+      const currentTask = {
+        id: taskId,
+        title: 'Recurring Parent',
+        status: 'in_progress',
+        deadline: '2024-01-01',
+        project_id: 12,
+        assigned_to: [5],
+        tags: ['urgent'],
+        recurrence_freq: 'weekly',
+        recurrence_interval: 2,
+        recurrence_series_id: 'series-123'
+      };
+      const updatedTask = { ...currentTask, status: 'completed' };
+      const newParent = { id: 99 };
+      const childSubtasks = [
+        {
+          id: 101,
+          title: 'Child Task',
+          description: 'Do something',
+          priority: 'high',
+          status: 'in_progress',
+          deadline: '2024-01-08',
+          project_id: 45,
+          assigned_to: [9],
+          tags: ['child']
+        }
+      ];
+
+      taskRepository.getTaskById.mockResolvedValue(currentTask);
+      taskRepository.updateById = jest.fn().mockResolvedValue(updatedTask);
+      taskRepository.insert = jest.fn().mockResolvedValue(newParent);
+      taskRepository.getSubtasks = jest.fn().mockResolvedValue(childSubtasks);
+      taskRepository.insertMany = jest.fn().mockResolvedValue([]);
+
+      await taskService.updateTask(taskId, { status: 'completed' });
+
+      expect(taskRepository.insert).toHaveBeenCalledWith(expect.objectContaining({
+        parent_id: null,
+        deadline: '2024-01-15',
+        recurrence_series_id: currentTask.recurrence_series_id
+      }));
+      expect(taskRepository.getSubtasks).toHaveBeenCalledWith(currentTask.id);
+      expect(taskRepository.insertMany).toHaveBeenCalledTimes(1);
+
+      const insertedChildren = taskRepository.insertMany.mock.calls[0][0];
+      expect(insertedChildren).toHaveLength(1);
+      const childPayload = insertedChildren[0];
+      expect(childPayload.parent_id).toBe(newParent.id);
+      expect(childPayload.status).toBe('pending');
+      expect(childPayload.deadline).toBe('2024-01-22');
+      expect(childPayload.recurrence_freq).toBe(currentTask.recurrence_freq);
+      expect(childPayload.recurrence_interval).toBe(currentTask.recurrence_interval);
+      expect(childPayload.recurrence_series_id).toBe(currentTask.recurrence_series_id);
+      expect(childPayload.assigned_to).toEqual(childSubtasks[0].assigned_to);
+      expect(childPayload.tags).toEqual(childSubtasks[0].tags);
+      expect(childPayload.created_at).toBeInstanceOf(Date);
+      expect(childPayload.updated_at).toBeInstanceOf(Date);
+    });
+
+    test('should skip cloning subtasks when none exist', async () => {
+      const taskId = 8;
+      const currentTask = {
+        id: taskId,
+        title: 'Parent without children',
+        status: 'in_progress',
+        deadline: '2024-02-01',
+        project_id: 20,
+        assigned_to: [],
+        tags: [],
+        recurrence_freq: 'weekly',
+        recurrence_interval: 1,
+        recurrence_series_id: 'series-xyz'
+      };
+      const updatedTask = { ...currentTask, status: 'completed' };
+
+      taskRepository.getTaskById.mockResolvedValue(currentTask);
+      taskRepository.updateById = jest.fn().mockResolvedValue(updatedTask);
+      taskRepository.insert = jest.fn().mockResolvedValue({ id: 200 });
+      taskRepository.getSubtasks = jest.fn().mockResolvedValue([]);
+      taskRepository.insertMany = jest.fn();
+
+      await taskService.updateTask(taskId, { status: 'completed' });
+
+      expect(taskRepository.getSubtasks).toHaveBeenCalledWith(currentTask.id);
+      expect(taskRepository.insertMany).not.toHaveBeenCalled();
+    });
+
+    test('should propagate recurrence for monthly schedules and update missing series id', async () => {
+      const taskId = 15;
+      const currentTask = {
+        id: taskId,
+        title: 'Monthly Parent',
+        description: 'Recurring monthly',
+        status: 'pending',
+        deadline: '2024-01-31',
+        project_id: 40,
+        assigned_to: [1, 2],
+        tags: ['m-tag'],
+        recurrence_freq: 'monthly',
+        recurrence_interval: 2,
+        recurrence_series_id: null
+      };
+      const updatedTask = { ...currentTask, status: 'completed' };
+      const newSeriesId = 'series-new';
+
+      const uuidSpy = jest.spyOn(crypto, 'randomUUID').mockReturnValue(newSeriesId);
+
+      taskRepository.getTaskById.mockResolvedValue(currentTask);
+      taskRepository.updateById = jest.fn()
+        .mockResolvedValueOnce(updatedTask) // primary update
+        .mockRejectedValueOnce(new Error('series update failed')); // ensure catch branch runs
+      taskRepository.insert = jest.fn().mockResolvedValue({ id: 400 });
+      taskRepository.getSubtasks = jest.fn().mockResolvedValue([
+        {
+          id: 900,
+          title: 'Child Monthly',
+          description: 'Child task',
+          priority: 'medium',
+          status: 'pending',
+          deadline: '2024-02-15',
+          project_id: null,
+          assigned_to: [3],
+          tags: ['child']
+        }
+      ]);
+      taskRepository.insertMany = jest.fn().mockResolvedValue([]);
+
+      await taskService.updateTask(taskId, { status: 'completed' });
+
+      // parent insert payload should have monthly interval applied (2 months)
+      const parentPayload = taskRepository.insert.mock.calls[0][0];
+      expect(parentPayload.deadline).toBe('2024-03-31');
+      expect(parentPayload.recurrence_series_id).toBe(newSeriesId);
+
+      // second update attempt should have been made (even though it failed)
+      expect(taskRepository.updateById).toHaveBeenCalledTimes(2);
+      expect(taskRepository.updateById.mock.calls[1]).toEqual([currentTask.id, { recurrence_series_id: newSeriesId }]);
+
+      const childPayload = taskRepository.insertMany.mock.calls[0][0][0];
+      expect(childPayload.parent_id).toBe(400);
+      expect(childPayload.deadline).toBe('2024-04-15');
+      expect(childPayload.recurrence_series_id).toBe(newSeriesId);
+      uuidSpy.mockRestore();
+    });
+
+    test('should advance deadlines for daily recurrence using the provided interval', async () => {
+      const taskId = 17;
+      const currentTask = {
+        id: taskId,
+        title: 'Daily Parent',
+        description: 'Daily',
+        status: 'pending',
+        deadline: '2024-05-01',
+        project_id: 10,
+        assigned_to: [],
+        tags: [],
+        recurrence_freq: 'daily',
+        recurrence_interval: 3,
+        recurrence_series_id: 'series-daily'
+      };
+      const updatedTask = { ...currentTask, status: 'completed' };
+
+      taskRepository.getTaskById.mockResolvedValue(currentTask);
+      taskRepository.updateById = jest.fn().mockResolvedValue(updatedTask);
+      taskRepository.insert = jest.fn().mockResolvedValue({ id: 610 });
+      taskRepository.getSubtasks = jest.fn().mockResolvedValue([]);
+      taskRepository.insertMany = jest.fn();
+
+      await taskService.updateTask(taskId, { status: 'completed' });
+
+      const parentPayload = taskRepository.insert.mock.calls[0][0];
+      expect(parentPayload.deadline).toBe('2024-05-04');
+      expect(taskRepository.insertMany).not.toHaveBeenCalled();
+    });
+
+    test('should advance weekly recurrence for parent and child deadlines', async () => {
+      const taskId = 18;
+      const currentTask = {
+        id: taskId,
+        title: 'Weekly Parent',
+        description: null,
+        status: 'pending',
+        deadline: '2024-06-01',
+        project_id: 11,
+        assigned_to: [8],
+        tags: ['weekly'],
+        recurrence_freq: 'weekly',
+        recurrence_interval: 2,
+        recurrence_series_id: 'series-weekly'
+      };
+      const updatedTask = { ...currentTask, status: 'completed' };
+      const child = {
+        id: 950,
+        title: 'Weekly Child',
+        description: 'child',
+        priority: 'medium',
+        status: 'pending',
+        deadline: '2024-06-03',
+        project_id: null,
+        assigned_to: [],
+        tags: ['child-weekly']
+      };
+
+      taskRepository.getTaskById.mockResolvedValue(currentTask);
+      taskRepository.updateById = jest.fn().mockResolvedValue(updatedTask);
+      taskRepository.insert = jest.fn().mockResolvedValue({ id: 611 });
+      taskRepository.getSubtasks = jest.fn().mockResolvedValue([child]);
+      taskRepository.insertMany = jest.fn().mockResolvedValue([]);
+
+      await taskService.updateTask(taskId, { status: 'completed' });
+
+      const parentPayload = taskRepository.insert.mock.calls[0][0];
+      expect(parentPayload.deadline).toBe('2024-06-15'); // +14 days
+
+      const childPayload = taskRepository.insertMany.mock.calls[0][0][0];
+      expect(childPayload.deadline).toBe('2024-06-17');
+    });
+
+    test('should handle invalid previous deadlines by setting next due to null', async () => {
+      const taskId = 19;
+      const currentTask = {
+        id: taskId,
+        title: 'Invalid date parent',
+        description: null,
+        status: 'pending',
+        deadline: 'not-a-date',
+        project_id: 12,
+        assigned_to: [],
+        tags: [],
+        recurrence_freq: 'daily',
+        recurrence_interval: 1,
+        recurrence_series_id: 'series-invalid'
+      };
+      const updatedTask = { ...currentTask, status: 'completed' };
+
+      taskRepository.getTaskById.mockResolvedValue(currentTask);
+      taskRepository.updateById = jest.fn().mockResolvedValue(updatedTask);
+      taskRepository.insert = jest.fn().mockResolvedValue({ id: 612 });
+      taskRepository.getSubtasks = jest.fn().mockResolvedValue([]);
+      taskRepository.insertMany = jest.fn();
+
+      await taskService.updateTask(taskId, { status: 'completed' });
+
+      const parentPayload = taskRepository.insert.mock.calls[0][0];
+      expect(parentPayload.deadline).toBeNull();
+    });
+
+    test('should handle missing deadlines and tolerate subtask cloning errors', async () => {
+      const taskId = 16;
+      const currentTask = {
+        id: taskId,
+        title: 'No deadline parent',
+        description: null,
+        status: 'pending',
+        deadline: null,
+        project_id: 55,
+        assigned_to: [],
+        tags: [],
+        recurrence_freq: 'weekly',
+        recurrence_interval: 1,
+        recurrence_series_id: 'series-fixed'
+      };
+      const updatedTask = { ...currentTask, status: 'completed' };
+
+      taskRepository.getTaskById.mockResolvedValue(currentTask);
+      taskRepository.updateById = jest.fn().mockResolvedValue(updatedTask);
+      taskRepository.insert = jest.fn().mockResolvedValue({ id: 501 });
+      taskRepository.getSubtasks = jest.fn().mockResolvedValue([
+        {
+          id: 901,
+          title: 'Child missing date',
+          description: null,
+          priority: 'low',
+          status: 'pending',
+          deadline: null,
+          project_id: null,
+          assigned_to: [],
+          tags: []
+        }
+      ]);
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      taskRepository.insertMany = jest.fn().mockRejectedValue(new Error('clone failure'));
+
+      await taskService.updateTask(taskId, { status: 'completed' });
+
+      const parentPayload = taskRepository.insert.mock.calls[0][0];
+      expect(parentPayload.deadline).toBeNull();
+
+      expect(taskRepository.insertMany).toHaveBeenCalledTimes(1);
+      expect(consoleSpy).toHaveBeenCalledWith('[recurrence] cloning subtasks failed:', expect.any(Error));
+      consoleSpy.mockRestore();
     });
   });
 
@@ -371,6 +888,145 @@ describe('TaskService', () => {
 
       await expect(taskService.getTasksByProject(projectId, filters))
         .rejects.toThrow('Project not found');
+    });
+  });
+
+  describe('getProjectTaskStats', () => {
+    test('should return zeroed stats when no tasks found', async () => {
+      projectRepository.getProjectById = jest.fn().mockResolvedValue({ id: 1 });
+      taskRepository.getTasksByProjectId = jest.fn().mockResolvedValue([]);
+
+      const stats = await taskService.getProjectTaskStats(1);
+
+      expect(stats).toEqual({
+        totalTasks: 0,
+        pendingTasks: 0,
+        inProgressTasks: 0,
+        completedTasks: 0,
+        cancelledTasks: 0,
+        blockedTasks: 0,
+        tasksByPriority: { low: 0, medium: 0, high: 0 },
+        overdueTasks: 0,
+        completionRate: 0
+      });
+    });
+
+    test('should compute aggregate stats for a project', async () => {
+      projectRepository.getProjectById = jest.fn().mockResolvedValue({ id: 2 });
+      const now = new Date();
+      const pastDate = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const futureDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+      taskRepository.getTasksByProjectId = jest.fn().mockResolvedValue([
+        { status: 'pending', priority: 'low', deadline: pastDate },
+        { status: 'in_progress', priority: 'medium', deadline: futureDate },
+        { status: 'completed', priority: 'high', deadline: pastDate },
+        { status: 'cancelled', priority: 'medium', deadline: null },
+        { status: 'blocked', priority: 'low', deadline: futureDate }
+      ]);
+
+      const stats = await taskService.getProjectTaskStats(2);
+
+      expect(stats.totalTasks).toBe(5);
+      expect(stats.pendingTasks).toBe(1);
+      expect(stats.inProgressTasks).toBe(1);
+      expect(stats.completedTasks).toBe(1);
+      expect(stats.cancelledTasks).toBe(1);
+      expect(stats.blockedTasks).toBe(1);
+      expect(stats.tasksByPriority).toEqual({ low: 2, medium: 2, high: 1 });
+      expect(stats.overdueTasks).toBe(1);
+      expect(stats.completionRate).toBe('20.0');
+    });
+  });
+
+  describe('deleteTask permissions', () => {
+    test('should enforce permissions before deleting', async () => {
+      const taskId = 2;
+      const currentTask = { id: taskId, project_id: 60 };
+
+      taskRepository.getTaskById.mockResolvedValue(currentTask);
+      taskRepository.deleteTask.mockResolvedValue(true);
+
+      const canUpdateSpy = jest.spyOn(taskService, '_canUserUpdateTask').mockResolvedValue(true);
+
+      await taskService.deleteTask(taskId, 900);
+
+      expect(canUpdateSpy).toHaveBeenCalledWith(currentTask.project_id, 900);
+      expect(taskRepository.deleteTask).toHaveBeenCalledWith(taskId);
+      canUpdateSpy.mockRestore();
+    });
+
+    test('should reject deletion when permission denied', async () => {
+      const taskId = 3;
+      const currentTask = { id: taskId, project_id: 70 };
+
+      taskRepository.getTaskById.mockResolvedValue(currentTask);
+      taskRepository.deleteTask.mockResolvedValue(true);
+
+      const canUpdateSpy = jest.spyOn(taskService, '_canUserUpdateTask').mockResolvedValue(false);
+
+      await expect(taskService.deleteTask(taskId, 901))
+        .rejects.toThrow('You do not have permission to delete this task');
+
+      expect(taskRepository.deleteTask).not.toHaveBeenCalled();
+      canUpdateSpy.mockRestore();
+    });
+  });
+
+  describe('_canUserUpdateTask', () => {
+    test('should delegate to project repository when available', async () => {
+      const original = projectRepository.canUserManageMembers;
+      projectRepository.canUserManageMembers = jest.fn().mockResolvedValue(true);
+
+      const result = await taskService._canUserUpdateTask(1, 2);
+
+      expect(projectRepository.canUserManageMembers).toHaveBeenCalledWith(1, 2);
+      expect(result).toBe(true);
+      projectRepository.canUserManageMembers = original;
+    });
+
+    test('should return false when permission check throws', async () => {
+      const original = projectRepository.canUserManageMembers;
+      projectRepository.canUserManageMembers = jest.fn().mockRejectedValue(new Error('fail'));
+
+      const result = await taskService._canUserUpdateTask(1, 2);
+
+      expect(result).toBe(false);
+      projectRepository.canUserManageMembers = original;
+    });
+
+    test('should default to true when permission hook absent', async () => {
+      const original = projectRepository.canUserManageMembers;
+      delete projectRepository.canUserManageMembers;
+
+      const result = await taskService._canUserUpdateTask(1, 2);
+
+      expect(result).toBe(true);
+      projectRepository.canUserManageMembers = original;
+    });
+  });
+
+  describe('_calculatePagination', () => {
+    test('should calculate pagination metadata', () => {
+      const meta = taskService._calculatePagination({ page: 2, limit: 5 }, 22);
+      expect(meta).toEqual({
+        page: 2,
+        limit: 5,
+        totalPages: 5,
+        hasNext: true,
+        hasPrev: true
+      });
+    });
+
+    test('should handle default pagination values', () => {
+      const meta = taskService._calculatePagination({}, 5);
+      expect(meta).toEqual({
+        page: 1,
+        limit: 20,
+        totalPages: 1,
+        hasNext: false,
+        hasPrev: false
+      });
     });
   });
 
