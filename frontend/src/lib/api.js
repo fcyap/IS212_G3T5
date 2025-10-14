@@ -362,14 +362,11 @@ class NotificationService {
   }
 
   async dismissNotification(notifId) {
-    const csrfToken = await getCsrfToken();
-    const response = await fetch(`${API_BASE_URL}/api/notifications/${notifId}/dismiss`, {
+    const response = await fetchWithCsrf(`${API_BASE_URL}/api/notifications/${notifId}/dismiss`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        'x-csrf-token': csrfToken,
       },
-      credentials: 'include',
     });
     if (!response.ok) {
       throw new Error(`Failed to dismiss notification: ${response.statusText}`);

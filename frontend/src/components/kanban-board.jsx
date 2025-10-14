@@ -487,7 +487,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
     let mounted = true;
     (async () => {
       try {
-        const res = await fetch(`${API}/tasks?archived=false&parent_id=${task.id}`);
+        const res = await fetchWithCsrf(`${API}/tasks?archived=false&parent_id=${task.id}`);
         if (!res.ok) throw new Error(`GET /tasks ${res.status}`);
         const rows = await res.json();
         // rows already have assignees hydrated by backend; if you map, keep tags/assignees as you do elsewhere
@@ -502,7 +502,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
   async function loadSubtasks() {
     try {
       // Prefer backend filter: /tasks?parent_id=ID
-      const res = await fetch(`${API}/tasks?parent_id=${task.id}`);
+      const res = await fetchWithCsrf(`${API}/tasks?parent_id=${task.id}`);
       if (!res.ok) throw new Error(`GET /tasks?parent_id=${task.id} ${res.status}`);
       const rows = await res.json();
       setSubtasks(Array.isArray(rows) ? rows : []);
@@ -510,7 +510,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
       console.error("[load subtasks]", err);
       // Fallback: fetch all then filter if your backend doesn't support parent_id
       try {
-        const resAll = await fetch(`${API}/tasks`);
+        const resAll = await fetchWithCsrf(`${API}/tasks`);
         const rowsAll = await resAll.json();
         setSubtasks((rowsAll || []).filter((r) => r.parent_id === task.id));
       } catch (e) {

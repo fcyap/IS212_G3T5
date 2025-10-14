@@ -341,7 +341,11 @@ class TaskService {
     // ---- Optional permission check (comprehensive path) ----
     if (!twoArgOverload && requestingUserId && this._canUserUpdateTask) {
       const canUpdate = await this._canUserUpdateTask(currentTask.project_id, requestingUserId);
-      if (!canUpdate) throw new Error('You do not have permission to update this task');
+      if (!canUpdate) {
+        const err = new Error('You do not have permission to update this task');
+        err.status = 403;
+        throw err;
+      }
     }
 
     // Store previous task for notifications
@@ -497,7 +501,9 @@ class TaskService {
     if (requestingUserId && this._canUserUpdateTask) {
       const canDelete = await this._canUserUpdateTask(currentTask.project_id, requestingUserId);
       if (!canDelete) {
-        throw new Error('You do not have permission to delete this task');
+        const err = new Error('You do not have permission to delete this task');
+        err.status = 403;
+        throw err;
       }
     }
 
@@ -560,6 +566,9 @@ class TaskService {
    */
   async _canUserUpdateTask(projectId, userId) {
     try {
+      if (projectId == null) {
+        return true;
+      }
       if (projectRepository.canUserManageMembers) {
         return await projectRepository.canUserManageMembers(projectId, userId);
       }
