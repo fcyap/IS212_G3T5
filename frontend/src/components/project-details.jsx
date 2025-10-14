@@ -20,7 +20,7 @@ import { ArrowLeft, Plus, Search, X, Check, Filter, ChevronDown, ChevronRight, E
 import { useProjects } from "@/contexts/project-context"
 import toast from "react-hot-toast"
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API = process.env.NEXT_PUBLIC_API_URL ;
 
 export function ProjectDetails({ projectId, onBack }) {
   const [project, setProject] = useState(null)

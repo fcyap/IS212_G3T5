@@ -4,7 +4,7 @@ import { CommentItem } from './task-comment-item';
 import { CurrentUser } from './test-task-comments';
 import { fetchWithCsrf } from '@/lib/csrf';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ;
 const API = `${API_BASE_URL}/api/tasks`;
 
 export const CommentSection = ({ taskId: propTaskId, currentUser = CurrentUser }) => {
