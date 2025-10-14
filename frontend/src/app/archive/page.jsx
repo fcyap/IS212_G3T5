@@ -4,8 +4,8 @@ import { TaskCard } from "@/components/task-card";
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link"
-import { getCsrfToken } from "@/lib/csrf";
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { fetchWithCsrf } from "@/lib/csrf";
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export default function ArchivePage() {
   const [tasks, setTasks] = useState([]);
@@ -19,14 +19,11 @@ export default function ArchivePage() {
   }, []);
 
   async function handleUnarchive(id) {
-    const csrfToken = await getCsrfToken();
-    const res = await fetch(`${API}/tasks/${id}`, {
+    const res = await fetchWithCsrf(`${API}/tasks/${id}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        "x-csrf-token": csrfToken
       },
-      credentials: "include",
       body: JSON.stringify({ archived: false }),
     });
     if (!res.ok) {
