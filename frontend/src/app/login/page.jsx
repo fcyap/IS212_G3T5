@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { getCsrfToken } from "@/lib/csrf";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,11 +14,12 @@ export default function LoginPage() {
   const onSubmit = async (e) => {
     e.preventDefault();
     setErr("");
+      const csrfToken = await getCsrfToken();
     try {
       const res = await fetch(process.env.NEXT_PUBLIC_API_URL + "/auth/supabase-login", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
         body: JSON.stringify({ email, password: pw }),
       });
       if (!res.ok) {
