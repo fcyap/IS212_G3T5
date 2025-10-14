@@ -127,7 +127,6 @@ export function KanbanBoard({ projectId = null }) {
       return
     }
     try {
-      const csrfToken = await getCsrfToken();
       const res = await fetchWithCsrf(`${API}/tasks`, {
         method: "POST",
         headers: {
