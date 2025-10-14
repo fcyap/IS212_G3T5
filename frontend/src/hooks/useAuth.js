@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, createContext, useContext } from 'react';
 import { userService } from '@/lib/api';
+import { useSession } from '@/components/session-provider';
 
 const AuthContext = createContext();
 
@@ -16,22 +17,59 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const session = useSession?.() ?? null;
+  const sessionUserId = session?.user?.id;
 
-  // Get current user ID from environment variable (simulated auth)
-  const currentUserId = process.env.NEXT_PUBLIC_CURRENT_USER_ID;
+  const normalizeRole = (rawRole) => {
+    if (!rawRole) return null;
+    if (typeof rawRole === 'object' && rawRole.label) return String(rawRole.label);
+    const label = String(rawRole).toLowerCase();
+    switch (label) {
+      case 'admin':
+        return 'Admin';
+      case 'manager':
+        return 'Manager';
+      case 'staff':
+      default:
+        return 'Staff';
+    }
+  };
 
   useEffect(() => {
-    const fetchCurrentUser = async () => {
-      if (!currentUserId) {
-        setError('No user ID configured');
+    const resolveUser = async () => {
+      if (session?.loading) {
+        setLoading(true);
+        return;
+      }
+
+      if (!sessionUserId) {
+        setUser(null);
+        setError('No authenticated user');
+        setLoading(false);
+        return;
+      }
+
+      const sessionRole = normalizeRole(session?.role);
+
+      if (session?.user) {
+        const merged = {
+          ...session.user,
+          role: sessionRole ?? normalizeRole(session?.user?.role),
+        };
+        setUser(merged);
+        setError(null);
         setLoading(false);
         return;
       }
 
       try {
         setLoading(true);
-        const userData = await userService.getUserById(currentUserId);
-        setUser(userData);
+        const userData = await userService.getUserById(sessionUserId);
+        const merged = {
+          ...userData,
+          role: sessionRole ?? normalizeRole(userData.role),
+        };
+        setUser(merged);
         setError(null);
       } catch (err) {
         console.error('Error fetching current user:', err);
@@ -42,31 +80,22 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
-    fetchCurrentUser();
-  }, [currentUserId]);
+    resolveUser();
+  }, [session?.loading, session?.user, session?.role, sessionUserId]);
 
-  // Helper functions to check permissions
-  const isManager = () => {
-    return user?.role === 'manager';
-  };
+  const userRole = normalizeRole(user?.role) ?? normalizeRole(session?.role);
 
-  const canCreateProject = () => {
-    return isManager();
-  };
-
-  const canEditProject = (projectCreatorId) => {
-    return user?.id === projectCreatorId;
-  };
-
-  const canDeleteProject = (projectCreatorId) => {
-    return user?.id === projectCreatorId;
-  };
+  const isManager = () => userRole === 'Manager';
+  const canCreateProject = () => isManager();
+  const canEditProject = (projectCreatorId) => user?.id === projectCreatorId;
+  const canDeleteProject = (projectCreatorId) => user?.id === projectCreatorId;
 
   const value = {
     user,
     loading,
     error,
-    currentUserId: currentUserId ? parseInt(currentUserId) : null,
+    currentUserId: sessionUserId ?? null,
+    role: userRole,
     isManager,
     canCreateProject,
     canEditProject,

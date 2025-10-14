@@ -107,7 +107,21 @@ describe('TaskController', () => {
 
       await taskController.create(req, res);
 
-      expect(taskService.createTask).toHaveBeenCalledWith(req.body);
+      expect(taskService.createTask).toHaveBeenCalledWith(expect.objectContaining(req.body), null);
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith(mockCreatedTask);
+    });
+
+    test('should attach creator from request user', async () => {
+      req.user = { id: 42 };
+      req.body = { title: 'Creator Task' };
+
+      const mockCreatedTask = { id: 1, title: 'Creator Task' };
+      taskService.createTask.mockResolvedValue(mockCreatedTask);
+
+      await taskController.create(req, res);
+
+      expect(taskService.createTask).toHaveBeenCalledWith(expect.objectContaining({ title: 'Creator Task' }), 42);
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.json).toHaveBeenCalledWith(mockCreatedTask);
     });
@@ -165,7 +179,7 @@ describe('TaskController', () => {
 
       await taskController.update(req, res);
 
-      expect(taskService.updateTask).toHaveBeenCalledWith(1, req.body);
+      expect(taskService.updateTask).toHaveBeenCalledWith(1, req.body, null);
       expect(res.json).toHaveBeenCalledWith(mockUpdatedTask);
     });
 
@@ -203,6 +217,7 @@ describe('TaskController', () => {
 
       await taskController.update(req, res);
 
+      expect(taskService.updateTask).toHaveBeenCalledWith(1, req.body, null);
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({
         error: 'Task not found'

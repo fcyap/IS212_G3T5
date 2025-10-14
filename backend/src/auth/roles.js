@@ -1,16 +1,18 @@
 /*path: backend/src/auth.roles*/
+const { supabase } = require('../supabase-client');
+
 const getEffectiveRole = async (sql, userId) => {
   try {
-    // Get user role from the users table directly
-    const users = await sql/*sql*/`
-      select role from public.users
-      where id = ${userId}
-      limit 1
-    `;
+    // Use Supabase instead of direct SQL connection
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', userId)
+      .single();
     
-    const user = users[0];
-    if (!user) {
-      return { label: 'Staff', level: 1 };
+    if (error || !user) {
+      console.error('Error getting user role from Supabase:', error);
+      return { label: 'staff', level: 1 };
     }
 
     const role = user.role || 'staff';
@@ -18,17 +20,17 @@ const getEffectiveRole = async (sql, userId) => {
     // Map database roles to display roles
     switch (role.toLowerCase()) {
       case 'admin':
-        return { label: 'Admin', level: 3 };
+        return { label: 'admin', level: 3 };
       case 'manager':
-        return { label: 'Manager', level: 2 };
+        return { label: 'manager', level: 2 };
       case 'staff':
       default:
-        return { label: 'Staff', level: 1 };
+        return { label: 'staff', level: 1 };
     }
   } catch (error) {
     console.error('Error getting user role:', error);
     // Fallback to staff role if there's an error
-    return { label: 'Staff', level: 1 };
+    return { label: 'staff', level: 1 };
   }
 };
 

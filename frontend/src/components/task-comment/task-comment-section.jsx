@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { CommentBox } from './task-comment';
 import { CommentItem } from './task-comment-item';
-import { CurrentUser } from './test-task-comments';
 import { getCsrfToken } from '@/lib/csrf';
+import { useAuth } from '@/hooks/useAuth';
 
 const API = 'http://localhost:3001/api/tasks';
 
-export const CommentSection = ({ taskId: propTaskId, currentUser = CurrentUser }) => {
+export const CommentSection = ({ taskId: propTaskId, currentUser: overrideUser = null }) => {
+  const { user: authUser } = useAuth();
+  const currentUser = overrideUser ?? authUser;
+  if (!currentUser) {
+    console.warn('[CommentSection] No authenticated user available; comment actions disabled');
+  }
   const taskId = propTaskId;
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +38,10 @@ const toViewModel = (row) => ({
     let alive = true;
     (async () => {
       try {
-  const res = await fetch(`${API}/${taskId}/comments`, { cache: 'no-store' });
+  const res = await fetch(`${API}/${taskId}/comments`, {
+    cache: 'no-store',
+    credentials: 'include',
+  });
         if (!res.ok) throw new Error((await res.json()).error || res.statusText);
         const data = await res.json();
         if (alive) setComments(data.map(toViewModel));
@@ -69,7 +77,10 @@ const toViewModel = (row) => ({
     if (!res.ok) throw new Error(body.error || res.statusText);
     // After creating, reload all comments so replies are nested
     try {
-  const reload = await fetch(`${API}/${taskId}/comments`, { cache: 'no-store' });
+  const reload = await fetch(`${API}/${taskId}/comments`, {
+    cache: 'no-store',
+    credentials: 'include',
+  });
       if (!reload.ok) throw new Error((await reload.json()).error || reload.statusText);
       const data = await reload.json();
       setComments(data.map(toViewModel));
@@ -100,7 +111,10 @@ const toViewModel = (row) => ({
     if (!res.ok) throw new Error(body.error || res.statusText);
     // After editing, reload all comments so replies are nested
     try {
-  const reload = await fetch(`${API}/${taskId}/comments`, { cache: 'no-store' });
+  const reload = await fetch(`${API}/${taskId}/comments`, {
+    cache: 'no-store',
+    credentials: 'include',
+  });
       if (!reload.ok) throw new Error((await reload.json()).error || reload.statusText);
       const data = await reload.json();
       setComments(data.map(toViewModel));

@@ -5,7 +5,9 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 class ProjectService {
   async getAllProjects() {
-    const response = await fetch(`${API_BASE_URL}/api/projects`);
+    const response = await fetch(`${API_BASE_URL}/api/projects`, {
+      credentials: 'include', // Include cookies for authentication
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch projects: ${response.statusText}`);
     }
@@ -17,7 +19,9 @@ class ProjectService {
   }
 
   async getProjectById(id) {
-    const response = await fetch(`${API_BASE_URL}/api/projects/${id}`);
+    const response = await fetch(`${API_BASE_URL}/api/projects/${id}`, {
+      credentials: 'include', // Include cookies for authentication
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch project ${id}: ${response.statusText}`);
     }
@@ -91,7 +95,9 @@ class ProjectService {
   }
 
   async getProjectMembers(projectId) {
-    const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/members`);
+    const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/members`, {
+      credentials: 'include', // Include cookies for authentication
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch members for project ${projectId}: ${response.statusText}`);
     }
@@ -181,7 +187,9 @@ class ProjectTasksService {
     }
 
     const url = `${API_BASE_URL}/api/projects/${projectId}/tasks${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      credentials: 'include', // Include cookies for authentication
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to fetch tasks for project ${projectId}: ${response.statusText}`);
@@ -195,7 +203,9 @@ class ProjectTasksService {
   }
 
   async getTaskById(projectId, taskId) {
-    const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks/${taskId}`);
+    const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks/${taskId}`, {
+      credentials: 'include', // Include cookies for authentication
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch task ${taskId}: ${response.statusText}`);
     }
@@ -274,7 +284,9 @@ class ProjectTasksService {
   }
 
   async getTaskStats(projectId) {
-    const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks/stats`);
+    const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/tasks/stats`, {
+      credentials: 'include', // Include cookies for authentication
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch task stats for project ${projectId}: ${response.statusText}`);
     }
@@ -309,7 +321,9 @@ class ProjectTasksService {
     }
 
     const url = `${API_BASE_URL}/api/tasks${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      credentials: 'include', // Include cookies for authentication
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to fetch all tasks: ${response.statusText}`);
@@ -325,7 +339,9 @@ class ProjectTasksService {
 
 class UserService {
   async getUserById(id) {
-    const response = await fetch(`${API_BASE_URL}/api/users/${id}`);
+    const response = await fetch(`${API_BASE_URL}/api/users/${id}`, {
+      credentials: 'include', // Include cookies for authentication
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch user ${id}: ${response.statusText}`);
     }
@@ -337,7 +353,9 @@ class UserService {
   }
 
   async getAllUsers() {
-    const response = await fetch(`${API_BASE_URL}/api/users`);
+    const response = await fetch(`${API_BASE_URL}/api/users`, {
+      credentials: 'include', // Include cookies for authentication
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch users: ${response.statusText}`);
     }
@@ -349,6 +367,57 @@ class UserService {
   }
 }
 
+class NotificationService {
+  async getUserNotifications(limit = 50, offset = 0, includeDismissed = true) {
+    const response = await fetch(`${API_BASE_URL}/api/notifications?limit=${limit}&offset=${offset}&includeDismissed=${includeDismissed}`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch notifications: ${response.statusText}`);
+    }
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch notifications');
+    }
+    return data;
+  }
+
+  async getNotificationsByCreator(limit = 50, offset = 0) {
+    const response = await fetch(`${API_BASE_URL}/api/notifications/created?limit=${limit}&offset=${offset}`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch created notifications: ${response.statusText}`);
+    }
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch created notifications');
+    }
+    return data;
+  }
+
+  async dismissNotification(notifId) {
+    const csrfToken = await getCsrfToken();
+    const response = await fetch(`${API_BASE_URL}/api/notifications/${notifId}/dismiss`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken,
+      },
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to dismiss notification: ${response.statusText}`);
+    }
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to dismiss notification');
+    }
+    return data;
+  }
+}
+
 export const projectService = new ProjectService();
 export const projectTasksService = new ProjectTasksService();
 export const userService = new UserService();
+export const notificationService = new NotificationService();

@@ -1,5 +1,6 @@
 const projectTasksRepository = require('../repository/projectTasksRepository');
 const projectRepository = require('../repository/projectRepository');
+const notificationService = require('./notificationService');
 
 class ProjectTasksService {
   /**
@@ -35,6 +36,31 @@ class ProjectTasksService {
       throw new Error(`${fieldName} must be a positive integer`);
     }
     return num;
+  }
+
+  /**
+   * Normalize Supabase assigned_to payloads into an array of integers
+   * @param {Array<any>} assigned - Raw assigned_to values
+   * @returns {number[]} Normalized integer user IDs
+   */
+  _normalizeAssigneeIds(assigned) {
+    if (!Array.isArray(assigned)) {
+      return [];
+    }
+
+    return assigned
+      .map((value) => {
+        if (value === null || value === undefined) {
+          return null;
+        }
+        const raw = typeof value === 'string' ? value.trim() : value;
+        if (raw === '') {
+          return null;
+        }
+        const num = Number(raw);
+        return Number.isFinite(num) ? Math.trunc(num) : null;
+      })
+      .filter((value) => value !== null);
   }
 
   /**
@@ -252,7 +278,7 @@ class ProjectTasksService {
    * @param {Object} taskData - The task data
    * @returns {Object} Created task data or error
    */
-  async createTask(projectId, taskData) {
+  async createTask(projectId, taskData, creatorId = null) {
     try {
       // Validate project exists
       const validatedProjectId = this.validatePositiveInteger(projectId, 'projectId');
@@ -279,6 +305,21 @@ class ProjectTasksService {
         throw new Error('assigned_to must be an array of positive integers');
       }
 
+      const normalizedAssignees = Array.isArray(assigned_to) ? assigned_to : [];
+      const assignees = normalizedAssignees
+        .map((value) => (typeof value === 'string' ? value.trim() : value))
+        .filter((value) => value !== '' && value !== null && value !== undefined)
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value))
+        .map((value) => Math.trunc(value));
+
+      const creatorNumeric = creatorId != null ? Number(creatorId) : null;
+      const validCreatorId = Number.isFinite(creatorNumeric) ? Math.trunc(creatorNumeric) : null;
+
+      if (validCreatorId != null && !assignees.includes(validCreatorId)) {
+        assignees.push(validCreatorId);
+      }
+
       // Validate deadline format if provided
       if (deadline && isNaN(Date.parse(deadline))) {
         throw new Error('Invalid deadline format. Use ISO 8601 format');
@@ -290,13 +331,74 @@ class ProjectTasksService {
         status,
         priority,
         project_id: validatedProjectId,
-        assigned_to: assigned_to || [],
+        assigned_to: assignees,
         deadline: deadline || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
 
       const newTask = await projectTasksRepository.create(cleanTaskData);
+
+      console.log(`Task created: ${JSON.stringify(newTask)}`);
+
+      // Send immediate deadline notifications if task has deadline today/tomorrow
+      if (newTask.deadline) {
+        console.log(`DEBUG: Task has deadline: "${newTask.deadline}" (type: ${typeof newTask.deadline})`);
+        try {
+          console.log(`Task "${newTask.title}" has deadline: ${newTask.deadline}`);
+          const deadline = new Date(newTask.deadline);
+          console.log(`Parsed deadline: ${deadline}, isValid: ${!isNaN(deadline.getTime())}`);
+          
+          // Get current date in local timezone
+          const now = new Date();
+          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+
+          // Normalize deadline to start of day in local timezone
+          const deadlineDate = new Date(deadline.getFullYear(), deadline.getMonth(), deadline.getDate());
+
+          console.log(`Today: ${today.toISOString().split('T')[0]}, Tomorrow: ${tomorrow.toISOString().split('T')[0]}, Task deadline: ${deadlineDate.toISOString().split('T')[0]}`);
+          console.log(`Today time: ${today.getTime()}, Tomorrow time: ${tomorrow.getTime()}, Deadline time: ${deadlineDate.getTime()}`);
+
+          // Check if deadline is today or tomorrow
+          const isToday = deadlineDate.getTime() === today.getTime();
+          const isTomorrow = deadlineDate.getTime() === tomorrow.getTime();
+          
+          console.log(`Is today: ${isToday}, Is tomorrow: ${isTomorrow}`);
+          
+          if (isToday || isTomorrow) {
+            console.log(`Task "${newTask.title}" has deadline ${deadlineDate.toDateString()}, sending immediate notifications`);
+
+            // Hydrate task with assignee information
+            const hydratedTask = { ...newTask };
+            if (newTask.assigned_to && newTask.assigned_to.length > 0) {
+              try {
+                const userRepository = require('../repository/userRepository');
+                const assignees = [];
+                for (const userId of newTask.assigned_to) {
+                  const user = await userRepository.getUserById(userId);
+                  if (user) {
+                    assignees.push(user);
+                  }
+                }
+                hydratedTask.assignees = assignees;
+              } catch (error) {
+                console.error('Error hydrating assignees:', error);
+                hydratedTask.assignees = [];
+              }
+            } else {
+              hydratedTask.assignees = [];
+            }
+
+            // Send deadline notifications using the unified method
+            await this.sendDeadlineNotifications(hydratedTask);
+          }
+        } catch (notificationError) {
+          console.error('Error sending immediate deadline notification:', notificationError);
+          // Don't fail task creation if notification fails
+        }
+      }
 
       return {
         success: true,
@@ -320,9 +422,29 @@ class ProjectTasksService {
    * @param {Object} updateData - The data to update
    * @returns {Object} Updated task data or error
    */
-  async updateTask(taskId, updateData) {
+  async updateTask(taskId, updateData, requestingUserId = null) {
     try {
       const validatedTaskId = this.validatePositiveInteger(taskId, 'taskId');
+      const normalizedRequesterId = requestingUserId !== null && requestingUserId !== undefined
+        ? this.validatePositiveInteger(requestingUserId, 'requestingUserId')
+        : null;
+      let existingTask = null;
+
+      if (normalizedRequesterId !== null) {
+        existingTask = await projectTasksRepository.findById(validatedTaskId);
+        if (!existingTask) {
+          const notFoundError = new Error('Task not found');
+          notFoundError.statusCode = 404;
+          throw notFoundError;
+        }
+
+        const assigneeIds = this._normalizeAssigneeIds(existingTask.assigned_to);
+        if (!assigneeIds.includes(normalizedRequesterId)) {
+          const permissionError = new Error('You must be assigned to the task to update it.');
+          permissionError.statusCode = 403;
+          throw permissionError;
+        }
+      }
 
       // Filter out undefined values
       const filteredUpdateData = Object.fromEntries(
@@ -350,7 +472,54 @@ class ProjectTasksService {
       const updatedTask = await projectTasksRepository.update(validatedTaskId, filteredUpdateData);
 
       if (!updatedTask) {
-        throw new Error('Task not found');
+        const notFoundError = new Error('Task not found');
+        notFoundError.statusCode = 404;
+        throw notFoundError;
+      }
+
+      // Send immediate deadline notifications if task deadline was updated to today/tomorrow
+      if (filteredUpdateData.deadline && updatedTask.deadline) {
+        try {
+          const deadline = new Date(updatedTask.deadline);
+          const now = new Date();
+          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+
+          const deadlineDate = new Date(deadline.getFullYear(), deadline.getMonth(), deadline.getDate());
+
+          // Check if deadline is today or tomorrow
+          if (deadlineDate.getTime() === today.getTime() || deadlineDate.getTime() === tomorrow.getTime()) {
+            console.log(`Task "${updatedTask.title}" deadline updated to ${deadlineDate.toDateString()}, sending immediate notifications`);
+
+            // Hydrate task with assignee information
+            const hydratedTask = { ...updatedTask };
+            if (updatedTask.assigned_to && updatedTask.assigned_to.length > 0) {
+              try {
+                const userRepository = require('../repository/userRepository');
+                const assignees = [];
+                for (const userId of updatedTask.assigned_to) {
+                  const user = await userRepository.getUserById(userId);
+                  if (user) {
+                    assignees.push(user);
+                  }
+                }
+                hydratedTask.assignees = assignees;
+              } catch (error) {
+                console.error('Error hydrating assignees:', error);
+                hydratedTask.assignees = [];
+              }
+            } else {
+              hydratedTask.assignees = [];
+            }
+
+            // Send deadline notifications using the unified method
+            await this.sendDeadlineNotifications(hydratedTask);
+          }
+        } catch (notificationError) {
+          console.error('Error sending immediate deadline notification on update:', notificationError);
+          // Don't fail task update if notification fails
+        }
       }
 
       return {
@@ -364,7 +533,8 @@ class ProjectTasksService {
       return {
         success: false,
         error: error.message,
-        message: 'Failed to update task'
+        message: 'Failed to update task',
+        statusCode: error.statusCode || error.status
       };
     }
   }
@@ -453,6 +623,86 @@ class ProjectTasksService {
         error: error.message,
         message: 'Failed to retrieve task statistics'
       };
+    }
+  }
+
+  /**
+   * Send deadline notifications for any task (with or without project)
+   * @param {Object} task - The task object
+   * @param {string} deadlineType - 'today' or 'tomorrow'
+   */
+  async sendDeadlineNotifications(task, deadlineType = 'today') {
+    try {
+      if (!task.deadline) return;
+
+      // Check if deadline is today or tomorrow
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const deadlineDate = new Date(task.deadline);
+      deadlineDate.setHours(0, 0, 0, 0);
+
+      const isToday = deadlineDate.getTime() === today.getTime();
+      const isTomorrow = deadlineDate.getTime() === tomorrow.getTime();
+
+      if (!isToday && !isTomorrow) return;
+
+      console.log('Sending deadline notifications for task:', {
+        taskId: task.id,
+        title: task.title,
+        deadline: task.deadline,
+        deadlineType: isToday ? 'today' : 'tomorrow',
+        hasProject: !!task.project_id
+      });
+
+      const recipients = [];
+
+      // Get project managers if task has a project
+      if (task.project_id) {
+        try {
+          const managers = await notificationService.getProjectManagers(task.project_id);
+          recipients.push(...managers);
+        } catch (error) {
+          console.warn('Could not fetch project managers for notifications:', error.message);
+        }
+      }
+
+      // Get task assignees
+      if (task.assigned_to && Array.isArray(task.assigned_to)) {
+        try {
+          const userRepository = require('../repository/userRepository');
+          for (const userId of task.assigned_to) {
+            const user = await userRepository.getUserById(userId);
+            if (user) {
+              recipients.push(user);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching assignees for notifications:', error);
+        }
+      }
+
+      // Remove duplicates
+      const uniqueRecipients = recipients.filter((user, index, self) =>
+        index === self.findIndex(u => u.id === user.id)
+      );
+
+      console.log(`Sending ${isToday ? 'today' : 'tomorrow'} deadline notifications to ${uniqueRecipients.length} recipients:`, uniqueRecipients.map(u => u.id));
+
+      // Send notifications
+      for (const recipient of uniqueRecipients) {
+        try {
+          await notificationService.createDeadlineNotification(task, recipient);
+          await notificationService.sendDeadlineEmailNotification(task, recipient);
+        } catch (error) {
+          console.error(`Failed to send notification to user ${recipient.id}:`, error);
+        }
+      }
+
+    } catch (error) {
+      console.error('Error in sendDeadlineNotifications:', error);
     }
   }
 }
