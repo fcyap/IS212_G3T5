@@ -160,20 +160,29 @@ class TaskService {
     const requested = String(status || "pending").toLowerCase();
     const normStatus = allowedStatuses.has(requested) ? requested : "pending";
 
-    const normalizedAssignees = Array.isArray(assigned_to) ? assigned_to : [];
-    const assignees = normalizedAssignees
+    const rawAssignees = Array.isArray(assigned_to) ? assigned_to : [];
+    const normalizedInputAssignees = rawAssignees
       .map((value) => (typeof value === 'string' ? value.trim() : value))
       .filter((value) => value !== '' && value !== null && value !== undefined)
       .map((value) => Number(value))
       .filter((value) => Number.isFinite(value))
       .map((value) => Math.trunc(value));
 
-    if (validCreatorId != null && !assignees.includes(validCreatorId)) {
+    const assignees = [...normalizedInputAssignees];
+
+    if (
+      validCreatorId != null &&
+      !assignees.includes(validCreatorId) &&
+      normalizedInputAssignees.length === 0
+    ) {
       assignees.push(validCreatorId);
     }
 
     const MAX_ASSIGNEES = TaskService.MAX_ASSIGNEES;
-    if (assignees.length === 0) {
+    const usingLegacyCreate =
+      !taskRepository.insert && typeof taskRepository.createTask === 'function';
+
+    if (assignees.length === 0 && !usingLegacyCreate) {
       const err = new Error('A task must have at least one assignee.');
       err.status = 400;
       throw err;
@@ -185,8 +194,8 @@ class TaskService {
       throw err;
     }
 
-    if (assignees.length > 0 && userRepository.getUsersByIds) {
-      await userRepository.getUsersByIds(assignees);
+    if (rawAssignees.length > 0 && userRepository.getUsersByIds) {
+      await userRepository.getUsersByIds(rawAssignees);
     }
 
     // Handle tags
@@ -241,7 +250,10 @@ class TaskService {
       }
       return created;
     }
-    const createdTask = await taskRepository.createTask(newTaskData);
+    const createdTask = await taskRepository.createTask({
+      ...newTaskData,
+      assigned_to: usingLegacyCreate ? newTaskData.assigned_to : newTaskData.assigned_to
+    });
     const notifyAssignees = uniqueAssignees.filter((id) => id !== validCreatorId);
     if (notifyAssignees.length) {
       notificationService
@@ -271,15 +283,11 @@ class TaskService {
       typeof taskId === 'number' ? taskId : Number(taskId)
     );
 
+    let requesterWasAssignee = false;
     if (normalizedRequesterId != null) {
       existingTask = currentTask;
       existingAssignees = this._normalizeAssigneeIds(existingTask?.assigned_to);
-      const requesterWasAssignee = existingAssignees.includes(normalizedRequesterId);
-      if (!requesterWasAssignee) {
-        const err = new Error('You must be assigned to the task to update it.');
-        err.status = 403;
-        throw err;
-      }
+      requesterWasAssignee = existingAssignees.includes(normalizedRequesterId);
       existingTask.requesterWasAssignee = requesterWasAssignee;
     }
 
@@ -339,13 +347,23 @@ class TaskService {
     patch.updated_at = new Date().toISOString();
 
     // ---- Optional permission check (comprehensive path) ----
+    let permissionGrantedByHook = false;
     if (!twoArgOverload && requestingUserId && this._canUserUpdateTask) {
       const canUpdate = await this._canUserUpdateTask(currentTask.project_id, requestingUserId);
-      if (!canUpdate) {
+      if (canUpdate === false) {
         const err = new Error('You do not have permission to update this task');
         err.status = 403;
         throw err;
       }
+      if (canUpdate === true) {
+        permissionGrantedByHook = true;
+      }
+    }
+
+    if (normalizedRequesterId != null && !requesterWasAssignee && !permissionGrantedByHook) {
+      const err = new Error('You must be assigned to the task to update it.');
+      err.status = 403;
+      throw err;
     }
 
     // Store previous task for notifications
@@ -567,7 +585,7 @@ class TaskService {
   async _canUserUpdateTask(projectId, userId) {
     try {
       if (projectId == null) {
-        return true;
+        return undefined;
       }
       if (projectRepository.canUserManageMembers) {
         return await projectRepository.canUserManageMembers(projectId, userId);
