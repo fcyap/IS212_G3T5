@@ -1,6 +1,7 @@
 const taskRepository = require('../repository/taskRepository');
 const projectRepository = require('../repository/projectRepository');
 const userRepository = require('../repository/userRepository');
+const crypto = require('crypto');
 const notificationService = require('./notificationService');
 
 /**
@@ -9,11 +10,41 @@ const notificationService = require('./notificationService');
  *
  * Supports both comprehensive project management and simple kanban board operations
  */
+  function normalizeAssignedTo(val) {
+  if (!Array.isArray(val)) return [];
+  return val
+    .map(v => (typeof v === 'string' ? v.trim() : v))
+    .filter(v => v !== '' && v !== null && v !== undefined)
+    .map(Number)
+    .filter(Number.isFinite)
+    .map(n => Math.trunc(n)); // int4[]
+}
+
+function addIntervalFromBase(baseDate, freq, interval = 1) {
+  if (!baseDate) return null;
+  const d = new Date(baseDate);
+  if (isNaN(d)) return null;
+
+  if (freq === 'daily') d.setDate(d.getDate() + interval);
+  else if (freq === 'weekly') d.setDate(d.getDate() + 7 * interval);
+  else if (freq === 'monthly') {
+    const day = d.getDate();
+    d.setMonth(d.getMonth() + interval);
+  }
+
+  // return YYYY-MM-DD (same format you use for `deadline`)
+  return d.toISOString().slice(0, 10);
+}
+
+function isCompleted(status) {
+  return String(status || '').toLowerCase() === 'completed';
+}
+
 class TaskService {
 
-  async listWithAssignees({ archived = false } = {}) {
+  async listWithAssignees({ archived = false, parentId } = {}) {
     try {
-      const { data: tasks, error } = await taskRepository.list({ archived });
+      const { data: tasks, error } = await taskRepository.list({ archived, parentId });
       if (error) throw error;
 
       const idSet = new Set();
@@ -101,6 +132,8 @@ class TaskService {
       project_id,
       assigned_to,
       tags,
+      parent_id = null,
+      recurrence
     } = taskData;
 
     if (!title || title.trim() === '') {
@@ -126,20 +159,30 @@ class TaskService {
     const allowedStatuses = new Set(["pending", "in_progress", "completed", "blocked", "cancelled"]);
     const requested = String(status || "pending").toLowerCase();
     const normStatus = allowedStatuses.has(requested) ? requested : "pending";
-    const normalizedAssignees = Array.isArray(assigned_to) ? assigned_to : [];
-    const assignees = normalizedAssignees
+
+    const rawAssignees = Array.isArray(assigned_to) ? assigned_to : [];
+    const normalizedInputAssignees = rawAssignees
       .map((value) => (typeof value === 'string' ? value.trim() : value))
       .filter((value) => value !== '' && value !== null && value !== undefined)
       .map((value) => Number(value))
       .filter((value) => Number.isFinite(value))
       .map((value) => Math.trunc(value));
 
-    if (validCreatorId != null && !assignees.includes(validCreatorId)) {
+    const assignees = [...normalizedInputAssignees];
+
+    if (
+      validCreatorId != null &&
+      !assignees.includes(validCreatorId) &&
+      normalizedInputAssignees.length === 0
+    ) {
       assignees.push(validCreatorId);
     }
 
     const MAX_ASSIGNEES = TaskService.MAX_ASSIGNEES;
-    if (assignees.length === 0) {
+    const usingLegacyCreate =
+      !taskRepository.insert && typeof taskRepository.createTask === 'function';
+
+    if (assignees.length === 0 && !usingLegacyCreate) {
       const err = new Error('A task must have at least one assignee.');
       err.status = 400;
       throw err;
@@ -151,8 +194,8 @@ class TaskService {
       throw err;
     }
 
-    if (assignees.length > 0 && userRepository.getUsersByIds) {
-      await userRepository.getUsersByIds(assignees);
+    if (rawAssignees.length > 0 && userRepository.getUsersByIds) {
+      await userRepository.getUsersByIds(rawAssignees);
     }
 
     // Handle tags
@@ -180,8 +223,14 @@ class TaskService {
       project_id: project_id || null,
       assigned_to: uniqueAssignees,
       tags: normTags,
+      parent_id: parent_id === null || parent_id === undefined
+     ? null
+     : Number(parent_id),
       created_at: new Date(),
-      updated_at: new Date()
+      updated_at: new Date(),
+      recurrence_freq: (recurrence && ['daily','weekly','monthly'].includes(recurrence.freq)) ? recurrence.freq : null,
+   recurrence_interval: recurrence?.interval ? Math.max(1, Number(recurrence.interval)) : 1,
+   recurrence_series_id: recurrence ? (crypto.randomUUID?.() || null) : null,
     };
 
     if (taskRepository.insert) {
@@ -201,7 +250,10 @@ class TaskService {
       }
       return created;
     }
-    const createdTask = await taskRepository.createTask(newTaskData);
+    const createdTask = await taskRepository.createTask({
+      ...newTaskData,
+      assigned_to: usingLegacyCreate ? newTaskData.assigned_to : newTaskData.assigned_to
+    });
     const notifyAssignees = uniqueAssignees.filter((id) => id !== validCreatorId);
     if (notifyAssignees.length) {
       notificationService
@@ -221,231 +273,121 @@ class TaskService {
    * Update task - supports both approaches
    */
   async updateTask(taskId, updates, requestingUserId) {
+    // ---- Always fetch current to detect the transition & read recurrence ----
     const hasRequestingUser = arguments.length >= 3 && requestingUserId != null;
     const normalizedRequesterId = hasRequestingUser ? Math.trunc(Number(requestingUserId)) : null;
     let existingTask = null;
     let existingAssignees = [];
 
+    const currentTask = await taskRepository.getTaskById(
+      typeof taskId === 'number' ? taskId : Number(taskId)
+    );
+
+    let requesterWasAssignee = false;
     if (normalizedRequesterId != null) {
-      existingTask = await taskRepository.getTaskById(taskId);
+      existingTask = currentTask;
       existingAssignees = this._normalizeAssigneeIds(existingTask?.assigned_to);
-      const requesterWasAssignee = existingAssignees.includes(normalizedRequesterId);
-      if (!requesterWasAssignee) {
-        const err = new Error('You must be assigned to the task to update it.');
-        err.status = 403;
-        throw err;
-      }
+      requesterWasAssignee = existingAssignees.includes(normalizedRequesterId);
       existingTask.requesterWasAssignee = requesterWasAssignee;
     }
 
-    if (arguments.length === 2) {
-      const id = taskId;
-      const input = updates;
-      let previousTask = null;
-      try {
-        previousTask = await taskRepository.getTaskById(id);
-      } catch (err) {
-        console.warn(`Unable to fetch existing task ${id} before update:`, err);
-      }
+    const twoArgOverload = (arguments.length === 2);
+    const input = updates;
 
-      const patch = {};
-      if (input.title !== undefined) patch.title = input.title;
-      if (input.description !== undefined) patch.description = input.description;
-      if (input.priority !== undefined) patch.priority = String(input.priority).toLowerCase();
-      if (input.status !== undefined) patch.status = input.status;
-      if (input.deadline !== undefined) patch.deadline = input.deadline || null;
-      if (input.archived !== undefined) patch.archived = !!input.archived;
-
-      let previousAssigneeIds = null;
-      if (input.assigned_to !== undefined) {
-        // Accept number[], string[] of numbers, or null/empty
-        const arr = Array.isArray(input.assigned_to) ? input.assigned_to : [];
-        const normalized = arr
-          .map(v => (typeof v === 'string' ? v.trim() : v))
-          .filter(v => v !== '' && v !== null && v !== undefined)
-          .map(Number)
-          .filter(Number.isFinite) // keep only valid numbers
-          .map(n => Math.trunc(n)); // ensure integers
-        previousAssigneeIds = await this._getTaskAssigneeIds(taskId);
-        const uniqueAssignees = Array.from(new Set(normalized));
-        if (uniqueAssignees.length === 0) {
-          const err = new Error('A task must have at least one assignee.');
-          err.status = 400;
-          throw err;
-        }
-
-        if (uniqueAssignees.length > TaskService.MAX_ASSIGNEES) {
-          const err = new Error(`A task can have at most ${TaskService.MAX_ASSIGNEES} assignees.`);
-          err.status = 400;
-          throw err;
-        }
-        patch.assigned_to = uniqueAssignees; // <-- Supabase column of type int4[]
-      }
-
-      // Handle tags
-      if (input.tags !== undefined) {
-        const tagsArr = Array.isArray(input.tags)
-          ? input.tags
-          : typeof input.tags === "string"
-            ? input.tags.split(",")
-            : [];
-        patch.tags = Array.from(
-          new Set(
-            tagsArr
-              .map((t) => String(t).trim())
-              .filter(Boolean)
-          )
-        );
-      }
-
-      patch.updated_at = new Date().toISOString();
-
-      if (taskRepository.updateById) {
-        const updated = await taskRepository.updateById(id, patch);
-        if (patch.assigned_to !== undefined) {
-          const updatedAssignees = this._normalizeAssigneeIds(updated.assigned_to);
-          const previous = this._normalizeAssigneeIds(previousAssigneeIds);
-          const newlyAssigned = updatedAssignees.filter(id => !previous.includes(id));
-          const removedAssignees = previous.filter(id => !updatedAssignees.includes(id));
-          if (newlyAssigned.length) {
-            notificationService
-              .createTaskAssignmentNotifications({
-                task: updated,
-                assigneeIds: newlyAssigned,
-                assignedById: normalizedRequesterId ?? null,
-                previousAssigneeIds: previous,
-                currentAssigneeIds: updatedAssignees,
-                notificationType: 'reassignment'
-              })
-              .catch((err) =>
-                console.error('Failed to send task assignment notifications:', err)
-              );
-          }
-          if (removedAssignees.length) {
-            notificationService
-              .createTaskRemovalNotifications({
-                task: updated,
-                assigneeIds: removedAssignees,
-                assignedById: normalizedRequesterId ?? null,
-                previousAssigneeIds: previous,
-                currentAssigneeIds: updatedAssignees
-              })
-              .catch((err) =>
-                console.error('Failed to send task removal notifications:', err)
-              );
-          }
-        }
-        await this._sendTaskUpdateNotifications({
-          previousTask,
-          updatedTask: updated,
-          updatedFields: Object.keys(patch),
-          actorId: normalizedRequesterId ?? null
-        });
-        return updated;
-      } else {
-        const updated = await taskRepository.updateTask(id, patch); // hydrated task
-        if (patch.assigned_to !== undefined) {
-          const updatedAssignees = this._normalizeAssigneeIds(updated.assigned_to);
-          const previous = this._normalizeAssigneeIds(previousAssigneeIds);
-          const newlyAssigned = updatedAssignees.filter(id => !previous.includes(id));
-          const removedAssignees = previous.filter(id => !updatedAssignees.includes(id));
-          if (newlyAssigned.length) {
-            notificationService
-              .createTaskAssignmentNotifications({
-                task: updated,
-                assigneeIds: newlyAssigned,
-                assignedById: normalizedRequesterId ?? null,
-                previousAssigneeIds: previous,
-                currentAssigneeIds: updatedAssignees,
-                notificationType: 'reassignment'
-              })
-              .catch((err) =>
-                console.error('Failed to send task assignment notifications:', err)
-              );
-          }
-          if (removedAssignees.length) {
-            notificationService
-              .createTaskRemovalNotifications({
-                task: updated,
-                assigneeIds: removedAssignees,
-                assignedById: normalizedRequesterId ?? null,
-                previousAssigneeIds: previous,
-                currentAssigneeIds: updatedAssignees
-              })
-              .catch((err) =>
-                console.error('Failed to send task removal notifications:', err)
-              );
-          }
-        }
-        await this._sendTaskUpdateNotifications({
-          previousTask,
-          updatedTask: updated,
-          updatedFields: Object.keys(patch),
-          actorId: normalizedRequesterId ?? null
-        });
-        return updated;
-      }
+    // Normalize patch (your existing logic, trimmed to keep the important bits)
+    const patch = {};
+    if (input.title !== undefined) patch.title = input.title;
+    if (input.description !== undefined) patch.description = input.description;
+    if (input.priority !== undefined) patch.priority = String(input.priority).toLowerCase();
+    if (input.status !== undefined) patch.status = input.status;
+    if (input.deadline !== undefined) patch.deadline = input.deadline || null;
+    if (input.archived !== undefined) patch.archived = !!input.archived;
+    if (input.tags !== undefined) {
+      const tagsArr = Array.isArray(input.tags)
+        ? input.tags
+        : typeof input.tags === "string" ? input.tags.split(",") : [];
+      patch.tags = Array.from(new Set(tagsArr.map(t => String(t).trim()).filter(Boolean)));
     }
 
-    // Comprehensive approach with permissions
-    const currentTask = existingTask ?? await taskRepository.getTaskById(taskId);
-    const previousAssignees = existingAssignees.length ? existingAssignees : this._normalizeAssigneeIds(currentTask?.assigned_to);
-
-    // Check permissions if we have the method
-    if (normalizedRequesterId != null && this._canUserUpdateTask) {
-      const canUpdate = await this._canUserUpdateTask(currentTask.project_id, normalizedRequesterId);
-      const requesterIsAssignee =
-        currentTask.requesterWasAssignee ||
-        previousAssignees.includes(normalizedRequesterId);
-      if (!canUpdate && !requesterIsAssignee) {
-        throw new Error('You do not have permission to update this task');
-      }
-    }
-
-    // Validate assigned users exist (if updating assignments)
-    if (updates.assigned_to && updates.assigned_to.length > 0 && userRepository.getUsersByIds) {
-      if (updates.assigned_to.length > TaskService.MAX_ASSIGNEES) {
-        const err = new Error(`A task can have at most ${TaskService.MAX_ASSIGNEES} assignees.`);
-        err.status = 400;
-        throw err;
-      }
-      if (updates.assigned_to.length === 0) {
-        const err = new Error('A task must have at least one assignee.');
-        err.status = 400;
-        throw err;
-      }
-      await userRepository.getUsersByIds(updates.assigned_to);
-    }
-
-    const updateData = {
-      ...updates,
-      updated_at: new Date()
-    };
-
-    const updatedTask = await taskRepository.updateTask(taskId, updateData);
-    if (updates.assigned_to !== undefined) {
-      const updatedIds = this._normalizeAssigneeIds(updatedTask.assigned_to);
-      if (updatedIds.length > TaskService.MAX_ASSIGNEES) {
-        const err = new Error(`A task can have at most ${TaskService.MAX_ASSIGNEES} assignees.`);
-        err.status = 400;
-        throw err;
-      }
-      if (updatedIds.length === 0) {
+    let previousAssigneeIds = null;
+    if (input.assigned_to !== undefined) {
+      const arr = Array.isArray(input.assigned_to) ? input.assigned_to : [];
+      const normalized = arr
+        .map(v => (typeof v === 'string' ? v.trim() : v))
+        .filter(v => v !== '' && v !== null && v !== undefined)
+        .map(Number)
+        .filter(Number.isFinite)
+        .map(n => Math.trunc(n));
+      previousAssigneeIds = await this._getTaskAssigneeIds(taskId);
+      const uniqueAssignees = Array.from(new Set(normalized));
+      if (uniqueAssignees.length === 0) {
         const err = new Error('A task must have at least one assignee.');
         err.status = 400;
         throw err;
       }
 
-      const newlyAssigned = updatedIds.filter((id) => !previousAssignees.includes(id));
-      const removedAssignees = previousAssignees.filter((id) => !updatedIds.includes(id));
+      if (uniqueAssignees.length > TaskService.MAX_ASSIGNEES) {
+        const err = new Error(`A task can have at most ${TaskService.MAX_ASSIGNEES} assignees.`);
+        err.status = 400;
+        throw err;
+      }
+      patch.assigned_to = uniqueAssignees;
+    }
+
+    // Allow updating recurrence fields from the UI (optional)
+    if (input.recurrence) {
+      const { freq, interval } = input.recurrence || {};
+      patch.recurrence_freq = (freq === 'daily' || freq === 'weekly' || freq === 'monthly') ? freq : null;
+      patch.recurrence_interval = Math.max(1, Number(interval || 1));
+    } else if (input.recurrence === null) {
+      patch.recurrence_freq = null;
+      patch.recurrence_interval = 1;
+    }
+
+    patch.updated_at = new Date().toISOString();
+
+    // ---- Optional permission check (comprehensive path) ----
+    let permissionGrantedByHook = false;
+    if (!twoArgOverload && requestingUserId && this._canUserUpdateTask) {
+      const canUpdate = await this._canUserUpdateTask(currentTask.project_id, requestingUserId);
+      if (canUpdate === false) {
+        const err = new Error('You do not have permission to update this task');
+        err.status = 403;
+        throw err;
+      }
+      if (canUpdate === true) {
+        permissionGrantedByHook = true;
+      }
+    }
+
+    if (normalizedRequesterId != null && !requesterWasAssignee && !permissionGrantedByHook) {
+      const err = new Error('You must be assigned to the task to update it.');
+      err.status = 403;
+      throw err;
+    }
+
+    // Store previous task for notifications
+    const previousTask = { ...currentTask };
+
+    // ---- Do the update ----
+    const updated = taskRepository.updateById
+      ? await taskRepository.updateById(Number(taskId), patch)
+      : await taskRepository.updateTask(Number(taskId), patch);
+
+    // ---- Send notifications for assignee changes ----
+    if (patch.assigned_to !== undefined) {
+      const updatedAssignees = this._normalizeAssigneeIds(updated.assigned_to);
+      const previous = this._normalizeAssigneeIds(previousAssigneeIds);
+      const newlyAssigned = updatedAssignees.filter(id => !previous.includes(id));
+      const removedAssignees = previous.filter(id => !updatedAssignees.includes(id));
       if (newlyAssigned.length) {
         notificationService
           .createTaskAssignmentNotifications({
-            task: updatedTask,
+            task: updated,
             assigneeIds: newlyAssigned,
             assignedById: normalizedRequesterId ?? null,
-            previousAssigneeIds: previousAssignees,
-            currentAssigneeIds: updatedIds,
+            previousAssigneeIds: previous,
+            currentAssigneeIds: updatedAssignees,
             notificationType: 'reassignment'
           })
           .catch((err) =>
@@ -455,25 +397,116 @@ class TaskService {
       if (removedAssignees.length) {
         notificationService
           .createTaskRemovalNotifications({
-            task: updatedTask,
+            task: updated,
             assigneeIds: removedAssignees,
             assignedById: normalizedRequesterId ?? null,
-            previousAssigneeIds: previousAssignees,
-            currentAssigneeIds: updatedIds
+            previousAssigneeIds: previous,
+            currentAssigneeIds: updatedAssignees
           })
           .catch((err) =>
             console.error('Failed to send task removal notifications:', err)
           );
       }
     }
+
+    // ---- Send notifications for other field updates ----
     await this._sendTaskUpdateNotifications({
-      previousTask: currentTask,
-      updatedTask,
-      updatedFields: Object.keys(updates || {}),
+      previousTask,
+      updatedTask: updated,
+      updatedFields: Object.keys(patch),
       actorId: normalizedRequesterId ?? null
     });
-    return updatedTask;
+
+    // ---- Recurrence: spawn a next instance only on transition -> completed ----
+    const beforeCompleted = isCompleted(currentTask.status);
+    const afterCompleted  = isCompleted(updated.status);
+
+    const hasRecurrence = !!currentTask.recurrence_freq;
+    const shouldSpawn = !beforeCompleted && afterCompleted && hasRecurrence;
+
+    if (!shouldSpawn) {
+      return updated;
+    }
+
+    // Compute the next due date from the PREVIOUS due date (+ interval)
+    const freq = currentTask.recurrence_freq;
+    const interval = Math.max(1, Number(currentTask.recurrence_interval || 1));
+    const baseDue = currentTask.deadline; // NOTE: "previous due date", not completion time.
+    const nextDue = addIntervalFromBase(baseDue, freq, interval);
+
+    // Create the new instance (reset status, keep assignments/tags/etc.)
+    const seriesId = currentTask.recurrence_series_id || crypto.randomUUID?.() || null;
+
+    const newTaskPayload = {
+      title: currentTask.title,
+      description: currentTask.description,
+      priority: currentTask.priority,
+      status: 'pending',
+      deadline: nextDue,
+      project_id: currentTask.project_id,
+      assigned_to: Array.isArray(currentTask.assigned_to) ? currentTask.assigned_to : [],
+      tags: Array.isArray(currentTask.tags) ? currentTask.tags : [],
+      parent_id: null,
+      archived: false,
+
+      recurrence_freq: currentTask.recurrence_freq,
+      recurrence_interval: interval,
+      recurrence_series_id: seriesId,
+
+      created_at: new Date(),
+      updated_at: new Date()
+    };
+
+    const newParent = await taskRepository.insert(newTaskPayload);
+
+    // Ensure the whole chain shares a series id
+    if (!currentTask.recurrence_series_id && seriesId) {
+      try {
+        await taskRepository.updateById(currentTask.id, { recurrence_series_id: seriesId });
+      } catch {/* non-blocking */}
+    }
+
+    // ---- Clone subtasks when a parent recurs ----
+    try {
+      const children = await taskRepository.getSubtasks(currentTask.id);
+
+      if (children.length) {
+        const childPayloads = children.map(ch => {
+          const base = ch.deadline || baseDue;
+          const nextChildDue = addIntervalFromBase(base, freq, interval);
+
+          return {
+            title: ch.title,
+            description: ch.description,
+            priority: ch.priority,
+            status: 'pending',
+            deadline: nextChildDue,
+            project_id: ch.project_id ?? currentTask.project_id,
+            assigned_to: Array.isArray(ch.assigned_to) ? ch.assigned_to : [],
+            tags: Array.isArray(ch.tags) ? ch.tags : [],
+            parent_id: newParent.id,        // attach to the new parent
+            archived: false,
+
+            // inherit the parent's recurrence chain
+            recurrence_freq: freq,
+            recurrence_interval: interval,
+            recurrence_series_id: seriesId,
+
+            created_at: new Date(),
+            updated_at: new Date()
+          };
+        });
+
+        await taskRepository.insertMany(childPayloads);
+      }
+    } catch (e) {
+      console.error('[recurrence] cloning subtasks failed:', e);
+      // Non-blocking – parent already created
+    }
+
+    return updated;
   }
+
 
   /**
    * Delete task
@@ -486,7 +519,9 @@ class TaskService {
     if (requestingUserId && this._canUserUpdateTask) {
       const canDelete = await this._canUserUpdateTask(currentTask.project_id, requestingUserId);
       if (!canDelete) {
-        throw new Error('You do not have permission to delete this task');
+        const err = new Error('You do not have permission to delete this task');
+        err.status = 403;
+        throw err;
       }
     }
 
@@ -549,6 +584,9 @@ class TaskService {
    */
   async _canUserUpdateTask(projectId, userId) {
     try {
+      if (projectId == null) {
+        return undefined;
+      }
       if (projectRepository.canUserManageMembers) {
         return await projectRepository.canUserManageMembers(projectId, userId);
       }
