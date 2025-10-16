@@ -1,5 +1,11 @@
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
+const { sql } = require('../db');
+const {
+  requireProjectEdit,
+  requireTaskCreation,
+  requireTaskModification
+} = require('../middleware/rbac');
 const router = express.Router();
 
 // Constants for validation
@@ -283,7 +289,7 @@ router.get('/:projectId/tasks', async (req, res) => {
 });
 
 // POST /projects/:projectId/tasks - Create a new task
-router.post('/:projectId/tasks', async (req, res) => {
+router.post('/:projectId/tasks', requireTaskCreation(sql), async (req, res) => {
   try {
     const { projectId } = req.params;
     const taskData = req.body;
@@ -462,7 +468,7 @@ router.get('/:projectId/tasks/:taskId', async (req, res) => {
 });
 
 // PUT /projects/:projectId/tasks/:taskId - Update a task
-router.put('/:projectId/tasks/:taskId', async (req, res) => {
+router.put('/:projectId/tasks/:taskId', requireTaskModification(sql), async (req, res) => {
   try {
     const { projectId, taskId } = req.params;
     const updateData = req.body;
@@ -732,7 +738,7 @@ router.get('/', async (req, res) => {
 });
 
 // PATCH /projects/:projectId/archive - Archive a project
-router.patch('/:projectId/archive', async (req, res) => {
+router.patch('/:projectId/archive', requireProjectEdit(sql), async (req, res) => {
   try {
     const { projectId } = req.params;
 

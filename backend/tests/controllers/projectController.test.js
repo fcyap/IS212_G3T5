@@ -11,6 +11,22 @@ const projectService = require('../../src/services/projectService');
 
 jest.mock('../../src/services/projectService');
 
+// Mock the database connection
+jest.mock('../../src/db', () => ({
+  sql: jest.fn((strings, ...values) => {
+    // Return mock user data
+    return Promise.resolve([{
+      id: 1,
+      name: 'Test User',
+      email: 'test@example.com',
+      role: 'admin',
+      hierarchy: 1,
+      division: 'Engineering',
+      department: 'Development'
+    }]);
+  })
+}));
+
 describe('ProjectController', () => {
   let req, res;
 
@@ -22,7 +38,10 @@ describe('ProjectController', () => {
     };
     res = {
       status: jest.fn().mockReturnThis(),
-      json: jest.fn()
+      json: jest.fn(),
+      locals: {
+        session: { user_id: 1 }
+      }
     };
     jest.clearAllMocks();
   });
@@ -129,34 +148,37 @@ describe('ProjectController', () => {
         { id: 2, name: 'Project 2' }
       ];
 
-      projectService.getAllProjectsForUser.mockResolvedValue(mockProjects);
+      projectService.getProjectsWithRBAC.mockResolvedValue(mockProjects);
 
       await getAllProjects(req, res);
 
-      expect(projectService.getAllProjectsForUser).toHaveBeenCalledWith(1);
+      expect(projectService.getProjectsWithRBAC).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 1,
+          role: 'admin'
+        })
+      );
       expect(res.json).toHaveBeenCalledWith({
         success: true,
-        projects: mockProjects
+        projects: mockProjects,
+        userRole: 'admin'
       });
     });
 
-    test('should default to user id 1 when req.user is undefined', async () => {
-      delete req.user;
-      const mockProjects = [];
-
-      projectService.getAllProjectsForUser.mockResolvedValue(mockProjects);
+    test('should return 401 when session is missing', async () => {
+      delete res.locals.session;
 
       await getAllProjects(req, res);
 
-      expect(projectService.getAllProjectsForUser).toHaveBeenCalledWith(1);
+      expect(res.status).toHaveBeenCalledWith(401);
       expect(res.json).toHaveBeenCalledWith({
-        success: true,
-        projects: mockProjects
+        success: false,
+        message: 'Authentication required'
       });
     });
 
     test('should handle service error', async () => {
-      projectService.getAllProjectsForUser.mockRejectedValue(new Error('Database error'));
+      projectService.getProjectsWithRBAC.mockRejectedValue(new Error('Database error'));
 
       await getAllProjects(req, res);
 

@@ -32,7 +32,7 @@ const requireProjectCreation = (req, res, next) => {
 /**
  * Middleware to check if user can edit projects
  */
-const requireProjectEdit = async (sql) => {
+const requireProjectEdit = (sql) => {
   return async (req, res, next) => {
     try {
       const user = res.locals.session || req.user;
@@ -87,7 +87,7 @@ const requireProjectEdit = async (sql) => {
 /**
  * Middleware to check if user can add members to projects
  */
-const requireAddProjectMembers = async (sql) => {
+const requireAddProjectMembers = (sql) => {
   return async (req, res, next) => {
     try {
       const user = res.locals.session || req.user;
@@ -135,7 +135,7 @@ const requireAddProjectMembers = async (sql) => {
 /**
  * Middleware to filter projects based on user hierarchy and division
  */
-const filterVisibleProjects = async (sql) => {
+const filterVisibleProjects = (sql) => {
   return async (req, res, next) => {
     try {
       const user = res.locals.session || req.user;
@@ -188,9 +188,166 @@ const filterVisibleProjects = async (sql) => {
   };
 };
 
+/**
+ * Middleware to check if user can create tasks in a project
+ * Users must be project members or have higher access via RBAC
+ */
+const requireTaskCreation = (sql) => {
+  return async (req, res, next) => {
+    try {
+      const user = res.locals.session || req.user;
+      const projectId = req.params.projectId || req.body.project_id;
+
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      // If no project specified, allow (for personal tasks)
+      if (!projectId) {
+        return next();
+      }
+
+      // Get project and check access
+      const projects = await sql/*sql*/`
+        select p.id, p.creator_id, p.user_ids, u.role, u.hierarchy, u.division
+        from public.projects p
+        left join public.users u on u.id = p.creator_id
+        where p.id = ${projectId}
+        limit 1
+      `;
+
+      if (!projects.length) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      const project = projects[0];
+      const userData = {
+        id: user.user_id || user.id,
+        role: user.role || 'staff',
+        hierarchy: user.hierarchy || 1,
+        division: user.division
+      };
+
+      // Admin can create tasks anywhere
+      if (userData.role === 'admin') {
+        return next();
+      }
+
+      // Check if user is project member
+      const isProjectMember = project.user_ids && project.user_ids.includes(userData.id);
+
+      // Check if user is project creator
+      const isCreator = userData.id === project.creator_id;
+
+      // Managers can create tasks in projects from their division with lower hierarchy
+      const projectCreator = {
+        role: project.role,
+        hierarchy: project.hierarchy,
+        division: project.division
+      };
+
+      const hasManagerAccess = userData.role === 'manager' &&
+                               userData.division === projectCreator.division &&
+                               (userData.hierarchy || 0) > (projectCreator.hierarchy || 0);
+
+      if (isProjectMember || isCreator || hasManagerAccess) {
+        return next();
+      }
+
+      return res.status(403).json({
+        error: 'Access denied',
+        message: 'You do not have permission to create tasks in this project'
+      });
+    } catch (error) {
+      console.error('Error in requireTaskCreation middleware:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+};
+
+/**
+ * Middleware to check if user can modify/delete tasks
+ * Task creators, project members with appropriate access, and managers can modify
+ */
+const requireTaskModification = (sql) => {
+  return async (req, res, next) => {
+    try {
+      const user = res.locals.session || req.user;
+      const taskId = req.params.id || req.params.taskId;
+
+      if (!user || !taskId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      // Get task and associated project
+      const tasks = await sql/*sql*/`
+        select t.id, t.project_id, t.assigned_to, p.creator_id as project_creator_id,
+               p.user_ids as project_members, u.role, u.hierarchy, u.division
+        from public.tasks t
+        left join public.projects p on p.id = t.project_id
+        left join public.users u on u.id = p.creator_id
+        where t.id = ${taskId}
+        limit 1
+      `;
+
+      if (!tasks.length) {
+        return res.status(404).json({ error: 'Task not found' });
+      }
+
+      const task = tasks[0];
+      const userData = {
+        id: user.user_id || user.id,
+        role: user.role || 'staff',
+        hierarchy: user.hierarchy || 1,
+        division: user.division
+      };
+
+      // Admin can modify anything
+      if (userData.role === 'admin') {
+        return next();
+      }
+
+      // Check if user is assigned to the task
+      const isAssigned = task.assigned_to && task.assigned_to.includes(userData.id);
+
+      // Check if user is project member
+      const isProjectMember = task.project_members && task.project_members.includes(userData.id);
+
+      // Check if user is project creator
+      const isProjectCreator = userData.id === task.project_creator_id;
+
+      // Managers can modify tasks in projects from their division
+      const projectCreator = {
+        role: task.role,
+        hierarchy: task.hierarchy,
+        division: task.division
+      };
+
+      const hasManagerAccess = userData.role === 'manager' &&
+                               task.project_id && // Only for project tasks
+                               userData.division === projectCreator.division &&
+                               (userData.hierarchy || 0) > (projectCreator.hierarchy || 0);
+
+      if (isAssigned || isProjectMember || isProjectCreator || hasManagerAccess) {
+        return next();
+      }
+
+      return res.status(403).json({
+        error: 'Access denied',
+        message: 'You do not have permission to modify this task'
+      });
+    } catch (error) {
+      console.error('Error in requireTaskModification middleware:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+};
+
 module.exports = {
   requireProjectCreation,
   requireProjectEdit,
   requireAddProjectMembers,
-  filterVisibleProjects
+  filterVisibleProjects,
+  requireTaskCreation,
+  requireTaskModification
 };
