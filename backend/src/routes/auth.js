@@ -8,7 +8,7 @@ const { cookieName } = require('../middleware/auth');
 const { authMiddleware } = require('../middleware/auth');
 const supabase = require('../utils/supabase');
 
-function authRoutes(sql) {
+function authRoutes() {
   const router = express.Router();
 
   router.post('/login', async (req, res) => {
@@ -253,7 +253,7 @@ function authRoutes(sql) {
   });
 
   // PROTECT THIS:
-  router.get('/me', authMiddleware(sql), async (req, res) => {
+  router.get('/me', authMiddleware(), async (req, res) => {
     try {
       const { session } = res.locals;
 

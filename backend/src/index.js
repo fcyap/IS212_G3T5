@@ -8,7 +8,6 @@ const jwt = require('jsonwebtoken');
 
 const { csrf } = require('lusca');
 // Import UAA modules
-const { sql } = require('./db');
 const { authRoutes } = require('./routes/auth');
 const { authMiddleware, cookieName } = require('./middleware/auth');
 const { createSession, deleteSession } = require('./auth/sessions');
@@ -81,10 +80,10 @@ async function initializeApp() {
     app.get("/csrf-token", (req, res) => {
         res.json({ csrfToken: req.csrfToken() });
     });
-  const authMw = authMiddleware(sql);
+  const authMw = authMiddleware();
 
   // UAA Auth endpoints (unprotected)
-  app.use('/auth', authRoutes(sql));
+  app.use('/auth', authRoutes());
 
   // -------------------- Dev session routes --------------------
   const supabase = require('./utils/supabase');
@@ -148,7 +147,7 @@ async function initializeApp() {
   app.use('/tasks', authMw, tasksRouter);
 
   // UAA Protected route example
-  app.get('/protected/ping', authMiddleware(sql), (req, res) => {
+  app.get('/protected/ping', authMiddleware(), (req, res) => {
     res.json({ ok: true, at: new Date().toISOString(), user: res.locals.session });
   });
 
