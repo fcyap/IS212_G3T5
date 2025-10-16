@@ -50,7 +50,7 @@ export function ProjectHeader({ currentView }) {
     .join('')
     .slice(0, 2)
     .toUpperCase()
-  const roleLabel = user?.role?.label || user?.role_label || 'No Role'
+  const roleLabel = (user?.role?.label || user?.role_label || user?.role || 'No Role').replace(/^./, c => c.toUpperCase())
 
   return (
     <div className="bg-[#1f1f23] text-white">
