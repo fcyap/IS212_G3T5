@@ -639,6 +639,72 @@ class ProjectRepository {
     return true;
   }
 
+  /**
+   * Get projects created by users in the same division with lower hierarchy
+   * Used for manager view of subordinate projects
+   */
+  async getProjectsByDivisionAndHierarchy(division, managerHierarchy) {
+    console.log('🔍 [ProjectRepository] Getting projects by division and hierarchy:', { division, managerHierarchy });
+
+    // First, get all users in the division with lower hierarchy
+    const { data: users, error: usersError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('division', division)
+      .lt('hierarchy', managerHierarchy);
+
+    if (usersError) {
+      console.error('❌ [ProjectRepository] Error getting users:', usersError);
+      throw new Error(usersError.message);
+    }
+
+    if (!users || users.length === 0) {
+      console.log('⚠️ [ProjectRepository] No subordinate users found');
+      return [];
+    }
+
+    const subordinateUserIds = users.map(u => u.id);
+
+    // Now get all projects created by those users
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .in('creator_id', subordinateUserIds)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ [ProjectRepository] Error getting projects by division/hierarchy:', error);
+      throw new Error(error.message);
+    }
+
+    console.log('✅ [ProjectRepository] Found projects by division/hierarchy:', data?.length || 0);
+    return data || [];
+  }
+
+  /**
+   * Get all projects (for admin users)
+   */
+  async getAllProjectsEnhanced() {
+    console.log('🔍 [ProjectRepository] Getting all projects with user details');
+
+    // Get all projects first
+    const { data: projects, error } = await supabase
+      .from('projects')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ [ProjectRepository] Error getting all projects:', error);
+      throw new Error(error.message);
+    }
+
+    console.log('✅ [ProjectRepository] Found all projects:', projects?.length || 0);
+
+    // For now, return just the projects without joined creator data
+    // The foreign key relationship might not be properly configured in Supabase
+    return projects || [];
+  }
+
 }
 
 module.exports = new ProjectRepository();

@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { CreateProjectDialog } from "@/components/create-project"
 import { useProjects } from "@/contexts/project-context"
-import { useAuth } from "@/hooks/useAuth"
+import { useSession } from "@/components/session-provider"
 import {
     Home,
     CheckSquare,
@@ -47,7 +47,12 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
     const [isProjectsExpanded, setIsProjectsExpanded] = useState(true)
     const [isTeamsExpanded, setIsTeamsExpanded] = useState(true)
     const { projects, loading, error, selectedProject, selectProject } = useProjects()
-    const { user, role, loading: authLoading, canCreateProject } = useAuth()
+    const { user, role, loading: sessionLoading } = useSession()
+
+    // Check if user can create projects (only managers and admins)
+    const canCreateProject = () => {
+        return user?.role === 'manager' || user?.role === 'admin'
+    }
 
     const displayName = user?.name || user?.email || 'Unknown User'
     const initials = (user?.name || user?.email || 'U')
@@ -246,7 +251,7 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
             </div>
 
             {/* User Info Section */}
-            {!authLoading && user && (
+            {!sessionLoading && user && (
                 <div className="p-4 border-t border-gray-700">
                     {isCollapsed ? (
                         <div className="flex items-center justify-center p-2 bg-gray-800 rounded-lg">
@@ -262,7 +267,10 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                 </div>
                                 <div className="flex-1">
                                     <div className="text-sm font-medium text-white">{displayName}</div>
-                                    <div className="text-xs text-gray-400 capitalize">{roleLabel}</div>
+                                    <div className="text-xs text-gray-400 capitalize">
+                                        {roleLabel}
+                                        {user.division && ` - ${user.division}`}
+                                    </div>
                                 </div>
                             </div>
                         </div>

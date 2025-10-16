@@ -534,7 +534,7 @@ describe('notificationService', () => {
     it('getUserNotifications validates email', async () => {
       notificationRepository.getByRecipientEmail.mockResolvedValue(['notification']);
       const result = await notificationService.getUserNotifications('user@example.com', 5, 2);
-      expect(notificationRepository.getByRecipientEmail).toHaveBeenCalledWith('user@example.com', { limit: 5, offset: 2 });
+      expect(notificationRepository.getByRecipientEmail).toHaveBeenCalledWith('user@example.com', { limit: 5, offset: 2, includeDismissed: true });
       expect(result).toEqual(['notification']);
 
       await expect(notificationService.getUserNotifications()).rejects.toThrow('User email is required');

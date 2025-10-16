@@ -3,6 +3,7 @@ const projectRepository = require('../repository/projectRepository');
 const userRepository = require('../repository/userRepository');
 const crypto = require('crypto');
 const notificationService = require('./notificationService');
+const supabase = require('../utils/supabase');
 
 /**
  * Task Service - Contains business logic for task operations
@@ -42,13 +43,19 @@ function isCompleted(status) {
 
 class TaskService {
 
-  async listWithAssignees({ archived = false, parentId } = {}) {
+  async listWithAssignees({ archived = false, parentId, userId, userRole, userHierarchy, userDivision } = {}) {
     try {
       const { data: tasks, error } = await taskRepository.list({ archived, parentId });
       if (error) throw error;
 
+      // Apply RBAC filtering if user context provided
+      let filteredTasks = tasks;
+      if (userId && userRole) {
+        filteredTasks = await this._filterTasksByRBAC(tasks, userId, userRole, userHierarchy, userDivision);
+      }
+
       const idSet = new Set();
-      for (const t of tasks) {
+      for (const t of filteredTasks) {
         const ids = Array.isArray(t.assigned_to)
           ? t.assigned_to
           : t.assigned_to != null ? [t.assigned_to] : [];
@@ -63,7 +70,7 @@ class TaskService {
         usersById = Object.fromEntries(users.map(u => [u.id, u]));
       }
 
-      return tasks.map(t => {
+      return filteredTasks.map(t => {
         const raw = Array.isArray(t.assigned_to)
           ? t.assigned_to
           : t.assigned_to != null ? [t.assigned_to] : [];
@@ -74,7 +81,7 @@ class TaskService {
         return { ...t, assignees };
       });
     } catch (error) {
-      return await this.getAllTasks({ archived });
+      return await this.getAllTasks({ archived, userId, userRole, userHierarchy, userDivision });
     }
   }
 
@@ -82,11 +89,49 @@ class TaskService {
    * Get all tasks with filters and pagination
    */
   async getAllTasks(filters = {}) {
-    const tasks = await taskRepository.getTasksWithFilters(filters);
-    const totalCount = await taskRepository.getTaskCount(filters);
+    // Apply RBAC filtering if user context provided
+    let rbacFilters = { ...filters };
+    if (filters.userId && filters.userRole) {
+      const accessibleProjectIds = await this._getAccessibleProjectIds(
+        filters.userId,
+        filters.userRole,
+        filters.userHierarchy,
+        filters.userDivision
+      );
+
+      // Store for use in filtering
+      rbacFilters.accessibleProjectIds = accessibleProjectIds;
+      rbacFilters.requestingUserId = filters.userId;
+    }
+
+    const tasks = await taskRepository.getTasksWithFilters(rbacFilters);
+
+    // Additional RBAC filtering for tasks - only show tasks from accessible projects or assigned to user
+    let filteredTasks = tasks;
+    if (rbacFilters.accessibleProjectIds !== undefined && rbacFilters.requestingUserId) {
+      filteredTasks = tasks.filter(task => {
+        // Show tasks from accessible projects
+        if (task.project_id && rbacFilters.accessibleProjectIds.includes(task.project_id)) {
+          return true;
+        }
+        // Show personal tasks (no project_id) assigned to user
+        if (!task.project_id && task.assigned_to && Array.isArray(task.assigned_to) &&
+            task.assigned_to.includes(rbacFilters.requestingUserId)) {
+          return true;
+        }
+        // Show tasks assigned to user even if not in accessible project
+        if (task.assigned_to && Array.isArray(task.assigned_to) &&
+            task.assigned_to.includes(rbacFilters.requestingUserId)) {
+          return true;
+        }
+        return false;
+      });
+    }
+
+    const totalCount = filteredTasks.length; // Use filtered count
 
     return {
-      tasks,
+      tasks: filteredTasks,
       totalCount,
       pagination: this._calculatePagination(filters, totalCount)
     };
@@ -761,6 +806,99 @@ class TaskService {
       default:
         return String(value);
     }
+  }
+
+  /**
+   * Get accessible project IDs based on user role and RBAC rules
+   * @private
+   */
+  async _getAccessibleProjectIds(userId, userRole, userHierarchy, userDivision) {
+    try {
+      // Admin can access all projects
+      if (userRole === 'admin') {
+        const { data, error } = await supabase
+          .from('projects')
+          .select('id');
+
+        if (error) throw error;
+        return data ? data.map(p => p.id) : [];
+      }
+
+      // Get projects where user is a member
+      const { data: memberData, error: memberError } = await supabase
+        .from('project_members')
+        .select('project_id')
+        .eq('user_id', userId);
+
+      if (memberError) throw memberError;
+      const memberProjectIds = memberData ? memberData.map(m => m.project_id) : [];
+
+      // Get projects created by user
+      const { data: creatorData, error: creatorError } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('creator_id', userId);
+
+      if (creatorError) throw creatorError;
+      const creatorProjectIds = creatorData ? creatorData.map(p => p.id) : [];
+
+      // For managers, also get projects from subordinates in same division
+      let subordinateProjectIds = [];
+      if (userRole === 'manager' && userDivision) {
+        const { data: projectsData, error: projectsError } = await supabase
+          .from('projects')
+          .select('id, creator_id, users!inner(role, hierarchy, division)')
+          .eq('users.division', userDivision)
+          .lt('users.hierarchy', userHierarchy);
+
+        if (!projectsError && projectsData) {
+          subordinateProjectIds = projectsData.map(p => p.id);
+        }
+      }
+
+      // Combine and deduplicate all accessible project IDs
+      const allProjectIds = [...new Set([
+        ...memberProjectIds,
+        ...creatorProjectIds,
+        ...subordinateProjectIds
+      ])];
+
+      return allProjectIds;
+    } catch (error) {
+      console.error('Error getting accessible project IDs:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Filter tasks based on RBAC rules
+   * @private
+   */
+  async _filterTasksByRBAC(tasks, userId, userRole, userHierarchy, userDivision) {
+    const accessibleProjectIds = await this._getAccessibleProjectIds(
+      userId,
+      userRole,
+      userHierarchy,
+      userDivision
+    );
+
+    return tasks.filter(task => {
+      // Show tasks from accessible projects
+      if (task.project_id && accessibleProjectIds.includes(task.project_id)) {
+        return true;
+      }
+      // Show personal tasks (no project_id) assigned to user
+      if (!task.project_id && task.assigned_to && Array.isArray(task.assigned_to) &&
+          task.assigned_to.includes(userId)) {
+        return true;
+      }
+      // Show tasks assigned to user even if not in accessible project
+      if (task.assigned_to && Array.isArray(task.assigned_to) &&
+          task.assigned_to.includes(userId)) {
+        return true;
+      }
+      return false;
+    });
   }
 }
 

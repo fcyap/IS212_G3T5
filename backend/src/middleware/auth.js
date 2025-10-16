@@ -8,24 +8,24 @@ const buildUserFromSession = (session) => ({
   email: session.email,
 });
 
-const authMiddleware = (sql) => async (req, res, next) => {
+const authMiddleware = () => async (req, res, next) => {
   const token = req.cookies?.[cookieName];
   if (!token) {
     return res.status(401).json({ error: 'Unauthenticated' });
   }
 
-  const session = await getSession(sql, token);
+  const session = await getSession(null, token);
   if (!session) {
-    await deleteSession(sql, token).catch(() => {});
+    await deleteSession(null, token).catch(() => {});
     return res.status(401).json({ error: 'Invalid session' });
   }
 
   if (new Date(session.expires_at).getTime() < Date.now()) {
-    await deleteSession(sql, token).catch(() => {});
+    await deleteSession(null, token).catch(() => {});
     return res.status(401).json({ error: 'Session expired' });
   }
 
-  const newExpiry = await touchSession(sql, token);
+  const newExpiry = await touchSession(null, token);
   res.locals.sessionToken = token;
   res.locals.session = session;
   res.locals.newExpiry = newExpiry;
@@ -33,16 +33,16 @@ const authMiddleware = (sql) => async (req, res, next) => {
   next();
 };
 
-const optionalAuthMiddleware = (sql) => async (req, res, next) => {
+const optionalAuthMiddleware = () => async (req, res, next) => {
   const token = req.cookies?.[cookieName];
   if (!token) return next();
   try {
-    const session = await getSession(sql, token);
+    const session = await getSession(null, token);
     if (!session) return next();
     if (new Date(session.expires_at).getTime() < Date.now()) return next();
     res.locals.sessionToken = token;
     res.locals.session = session;
-    res.locals.newExpiry = await touchSession(sql, token);
+    res.locals.newExpiry = await touchSession(null, token);
     req.user = buildUserFromSession(session);
   } catch (err) {
     console.error('[optionalAuthMiddleware] error', err);

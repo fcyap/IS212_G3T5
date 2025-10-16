@@ -10,11 +10,15 @@ describe('TaskController', () => {
     req = {
       body: {},
       params: {},
-      query: {}
+      query: {},
+      user: { id: 1, role: 'admin', hierarchy: 1, division: 'Engineering' }
     };
     res = {
       status: jest.fn().mockReturnThis(),
-      json: jest.fn()
+      json: jest.fn(),
+      locals: {
+        session: { user_id: 1, role: 'admin', hierarchy: 1, division: 'Engineering' }
+      }
     };
     jest.clearAllMocks();
   });
@@ -30,7 +34,14 @@ describe('TaskController', () => {
 
       await taskController.list(req, res);
 
-      expect(taskService.listWithAssignees).toHaveBeenCalledWith({ archived: false });
+      expect(taskService.listWithAssignees).toHaveBeenCalledWith({
+        archived: false,
+        parentId: undefined,
+        userId: 1,
+        userRole: 'admin',
+        userHierarchy: 1,
+        userDivision: 'Engineering'
+      });
       expect(res.json).toHaveBeenCalledWith(mockTasks);
     });
 
@@ -44,7 +55,14 @@ describe('TaskController', () => {
 
       await taskController.list(req, res);
 
-      expect(taskService.listWithAssignees).toHaveBeenCalledWith({ archived: true });
+      expect(taskService.listWithAssignees).toHaveBeenCalledWith({
+        archived: true,
+        parentId: undefined,
+        userId: 1,
+        userRole: 'admin',
+        userHierarchy: 1,
+        userDivision: 'Engineering'
+      });
       expect(res.json).toHaveBeenCalledWith(mockTasks);
     });
 
@@ -58,7 +76,14 @@ describe('TaskController', () => {
 
       await taskController.list(req, res);
 
-      expect(taskService.getAllTasks).toHaveBeenCalledWith({ archived: false });
+      expect(taskService.getAllTasks).toHaveBeenCalledWith({
+        archived: false,
+        parentId: undefined,
+        userId: 1,
+        userRole: 'admin',
+        userHierarchy: 1,
+        userDivision: 'Engineering'
+      });
       expect(res.json).toHaveBeenCalledWith(mockTasks);
     });
 
@@ -107,7 +132,7 @@ describe('TaskController', () => {
 
       await taskController.create(req, res);
 
-      expect(taskService.createTask).toHaveBeenCalledWith(expect.objectContaining(req.body), null);
+      expect(taskService.createTask).toHaveBeenCalledWith(expect.objectContaining(req.body), 1);
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.json).toHaveBeenCalledWith(mockCreatedTask);
     });
@@ -179,7 +204,7 @@ describe('TaskController', () => {
 
       await taskController.update(req, res);
 
-      expect(taskService.updateTask).toHaveBeenCalledWith(1, req.body, null);
+      expect(taskService.updateTask).toHaveBeenCalledWith(1, req.body, 1);
       expect(res.json).toHaveBeenCalledWith(mockUpdatedTask);
     });
 
@@ -217,7 +242,7 @@ describe('TaskController', () => {
 
       await taskController.update(req, res);
 
-      expect(taskService.updateTask).toHaveBeenCalledWith(1, req.body, null);
+      expect(taskService.updateTask).toHaveBeenCalledWith(1, req.body, 1);
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({
         error: 'Task not found'

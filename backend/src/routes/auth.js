@@ -5,28 +5,30 @@ const crypto = require('crypto');
 const { createSession, deleteSession } = require('../auth/sessions');
 const { getEffectiveRole } = require('../auth/roles');
 const { cookieName } = require('../middleware/auth');
-const { authMiddleware } = require('../middleware/auth'); // <-- add this
+const { authMiddleware } = require('../middleware/auth');
+const supabase = require('../utils/supabase');
 
-function authRoutes(sql) {
+function authRoutes() {
   const router = express.Router();
 
   router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body || {};
     console.log('Login attempt for:', email);
-    
+
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password required' });
     }
 
     console.log('Querying database for user...');
-    const users = await sql/*sql*/`
-      select id, email, password_hash
-      from public.users
-      where lower(email) = lower(${email})
-      limit 1
-    `;
-    const user = users[0];
+    // Use Supabase instead of raw Postgres
+    const { data: users, error: userError } = await supabase
+      .from('users')
+      .select('id, email, password_hash, name, role, hierarchy, division, department')
+      .ilike('email', email)
+      .limit(1);
+
+    const user = users?.[0];
     console.log('User found:', user ? 'Yes' : 'No');
 
     // Important guard: if no user OR no bcrypt hash, return 401 (not 500)
@@ -43,7 +45,7 @@ function authRoutes(sql) {
     }
 
     console.log('Creating session...');
-    const { token, expiresAt } = await createSession(sql, user.id);
+    const { token, expiresAt } = await createSession(null, user.id);
     res.cookie(cookieName, token, {
       httpOnly: true,
       sameSite: 'lax',
@@ -53,12 +55,25 @@ function authRoutes(sql) {
     });
 
     console.log('Getting user role...');
-    const role = await getEffectiveRole(sql, user.id);
-    const payload = { user: { id: user.id, email: user.email }, role, expiresAt };
+    const role = await getEffectiveRole(null, user.id);
+    console.log('Login successful for user:', user.id);
+    const payload = {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        hierarchy: user.hierarchy,
+        division: user.division,
+        department: user.department
+      },
+      role,
+      expiresAt
+    };
     console.log('[Auth] /auth/login success', payload);
     return res.json(payload);
   } catch (e) {
-    console.error('POST /auth/login error:', e);  // <-- log root cause
+    console.error('POST /auth/login error:', e);
     console.error('Error stack:', e.stack);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
@@ -69,66 +84,68 @@ function authRoutes(sql) {
     try {
       console.log('DEBUG: Login request received');
       console.log('DEBUG: Request body:', req.body);
-      
+
       const { email, password } = req.body || {};
-      
+
       if (!email || !password) {
         console.log('DEBUG: Missing email or password');
         return res.status(400).json({ error: 'Email and password required' });
       }
-      
+
       console.log('DEBUG: Testing database connection...');
-      
-      // Test database connection first
-      const testQuery = await sql`SELECT 1 as test`;
-      console.log('DEBUG: Database connection OK:', testQuery);
-      
+
+      // Test database connection first using Supabase
+      const { data: testData, error: testError } = await supabase
+        .from('users')
+        .select('id')
+        .limit(1);
+      console.log('DEBUG: Database connection OK:', testData);
+
       // Try to find user
       console.log('DEBUG: Looking for user with email:', email);
-      const users = await sql`
-        SELECT id, email, password_hash, role
-        FROM public.users
-        WHERE lower(email) = lower(${email})
-        LIMIT 1
-      `;
-      
+      const { data: users, error: userError } = await supabase
+        .from('users')
+        .select('id, email, password_hash, role')
+        .ilike('email', email)
+        .limit(1);
+
       console.log('DEBUG: User query result:', users);
-      
-      if (users.length === 0) {
+
+      if (!users || users.length === 0) {
         console.log('DEBUG: No user found');
         return res.status(401).json({ error: 'User not found' });
       }
-      
+
       const user = users[0];
       console.log('DEBUG: User found:', { id: user.id, email: user.email, hasPassword: !!user.password_hash });
-      
+
       if (!user.password_hash) {
         console.log('DEBUG: User has no password hash');
         return res.status(401).json({ error: 'No password set for user' });
       }
-      
+
       // Test password comparison
       console.log('DEBUG: Testing password...');
       const passwordMatch = await bcrypt.compare(password, user.password_hash);
       console.log('DEBUG: Password match:', passwordMatch);
-      
+
       if (!passwordMatch) {
         console.log('DEBUG: Password mismatch');
         return res.status(401).json({ error: 'Invalid password' });
       }
-      
+
       // Return success without creating session for now
       console.log('DEBUG: Login would succeed for user:', user.id);
-      return res.json({ 
-        success: true, 
+      return res.json({
+        success: true,
         user: { id: user.id, email: user.email },
         message: 'Login test successful'
       });
-      
+
     } catch (error) {
       console.error('DEBUG: Login error:', error);
       console.error('DEBUG: Error stack:', error.stack);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Internal Server Error',
         details: error.message
       });
@@ -137,7 +154,7 @@ function authRoutes(sql) {
 
   router.post('/logout', async (req, res) => {
     const token = req.cookies?.[cookieName];
-    if (token) await deleteSession(sql, token);
+    if (token) await deleteSession(null, token);
     res.clearCookie(cookieName, { path: '/' });
     return res.json({ ok: true });
   });
@@ -159,7 +176,7 @@ function authRoutes(sql) {
       // Query user using Supabase client
       const { data: users, error: userError } = await supabase
         .from('users')
-        .select('id, email, password_hash, role')
+        .select('id, email, password_hash, name, role, hierarchy, division, department')
         .eq('email', email.toLowerCase())
         .single();
       
@@ -208,10 +225,19 @@ function authRoutes(sql) {
         maxAge: 15 * 60 * 1000,
         path: '/',
       });
-      
+
+      console.log('SUPABASE: Login successful for user:', users.id);
       const loginPayload = {
-        user: { id: users.id, email: users.email },
-        role: { label: users.role || 'Staff', level: 1 },
+        user: {
+          id: users.id,
+          email: users.email,
+          name: users.name,
+          role: users.role,
+          hierarchy: users.hierarchy,
+          division: users.division,
+          department: users.department
+        },
+        role: { label: users.role || 'staff', level: users.role === 'admin' ? 3 : users.role === 'manager' ? 2 : 1 },
         expiresAt
       };
       console.log('[Auth] /auth/supabase-login success', loginPayload);
@@ -227,12 +253,33 @@ function authRoutes(sql) {
   });
 
   // PROTECT THIS:
-  router.get('/me', authMiddleware(sql), async (req, res) => {
+  router.get('/me', authMiddleware(), async (req, res) => {
     try {
       const { session } = res.locals;
-      const role = await getEffectiveRole(sql, session.user_id);
+
+      // Get complete user information using Supabase
+      const { data: users, error: userError } = await supabase
+        .from('users')
+        .select('id, email, name, role, hierarchy, division, department')
+        .eq('id', session.user_id)
+        .limit(1);
+
+      const user = users?.[0];
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const role = await getEffectiveRole(null, session.user_id);
       return res.json({
-        user: { id: session.user_id, email: session.email },
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          hierarchy: user.hierarchy,
+          division: user.division,
+          department: user.department
+        },
         role,
         expiresAt: res.locals.newExpiry,
       });

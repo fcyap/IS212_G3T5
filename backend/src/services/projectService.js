@@ -479,6 +479,58 @@ class ProjectService {
     // Archive the project and its tasks
     return await projectRepository.archiveProject(projectId);
   }
+
+  /**
+   * Get projects visible to user based on RBAC rules
+   * Managers can see projects from staff in their division with lower hierarchy
+   */
+  async getProjectsWithRBAC(currentUser) {
+    console.log('🔍 [ProjectService] Getting RBAC-filtered projects for user:', currentUser.id);
+    
+    try {
+      // Admin can see all projects
+      if (currentUser.role === 'admin') {
+        console.log('👑 [ProjectService] Admin user - getting all projects');
+        return await projectRepository.getAllProjects();
+      }
+
+      // Managers can see:
+      // 1. Their own projects (as creator or member)
+      // 2. Projects created by staff in their division with lower hierarchy
+      if (currentUser.role === 'manager') {
+        console.log('🏢 [ProjectService] Manager user - getting division projects');
+        
+        // Get own projects first
+        const ownProjects = await this.getAllProjectsForUser(currentUser.id);
+        
+        // Get projects from subordinates in same division
+        const subordinateProjects = await projectRepository.getProjectsByDivisionAndHierarchy(
+          currentUser.division,
+          currentUser.hierarchy
+        );
+        
+        // Combine and deduplicate
+        const allProjectIds = [...new Set([
+          ...ownProjects.map(p => p.id),
+          ...subordinateProjects.map(p => p.id)
+        ])];
+        
+        if (allProjectIds.length === 0) {
+          return [];
+        }
+        
+        return await projectRepository.getProjectsByIds(allProjectIds);
+      }
+
+      // Staff can only see their own projects
+      console.log('👤 [ProjectService] Staff user - getting own projects only');
+      return await this.getAllProjectsForUser(currentUser.id);
+      
+    } catch (error) {
+      console.error('❌ [ProjectService] Error getting RBAC projects:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new ProjectService();

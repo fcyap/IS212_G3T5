@@ -16,9 +16,13 @@ const list = async (req, res) => {
       else parentId = Number(req.query.parent_id);
     }
 
+    // Get current user for RBAC filtering
+    const user = res.locals.session || req.user;
+    const userId = user ? (user.user_id || user.id) : null;
+
     const tasks = taskService.listWithAssignees
-      ? await taskService.listWithAssignees({ archived, parentId })
-      : await taskService.getAllTasks({ archived, parentId });
+      ? await taskService.listWithAssignees({ archived, parentId, userId, userRole: user?.role, userHierarchy: user?.hierarchy, userDivision: user?.division })
+      : await taskService.getAllTasks({ archived, parentId, userId, userRole: user?.role, userHierarchy: user?.hierarchy, userDivision: user?.division });
 
     res.json(tasks);
   } catch (e) {
@@ -80,6 +84,15 @@ const getAllTasks = async (req, res) => {
 
     if (filters.limit < 1 || filters.limit > 100) {
       return res.status(400).json({ success: false, message: 'Limit must be between 1 and 100' });
+    }
+
+    // Get current user for RBAC filtering
+    const user = res.locals.session || req.user;
+    if (user) {
+      filters.userId = user.user_id || user.id;
+      filters.userRole = user.role;
+      filters.userHierarchy = user.hierarchy;
+      filters.userDivision = user.division;
     }
 
     filters.offset = (filters.page - 1) * filters.limit;
