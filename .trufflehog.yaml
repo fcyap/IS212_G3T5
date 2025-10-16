@@ -1,8 +1,8 @@
 # TruffleHog Configuration
 # https://github.com/trufflesecurity/trufflehog
 
-# Exclude patterns - files matching these patterns will be skipped
-exclude_paths:
+# Exclude patterns - files matching these globs will be skipped
+exclude-globs:
   # Exclude example environment files (contain placeholder secrets)
   - '**/.env.example'
   - '**/*.env.example'
@@ -13,7 +13,7 @@ exclude_paths:
   - '**/.git/**'
   - '**/dist/**'
   - '**/build/**'
-  - '**/*.md'  # Documentation files
+  - '**/*.md'
 
   # Test files and mock data
   - '**/__tests__/**'
