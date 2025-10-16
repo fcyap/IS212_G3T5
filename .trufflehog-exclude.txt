@@ -1,0 +1,13 @@
+# Exclude .env.example files (contain placeholder secrets)
+.*\.env\.example$
+.*/\.env\.example$
+.*env\.example$
+
+# Exclude node_modules
+node_modules/
+
+# Exclude test files
+.*\.test\.js$
+.*\.spec\.js$
+__tests__/
+__mocks__/
