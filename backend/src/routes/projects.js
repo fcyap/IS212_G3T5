@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { sql } = require('../db');
+// No longer need sql import - RBAC middleware now uses Supabase directly
 const {
   createProject,
   getAllProjects,
@@ -58,13 +58,13 @@ const deleteProject = async (req, res) => {
 };
 
 router.post('/', requireProjectCreation, createProject);
-router.get('/', filterVisibleProjects(sql), getAllProjects);
+router.get('/', filterVisibleProjects(null), getAllProjects);
 router.get('/:projectId', getProjectById);
-router.put('/:projectId', requireProjectEdit(sql), updateProject);
-router.delete('/:projectId', requireProjectEdit(sql), deleteProject);
+router.put('/:projectId', requireProjectEdit(null), updateProject);
+router.delete('/:projectId', requireProjectEdit(null), deleteProject);
 router.get('/:projectId/members', getProjectMembers);
-router.post('/:projectId/members', requireAddProjectMembers(sql), addProjectMembers);
-router.delete('/:projectId/members/:userId', requireProjectEdit(sql), removeProjectMember);
-router.patch('/:projectId/archive', requireProjectEdit(sql), archiveProject);
+router.post('/:projectId/members', requireAddProjectMembers(null), addProjectMembers);
+router.delete('/:projectId/members/:userId', requireProjectEdit(null), removeProjectMember);
+router.patch('/:projectId/archive', requireProjectEdit(null), archiveProject);
 
 module.exports = router;

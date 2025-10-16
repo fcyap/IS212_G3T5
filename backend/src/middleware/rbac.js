@@ -1,5 +1,6 @@
 // src/middleware/rbac.js
 const { canCreateProject, canEditProject, canAddProjectMembers, canViewUserData } = require('../auth/roles');
+const supabase = require('../utils/supabase');
 
 /**
  * Middleware to check if user can create projects
@@ -37,24 +38,26 @@ const requireProjectEdit = (sql) => {
     try {
       const user = res.locals.session || req.user;
       const projectId = req.params.projectId || req.params.id;
-      
+
       if (!user || !projectId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
-      
-      // Get project and creator info
-      const projects = await sql/*sql*/`
-        select p.id, p.creator_id, u.role, u.hierarchy, u.division
-        from public.projects p
-        left join public.users u on u.id = p.creator_id
-        where p.id = ${projectId}
-        limit 1
-      `;
-      
-      if (!projects.length) {
+
+      // Get project and creator info using Supabase
+      const { data: projects, error: projectError } = await supabase
+        .from('projects')
+        .select(`
+          id,
+          creator_id,
+          users!projects_creator_id_fkey(role, hierarchy, division)
+        `)
+        .eq('id', projectId)
+        .limit(1);
+
+      if (!projects || !projects.length) {
         return res.status(404).json({ error: 'Project not found' });
       }
-      
+
       const project = projects[0];
       const userData = {
         id: user.user_id || user.id,
@@ -62,20 +65,20 @@ const requireProjectEdit = (sql) => {
         hierarchy: user.hierarchy || 1,
         division: user.division
       };
-      
-      const projectCreator = {
-        role: project.role,
-        hierarchy: project.hierarchy,
-        division: project.division
+
+      const projectCreator = project.users || {
+        role: null,
+        hierarchy: null,
+        division: null
       };
-      
+
       if (!canEditProject(userData, project, projectCreator)) {
-        return res.status(403).json({ 
-          error: 'Access denied', 
-          message: 'You do not have permission to edit this project' 
+        return res.status(403).json({
+          error: 'Access denied',
+          message: 'You do not have permission to edit this project'
         });
       }
-      
+
       next();
     } catch (error) {
       console.error('Error in requireProjectEdit middleware:', error);
@@ -92,23 +95,22 @@ const requireAddProjectMembers = (sql) => {
     try {
       const user = res.locals.session || req.user;
       const projectId = req.params.projectId || req.params.id;
-      
+
       if (!user || !projectId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
-      
-      // Get project info
-      const projects = await sql/*sql*/`
-        select id, creator_id
-        from public.projects
-        where id = ${projectId}
-        limit 1
-      `;
-      
-      if (!projects.length) {
+
+      // Get project info using Supabase
+      const { data: projects, error: projectError } = await supabase
+        .from('projects')
+        .select('id, creator_id')
+        .eq('id', projectId)
+        .limit(1);
+
+      if (!projects || !projects.length) {
         return res.status(404).json({ error: 'Project not found' });
       }
-      
+
       const project = projects[0];
       const userData = {
         id: user.user_id || user.id,
@@ -116,14 +118,14 @@ const requireAddProjectMembers = (sql) => {
         hierarchy: user.hierarchy || 1,
         division: user.division
       };
-      
+
       if (!canAddProjectMembers(userData, project)) {
-        return res.status(403).json({ 
-          error: 'Access denied', 
-          message: 'You do not have permission to add members to this project' 
+        return res.status(403).json({
+          error: 'Access denied',
+          message: 'You do not have permission to add members to this project'
         });
       }
-      
+
       next();
     } catch (error) {
       console.error('Error in requireAddProjectMembers middleware:', error);
@@ -139,31 +141,30 @@ const filterVisibleProjects = (sql) => {
   return async (req, res, next) => {
     try {
       const user = res.locals.session || req.user;
-      
+
       if (!user) {
         return res.status(401).json({ error: 'Authentication required' });
       }
-      
-      // Get current user's complete info
-      const users = await sql/*sql*/`
-        select id, role, hierarchy, division, department
-        from public.users
-        where id = ${user.user_id || user.id}
-        limit 1
-      `;
-      
-      if (!users.length) {
+
+      // Get current user's complete info using Supabase
+      const { data: users, error: userError } = await supabase
+        .from('users')
+        .select('id, role, hierarchy, division, department')
+        .eq('id', user.user_id || user.id)
+        .limit(1);
+
+      if (!users || !users.length) {
         return res.status(404).json({ error: 'User not found' });
       }
-      
+
       const currentUser = users[0];
-      
+
       // Admin can see all projects
       if (currentUser.role === 'admin') {
         req.visibilityFilter = {}; // No filter
         return next();
       }
-      
+
       // Managers can see projects from users in their division with lower hierarchy
       if (currentUser.role === 'manager') {
         req.visibilityFilter = {
@@ -172,14 +173,14 @@ const filterVisibleProjects = (sql) => {
         };
         return next();
       }
-      
+
       // Staff can only see their own projects and projects they're members of
       req.visibilityFilter = {
         currentUser,
         canViewAll: false,
         onlyOwnProjects: true
       };
-      
+
       next();
     } catch (error) {
       console.error('Error in filterVisibleProjects middleware:', error);
@@ -207,16 +208,19 @@ const requireTaskCreation = (sql) => {
         return next();
       }
 
-      // Get project and check access
-      const projects = await sql/*sql*/`
-        select p.id, p.creator_id, p.user_ids, u.role, u.hierarchy, u.division
-        from public.projects p
-        left join public.users u on u.id = p.creator_id
-        where p.id = ${projectId}
-        limit 1
-      `;
+      // Get project and check access using Supabase
+      const { data: projects, error: projectError } = await supabase
+        .from('projects')
+        .select(`
+          id,
+          creator_id,
+          user_ids,
+          users!projects_creator_id_fkey(role, hierarchy, division)
+        `)
+        .eq('id', projectId)
+        .limit(1);
 
-      if (!projects.length) {
+      if (!projects || !projects.length) {
         return res.status(404).json({ error: 'Project not found' });
       }
 
@@ -240,10 +244,10 @@ const requireTaskCreation = (sql) => {
       const isCreator = userData.id === project.creator_id;
 
       // Managers can create tasks in projects from their division with lower hierarchy
-      const projectCreator = {
-        role: project.role,
-        hierarchy: project.hierarchy,
-        division: project.division
+      const projectCreator = project.users || {
+        role: null,
+        hierarchy: null,
+        division: null
       };
 
       const hasManagerAccess = userData.role === 'manager' &&
@@ -279,18 +283,23 @@ const requireTaskModification = (sql) => {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      // Get task and associated project
-      const tasks = await sql/*sql*/`
-        select t.id, t.project_id, t.assigned_to, p.creator_id as project_creator_id,
-               p.user_ids as project_members, u.role, u.hierarchy, u.division
-        from public.tasks t
-        left join public.projects p on p.id = t.project_id
-        left join public.users u on u.id = p.creator_id
-        where t.id = ${taskId}
-        limit 1
-      `;
+      // Get task and associated project using Supabase
+      const { data: tasks, error: taskError } = await supabase
+        .from('tasks')
+        .select(`
+          id,
+          project_id,
+          assigned_to,
+          projects!tasks_project_id_fkey(
+            creator_id,
+            user_ids,
+            users!projects_creator_id_fkey(role, hierarchy, division)
+          )
+        `)
+        .eq('id', taskId)
+        .limit(1);
 
-      if (!tasks.length) {
+      if (!tasks || !tasks.length) {
         return res.status(404).json({ error: 'Task not found' });
       }
 
@@ -311,16 +320,16 @@ const requireTaskModification = (sql) => {
       const isAssigned = task.assigned_to && task.assigned_to.includes(userData.id);
 
       // Check if user is project member
-      const isProjectMember = task.project_members && task.project_members.includes(userData.id);
+      const isProjectMember = task.projects?.user_ids && task.projects.user_ids.includes(userData.id);
 
       // Check if user is project creator
-      const isProjectCreator = userData.id === task.project_creator_id;
+      const isProjectCreator = userData.id === task.projects?.creator_id;
 
       // Managers can modify tasks in projects from their division
-      const projectCreator = {
-        role: task.role,
-        hierarchy: task.hierarchy,
-        division: task.division
+      const projectCreator = task.projects?.users || {
+        role: null,
+        hierarchy: null,
+        division: null
       };
 
       const hasManagerAccess = userData.role === 'manager' &&

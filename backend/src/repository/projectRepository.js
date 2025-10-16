@@ -645,21 +645,31 @@ class ProjectRepository {
    */
   async getProjectsByDivisionAndHierarchy(division, managerHierarchy) {
     console.log('🔍 [ProjectRepository] Getting projects by division and hierarchy:', { division, managerHierarchy });
-    
+
+    // First, get all users in the division with lower hierarchy
+    const { data: users, error: usersError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('division', division)
+      .lt('hierarchy', managerHierarchy);
+
+    if (usersError) {
+      console.error('❌ [ProjectRepository] Error getting users:', usersError);
+      throw new Error(usersError.message);
+    }
+
+    if (!users || users.length === 0) {
+      console.log('⚠️ [ProjectRepository] No subordinate users found');
+      return [];
+    }
+
+    const subordinateUserIds = users.map(u => u.id);
+
+    // Now get all projects created by those users
     const { data, error } = await supabase
       .from('projects')
-      .select(`
-        *,
-        users!projects_creator_id_fkey (
-          id,
-          name,
-          role,
-          hierarchy,
-          division
-        )
-      `)
-      .eq('users.division', division)
-      .lt('users.hierarchy', managerHierarchy)
+      .select('*')
+      .in('creator_id', subordinateUserIds)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -676,20 +686,11 @@ class ProjectRepository {
    */
   async getAllProjectsEnhanced() {
     console.log('🔍 [ProjectRepository] Getting all projects with user details');
-    
-    const { data, error } = await supabase
+
+    // Get all projects first
+    const { data: projects, error } = await supabase
       .from('projects')
-      .select(`
-        *,
-        users!projects_creator_id_fkey (
-          id,
-          name,
-          email,
-          role,
-          hierarchy,
-          division
-        )
-      `)
+      .select('*')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -697,8 +698,11 @@ class ProjectRepository {
       throw new Error(error.message);
     }
 
-    console.log('✅ [ProjectRepository] Found all projects:', data?.length || 0);
-    return data || [];
+    console.log('✅ [ProjectRepository] Found all projects:', projects?.length || 0);
+
+    // For now, return just the projects without joined creator data
+    // The foreign key relationship might not be properly configured in Supabase
+    return projects || [];
   }
 
 }

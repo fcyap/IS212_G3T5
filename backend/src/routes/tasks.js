@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const taskController = require('../controllers/taskController.js');
-const { sql } = require('../db');
+// No longer need sql import - RBAC middleware now uses Supabase directly
 const {
   requireTaskCreation,
   requireTaskModification
@@ -14,8 +14,8 @@ router.use((req, res, next) => {
 });
 
 router.get('/', taskController.list);
-router.post('/', requireTaskCreation(sql), taskController.create);
-router.put('/:id', requireTaskModification(sql), taskController.update);
+router.post('/', requireTaskCreation(null), taskController.create);
+router.put('/:id', requireTaskModification(null), taskController.update);
 
 // Original routes for project-specific functionality
 router.get('/project/:projectId', taskController.getTasksByProject || taskController.list);

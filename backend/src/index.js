@@ -87,6 +87,8 @@ async function initializeApp() {
   app.use('/auth', authRoutes(sql));
 
   // -------------------- Dev session routes --------------------
+  const supabase = require('./utils/supabase');
+
   app.post('/dev/session/start', async (req, res) => {
     const { userId, email } = req.body || {};
     if (!userId && !email) return res.status(400).json({ error: 'userId or email required' });
@@ -94,12 +96,16 @@ async function initializeApp() {
     let targetId = userId;
     try {
       if (!targetId && email) {
-        const rows = await sql`select id from users where lower(email) = lower(${email}) limit 1`;
-        if (!rows.length) return res.status(404).json({ error: 'User not found' });
-        targetId = rows[0].id;
+        const { data: users, error: userError } = await supabase
+          .from('users')
+          .select('id')
+          .ilike('email', email)
+          .limit(1);
+        if (!users || !users.length) return res.status(404).json({ error: 'User not found' });
+        targetId = users[0].id;
       }
 
-      const { token, expiresAt } = await createSession(sql, targetId);
+      const { token, expiresAt } = await createSession(null, targetId);
       res.cookie(cookieName, token, {
         httpOnly: true,
         sameSite: 'lax',
@@ -116,7 +122,7 @@ async function initializeApp() {
 
   app.post('/session/end', async (req, res) => {
     const token = req.cookies?.[cookieName];
-    if (token) await deleteSession(sql, token).catch(() => {});
+    if (token) await deleteSession(null, token).catch(() => {});
     res.clearCookie(cookieName, { path: '/' });
     res.status(200).json({ ok: true });
   });

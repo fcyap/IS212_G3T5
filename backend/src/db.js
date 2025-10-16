@@ -12,6 +12,11 @@ const sql = postgres(process.env.DATABASE_URL, {
   fetch_types: false,
   connect_timeout: 30, // 30 seconds timeout
   idle_timeout: 0,
+  connection: {
+    application_name: 'spm_backend'
+  },
+  // Add options parameter for Supabase pooler compatibility
+  prepare: false, // Disable prepared statements for pooler
   transform: {
     undefined: null
   }

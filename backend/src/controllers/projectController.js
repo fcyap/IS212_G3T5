@@ -40,16 +40,15 @@ const getAllProjects = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
-    // Get complete user information including hierarchy and division
-    const { sql } = require('../db');
-    const users = await sql/*sql*/`
-      select id, name, email, role, hierarchy, division, department
-      from public.users
-      where id = ${session.user_id}
-      limit 1
-    `;
+    // Get complete user information including hierarchy and division using Supabase
+    const supabase = require('../utils/supabase');
+    const { data: users, error: userError } = await supabase
+      .from('users')
+      .select('id, name, email, role, hierarchy, division, department')
+      .eq('id', session.user_id)
+      .limit(1);
 
-    if (!users.length) {
+    if (!users || !users.length) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
