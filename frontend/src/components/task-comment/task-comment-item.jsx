@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
 import { Edit2, Trash2, Check, X, Reply, MessageCircle } from 'lucide-react';
 import { CommentBox } from './task-comment';
+import { useAuth } from '@/hooks/useAuth';
 
 export const CommentItem = ({ comment, currentUser, onUpdate, onReply, depth = 0 }) => {
+  const { user: authUser } = useAuth();
+  const effectiveUser = authUser ?? currentUser;
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(comment.content);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showReplyBox, setShowReplyBox] = useState(false);
   const [showReplies, setShowReplies] = useState(true);
 
-  console.log('Current User:', currentUser);
-  const canEdit = comment.user?.id && currentUser?.id && comment.user.id === currentUser.id;
+  console.log('Current User:', effectiveUser);
+  const canEdit = comment.user?.id && effectiveUser?.id && comment.user.id === effectiveUser.id;
   const hasReplies = comment.replies && comment.replies.length > 0;
 
   const handleStartEdit = () => {
@@ -67,7 +70,7 @@ export const CommentItem = ({ comment, currentUser, onUpdate, onReply, depth = 0
     return ts.toLocaleDateString();
   };
 
-  const safeName = currentUser?.name || (typeof currentUser === 'string' ? currentUser : 'User');
+  const safeName = effectiveUser?.name || effectiveUser?.email || (typeof effectiveUser === 'string' ? effectiveUser : 'User');
   const initials = safeName.split(' ').map(part => part.charAt(0).toUpperCase()).join('').substring(0, 2);
   const currentUserData = {
     name: safeName,
@@ -195,7 +198,7 @@ export const CommentItem = ({ comment, currentUser, onUpdate, onReply, depth = 0
             <CommentItem
               key={reply.id}
               comment={reply}
-              currentUser={currentUser}
+              currentUser={effectiveUser}
               onUpdate={onUpdate}
               onReply={onReply}
               depth={depth + 1}

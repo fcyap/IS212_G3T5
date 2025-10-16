@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { getCsrfToken } from "@/lib/csrf";
+import { fetchWithCsrf } from "@/lib/csrf";
+
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,17 +16,30 @@ export default function LoginPage() {
   const onSubmit = async (e) => {
     e.preventDefault();
     setErr("");
-      const csrfToken = await getCsrfToken();
     try {
-      const res = await fetch(process.env.NEXT_PUBLIC_API_URL + "/auth/supabase-login", {
+      const res = await fetchWithCsrf(`${API}/auth/supabase-login`, {
         method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password: pw }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Login failed");
+        throw new Error(data?.error || "Login failed");
+      }
+      try {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(
+            'session.profile',
+            JSON.stringify({ user: data.user, role: data.role, expiresAt: data.expiresAt ?? null })
+          );
+          window.dispatchEvent(
+            new CustomEvent('session:login', {
+              detail: { user: data.user, role: data.role, expiresAt: data.expiresAt ?? null },
+            })
+          );
+        }
+      } catch (err) {
+        console.warn('[LoginPage] Failed to cache session profile', err);
       }
       router.push("/");
     } catch (e) {

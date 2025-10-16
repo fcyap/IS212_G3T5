@@ -156,8 +156,36 @@ describe('ProjectTasksService', () => {
       const result = await projectTasksService.createTask(projectId, taskData);
 
       expect(projectRepository.exists).toHaveBeenCalledWith(1);
+      expect(projectTasksRepository.create).toHaveBeenCalledWith(expect.objectContaining({
+        assigned_to: []
+      }));
       expect(result.success).toBe(true);
       expect(result.task).toEqual(mockCreatedTask);
+    });
+
+    test('should include creator in assignees when provided', async () => {
+      const projectId = 2;
+      const taskData = {
+        title: 'Creator Task',
+        assigned_to: []
+      };
+
+      const mockCreatedTask = {
+        id: 10,
+        ...taskData,
+        assigned_to: [7],
+        project_id: projectId
+      };
+
+      projectRepository.exists.mockResolvedValue(true);
+      projectTasksRepository.create.mockResolvedValue(mockCreatedTask);
+
+      const result = await projectTasksService.createTask(projectId, taskData, 7);
+
+      expect(projectTasksRepository.create).toHaveBeenCalledWith(expect.objectContaining({
+        assigned_to: [7]
+      }));
+      expect(result.success).toBe(true);
     });
 
     test('should handle project not found during task creation', async () => {
@@ -204,6 +232,61 @@ describe('ProjectTasksService', () => {
       const result = await projectTasksService.updateTask(taskId, updateData);
 
       expect(result.success).toBe(false);
+      expect(result.error).toBe('Task not found');
+    });
+
+    test('should prevent updates from users who are not assigned to the task', async () => {
+      const taskId = 42;
+      const updateData = { title: 'Unauthorized Update' };
+      const requestingUserId = 5;
+
+      projectTasksRepository.findById.mockResolvedValue({
+        id: taskId,
+        assigned_to: [7, 8]
+      });
+
+      const result = await projectTasksService.updateTask(taskId, updateData, requestingUserId);
+
+      expect(projectTasksRepository.findById).toHaveBeenCalledWith(taskId);
+      expect(projectTasksRepository.update).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.statusCode).toBe(403);
+      expect(result.error).toBe('You must be assigned to the task to update it.');
+    });
+
+    test('should allow assigned users to update the task', async () => {
+      const taskId = 7;
+      const requestingUserId = 3;
+      const updateData = { status: 'completed' };
+      const mockUpdatedTask = { id: taskId, ...updateData };
+
+      projectTasksRepository.findById.mockResolvedValue({
+        id: taskId,
+        assigned_to: [requestingUserId, 6]
+      });
+      projectTasksRepository.update.mockResolvedValue(mockUpdatedTask);
+
+      const result = await projectTasksService.updateTask(taskId, updateData, requestingUserId);
+
+      expect(projectTasksRepository.findById).toHaveBeenCalledWith(taskId);
+      expect(projectTasksRepository.update).toHaveBeenCalledWith(taskId, updateData);
+      expect(result.success).toBe(true);
+      expect(result.task).toEqual(mockUpdatedTask);
+    });
+
+    test('should return not found when validating a missing task before update', async () => {
+      const taskId = 11;
+      const requestingUserId = 9;
+      const updateData = { title: 'Any' };
+
+      projectTasksRepository.findById.mockResolvedValue(null);
+
+      const result = await projectTasksService.updateTask(taskId, updateData, requestingUserId);
+
+      expect(projectTasksRepository.findById).toHaveBeenCalledWith(taskId);
+      expect(projectTasksRepository.update).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.statusCode).toBe(404);
       expect(result.error).toBe('Task not found');
     });
   });

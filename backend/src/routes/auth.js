@@ -55,19 +55,21 @@ function authRoutes(sql) {
     console.log('Getting user role...');
     const role = await getEffectiveRole(sql, user.id);
     console.log('Login successful for user:', user.id);
-    return res.json({ 
-      user: { 
-        id: user.id, 
-        email: user.email, 
+    const payload = {
+      user: {
+        id: user.id,
+        email: user.email,
         name: user.name,
         role: user.role,
         hierarchy: user.hierarchy,
         division: user.division,
         department: user.department
-      }, 
-      role, 
-      expiresAt 
-    });
+      },
+      role,
+      expiresAt
+    };
+    console.log('[Auth] /auth/login success', payload);
+    return res.json(payload);
   } catch (e) {
     console.error('POST /auth/login error:', e);  // <-- log root cause
     console.error('Error stack:', e.stack);
@@ -219,11 +221,11 @@ function authRoutes(sql) {
         maxAge: 15 * 60 * 1000,
         path: '/',
       });
-      
+
       console.log('SUPABASE: Login successful for user:', users.id);
-      return res.json({ 
-        user: { 
-          id: users.id, 
+      const loginPayload = {
+        user: {
+          id: users.id,
           email: users.email,
           name: users.name,
           role: users.role,
@@ -231,9 +233,11 @@ function authRoutes(sql) {
           division: users.division,
           department: users.department
         },
-        role: { label: users.role || 'Staff', level: 1 },
-        expiresAt 
-      });
+        role: { label: users.role || 'staff', level: users.role === 'admin' ? 3 : users.role === 'manager' ? 2 : 1 },
+        expiresAt
+      };
+      console.log('[Auth] /auth/supabase-login success', loginPayload);
+      return res.json(loginPayload);
       
     } catch (error) {
       console.error('SUPABASE: Login error:', error);

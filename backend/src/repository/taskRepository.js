@@ -1,4 +1,4 @@
-const supabase = require('../utils/supabase');
+﻿const supabase = require('../utils/supabase');
 
 /**
  * Task Repository - Handles all database operations for tasks
@@ -8,12 +8,19 @@ const supabase = require('../utils/supabase');
  */
 class TaskRepository {
 
-  async list({ archived = false } = {}) {
-    return supabase
-      .from("tasks")
-      .select("*")
-      .eq("archived", archived)
-      .order("created_at", { ascending: true });
+  async list({ archived = false, parentId } = {}) {
+    let q = supabase
+      .from('tasks')
+      .select('*')
+      .eq('archived', archived);
+
+    if (parentId === null) {
+      q = q.is('parent_id', null);          // root tasks only
+    } else if (parentId !== undefined) {
+      q = q.eq('parent_id', parentId);      // subtasks of a given parent
+    }
+
+    return q.order('created_at', { ascending: true });
   }
 
   async insert(payload) {
@@ -269,6 +276,30 @@ class TaskRepository {
 
     return count || 0;
   }
+    // Get all direct subtasks for a task
+  async getSubtasks(parentId) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('parent_id', parentId)
+      .eq('archived', false)
+      .order('created_at', { ascending: true });
+
+    if (error) throw new Error(error.message);
+    return data || [];
+  }
+
+  // Insert many (returns inserted rows)
+  async insertMany(payloads) {
+    if (!Array.isArray(payloads) || payloads.length === 0) return [];
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert(payloads)
+      .select();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
 }
 
 module.exports = new TaskRepository();
