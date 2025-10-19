@@ -1,5 +1,6 @@
 // src/services/tasks/taskCommentService.js (CommonJS)
 const { taskCommentRepository } = require('../../repository/tasks/taskCommentRepository');
+const notificationService = require('../notificationService');
 
 // tiny helper to attach HTTP status codes to plain Errors
 const httpError = (code, message) => Object.assign(new Error(message), { httpCode: code });
@@ -56,12 +57,33 @@ class TaskCommentService {
     if (!content?.trim()) throw httpError(400, 'content is required');
     if (!userId) throw httpError(400, 'userId is required');
 
+    // Create comment in database
     const created = await this.repo.create({
       taskId,
       content: content.trim(),
       userId: userId,
       parentId,
     });
+
+    // Trigger notification asynchronously (don't block comment creation)
+    try {
+      // Get commenter name from the created comment object
+      const commenterName = created.users?.name || 'Unknown User';
+      
+      await notificationService.createCommentNotification({
+        taskId,
+        commentId: created.id,
+        commentContent: content.trim(),
+        commenterId: userId,
+        commenterName: commenterName
+      });
+      
+      console.log(`Comment notification triggered for task ${taskId}, comment ${created.id}`);
+    } catch (notificationError) {
+      // Log but don't fail the comment creation if notification fails
+      console.error('Failed to send comment notification:', notificationError);
+    }
+
     return this.rowToVM(created);
   }
 

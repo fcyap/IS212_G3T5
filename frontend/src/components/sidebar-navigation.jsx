@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { CreateProjectDialog } from "@/components/create-project"
 import { useProjects } from "@/contexts/project-context"
@@ -45,7 +45,7 @@ const NavItem = ({ icon: Icon, label, isActive, isCollapsed, onClick, hasChevron
 
 export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSelect, onViewSelect, selectedProjectId, currentView }) {
     const [isProjectsExpanded, setIsProjectsExpanded] = useState(true)
-
+    const [isTeamsExpanded, setIsTeamsExpanded] = useState(true)
     const { projects, loading, error, selectedProject, selectProject } = useProjects()
     const { user, role, loading: sessionLoading } = useSession()
 
@@ -53,6 +53,20 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
     const canCreateProject = () => {
         return user?.role === 'manager' || user?.role === 'admin'
     }
+
+    const displayName = user?.name || user?.email || 'Unknown User'
+    const initials = (user?.name || user?.email || 'U')
+      .split(/\s+/)
+      .map(part => part[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase()
+    const roleLabel = role?.label
+      || user?.role?.label
+      || user?.role_label
+      || user?.roleName
+      || (typeof user?.role === 'string' ? user.role : null)
+      || 'No Role'
 
     return (
         <div
@@ -191,7 +205,26 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                 </div>
                             )}
 
-
+                            {/* Teams Section */}
+                            <div className="mb-6">
+                                <div className="flex items-center justify-between px-3 py-2 text-sm font-medium text-white">
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => setIsTeamsExpanded(!isTeamsExpanded)}
+                                            className="p-0 bg-[#1f1f23] text-white"
+                                        >
+                                            {isTeamsExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                        </button>
+                                        <span>Teams</span>
+                                    </div>
+                                    <Plus className="w-4 h-4" />
+                                </div>
+                                {isTeamsExpanded && (
+                                    <nav className="space-y-1">
+                                        <NavItem icon={Users} label="YANG's first team" hasChevron isCollapsed={isCollapsed} />
+                                    </nav>
+                                )}
+                            </div>
                         </>
                     )}
 
@@ -210,7 +243,7 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                     onClick={() => onProjectSelect(project.id)}
                                 />
                             ))}
-                
+                            <NavItem icon={Users} label="YANG's first team" isCollapsed={isCollapsed} />
                             <NavItem icon={Settings} label="Settings" isCollapsed={isCollapsed} />
                         </nav>
                     )}
@@ -223,19 +256,19 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                     {isCollapsed ? (
                         <div className="flex items-center justify-center p-2 bg-gray-800 rounded-lg">
                             <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-xs font-semibold">
-                                {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                                {initials}
                             </div>
                         </div>
                     ) : (
                         <div className="bg-gray-800 rounded-lg p-3">
                             <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-sm font-semibold">
-                                    {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                                    {initials}
                                 </div>
                                 <div className="flex-1">
-                                    <div className="text-sm font-medium text-white">{user.name || 'Unknown User'}</div>
+                                    <div className="text-sm font-medium text-white">{displayName}</div>
                                     <div className="text-xs text-gray-400 capitalize">
-                                        {role?.label || user.role || 'No Role'}
+                                        {roleLabel}
                                         {user.division && ` - ${user.division}`}
                                     </div>
                                 </div>
@@ -245,7 +278,25 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                 </div>
             )}
 
-
+            {/* Bottom Section */}
+            <div className="p-4 border-t border-gray-700 space-y-3">
+                <div className="flex items-center justify-between">
+                    {isCollapsed ? (
+                        <>
+                            <Button variant="ghost" className="text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg p-2">
+                                <Users className="w-4 h-4" />
+                            </Button>
+                        </>
+                    ) : (
+                        <>
+                            <Button variant="ghost" className="flex-1 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg mr-2">
+                                <Users className="w-4 h-4 mr-2" />
+                                Invite teammates
+                            </Button>
+                        </>
+                    )}
+                </div>
+            </div>
         </div>
     )
 }

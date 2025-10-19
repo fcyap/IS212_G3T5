@@ -14,18 +14,41 @@ jest.mock('../../src/middleware/logger', () => ({
 jest.mock('../../src/utils/supabase');
 jest.mock('../../src/services/projectService');
 
+// Mock postgres sql function for RBAC middleware
+jest.mock('../../src/db', () => {
+  const mockSql = jest.fn(() => Promise.resolve([]));
+  mockSql.unsafe = jest.fn(() => Promise.resolve([]));
+  return { sql: mockSql };
+});
+
 describe('API Integration Tests', () => {
   let app;
+  let mockSql;
 
   beforeAll(() => {
+    // Get the mocked sql function
+    mockSql = require('../../src/db').sql;
+
     app = express();
     app.use(cors());
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
 
-    // Mock user middleware for testing
+    // Mock user middleware for testing - includes RBAC fields
     app.use((req, res, next) => {
-      req.user = { id: 1 }; // Mock authenticated user
+      req.user = {
+        id: 1,
+        user_id: 1,
+        role: 'admin',
+        hierarchy: 10,
+        division: 'Engineering'
+      };
+      res.locals.session = {
+        user_id: 1,
+        role: 'admin',
+        hierarchy: 10,
+        division: 'Engineering'
+      };
       next();
     });
 
@@ -62,6 +85,50 @@ describe('API Integration Tests', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Setup default mock responses for RBAC middleware database queries
+    // This mocks user info queries
+    mockSql.mockImplementation((strings, ...values) => {
+      // Check if it's a user query (from filterVisibleProjects or other RBAC middleware)
+      const query = strings.join('');
+      if (query.includes('from public.users')) {
+        return Promise.resolve([{
+          id: 1,
+          name: 'Test User',
+          email: 'test@example.com',
+          role: 'admin',
+          hierarchy: 10,
+          division: 'Engineering',
+          department: 'Backend'
+        }]);
+      }
+      // Check if it's a project query (from requireProjectEdit, requireTaskCreation, etc)
+      if (query.includes('from public.projects')) {
+        return Promise.resolve([{
+          id: 1,
+          creator_id: 1,
+          user_ids: [1],
+          role: 'admin',
+          hierarchy: 10,
+          division: 'Engineering'
+        }]);
+      }
+      // Check if it's a task query (from requireTaskModification)
+      if (query.includes('from public.tasks')) {
+        return Promise.resolve([{
+          id: 1,
+          project_id: 1,
+          assigned_to: [1],
+          project_creator_id: 1,
+          project_members: [1],
+          role: 'admin',
+          hierarchy: 10,
+          division: 'Engineering'
+        }]);
+      }
+      // Default: return empty array
+      return Promise.resolve([]);
+    });
   });
 
   describe('GET /', () => {
@@ -161,20 +228,29 @@ describe('API Integration Tests', () => {
           { id: 2, name: 'Project 2', role: 'collaborator' }
         ];
 
-        projectService.getAllProjectsForUser.mockResolvedValue(mockProjects);
+        projectService.getProjectsWithRBAC.mockResolvedValue(mockProjects);
 
         const response = await request(app).get('/api/projects');
 
         expect(response.status).toBe(200);
         expect(response.body).toEqual({
           success: true,
-          projects: mockProjects
+          projects: mockProjects,
+          userRole: 'admin'
         });
-        expect(projectService.getAllProjectsForUser).toHaveBeenCalledWith(1);
+        expect(projectService.getProjectsWithRBAC).toHaveBeenCalledWith({
+          id: 1,
+          name: 'Test User',
+          email: 'test@example.com',
+          role: 'admin',
+          hierarchy: 10,
+          division: 'Engineering',
+          department: 'Backend'
+        });
       });
 
       test('should handle service error when getting projects', async () => {
-        projectService.getAllProjectsForUser.mockRejectedValue(new Error('Database error'));
+        projectService.getProjectsWithRBAC.mockRejectedValue(new Error('Database error'));
 
         const response = await request(app).get('/api/projects');
 

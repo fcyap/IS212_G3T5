@@ -5,8 +5,8 @@ const crypto = require('crypto');
 const { createSession, deleteSession } = require('../auth/sessions');
 const { getEffectiveRole } = require('../auth/roles');
 const { cookieName } = require('../middleware/auth');
-const { authMiddleware } = require('../middleware/auth'); // <-- add this
-const { supabase } = require('../supabase-client');
+const { authMiddleware } = require('../middleware/auth');
+const supabase = require('../utils/supabase');
 
 function authRoutes() {
   const router = express.Router();
@@ -15,23 +15,19 @@ function authRoutes() {
   try {
     const { email, password } = req.body || {};
     console.log('Login attempt for:', email);
-    
+
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password required' });
     }
 
     console.log('Querying database for user...');
-    const { data: users, error } = await supabase
+    // Use Supabase instead of raw Postgres
+    const { data: users, error: userError } = await supabase
       .from('users')
       .select('id, email, password_hash, name, role, hierarchy, division, department')
       .ilike('email', email)
       .limit(1);
-    
-    if (error) {
-      console.error('Database query error:', error);
-      return res.status(500).json({ error: 'Database query failed' });
-    }
-    
+
     const user = users?.[0];
     console.log('User found:', user ? 'Yes' : 'No');
 
@@ -49,7 +45,7 @@ function authRoutes() {
     }
 
     console.log('Creating session...');
-    const { token, expiresAt } = await createSession(user.id);
+    const { token, expiresAt } = await createSession(null, user.id);
     res.cookie(cookieName, token, {
       httpOnly: true,
       sameSite: 'lax',
@@ -59,23 +55,25 @@ function authRoutes() {
     });
 
     console.log('Getting user role...');
-    const role = await getEffectiveRole(sql, user.id);
+    const role = await getEffectiveRole(null, user.id);
     console.log('Login successful for user:', user.id);
-    return res.json({ 
-      user: { 
-        id: user.id, 
-        email: user.email, 
+    const payload = {
+      user: {
+        id: user.id,
+        email: user.email,
         name: user.name,
         role: user.role,
         hierarchy: user.hierarchy,
         division: user.division,
         department: user.department
-      }, 
-      role, 
-      expiresAt 
-    });
+      },
+      role,
+      expiresAt
+    };
+    console.log('[Auth] /auth/login success', payload);
+    return res.json(payload);
   } catch (e) {
-    console.error('POST /auth/login error:', e);  // <-- log root cause
+    console.error('POST /auth/login error:', e);
     console.error('Error stack:', e.stack);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
@@ -86,68 +84,68 @@ function authRoutes() {
     try {
       console.log('DEBUG: Login request received');
       console.log('DEBUG: Request body:', req.body);
-      
+
       const { email, password } = req.body || {};
-      
+
       if (!email || !password) {
         console.log('DEBUG: Missing email or password');
         return res.status(400).json({ error: 'Email and password required' });
       }
-      
+
       console.log('DEBUG: Testing database connection...');
-      
-      // Test database connection first
-      const { data: testQuery, error: testError } = await supabase
+
+      // Test database connection first using Supabase
+      const { data: testData, error: testError } = await supabase
         .from('users')
         .select('id')
         .limit(1);
-      console.log('DEBUG: Database connection OK:', testQuery);
-      
+      console.log('DEBUG: Database connection OK:', testData);
+
       // Try to find user
       console.log('DEBUG: Looking for user with email:', email);
-      const { data: users, error: usersError } = await supabase
+      const { data: users, error: userError } = await supabase
         .from('users')
         .select('id, email, password_hash, role')
         .ilike('email', email)
         .limit(1);
-      
+
       console.log('DEBUG: User query result:', users);
-      
+
       if (!users || users.length === 0) {
         console.log('DEBUG: No user found');
         return res.status(401).json({ error: 'User not found' });
       }
-      
+
       const user = users[0];
       console.log('DEBUG: User found:', { id: user.id, email: user.email, hasPassword: !!user.password_hash });
-      
+
       if (!user.password_hash) {
         console.log('DEBUG: User has no password hash');
         return res.status(401).json({ error: 'No password set for user' });
       }
-      
+
       // Test password comparison
       console.log('DEBUG: Testing password...');
       const passwordMatch = await bcrypt.compare(password, user.password_hash);
       console.log('DEBUG: Password match:', passwordMatch);
-      
+
       if (!passwordMatch) {
         console.log('DEBUG: Password mismatch');
         return res.status(401).json({ error: 'Invalid password' });
       }
-      
+
       // Return success without creating session for now
       console.log('DEBUG: Login would succeed for user:', user.id);
-      return res.json({ 
-        success: true, 
+      return res.json({
+        success: true,
         user: { id: user.id, email: user.email },
         message: 'Login test successful'
       });
-      
+
     } catch (error) {
       console.error('DEBUG: Login error:', error);
       console.error('DEBUG: Error stack:', error.stack);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Internal Server Error',
         details: error.message
       });
@@ -156,7 +154,7 @@ function authRoutes() {
 
   router.post('/logout', async (req, res) => {
     const token = req.cookies?.[cookieName];
-    if (token) await deleteSession(token);
+    if (token) await deleteSession(null, token);
     res.clearCookie(cookieName, { path: '/' });
     return res.json({ ok: true });
   });
@@ -227,11 +225,11 @@ function authRoutes() {
         maxAge: 15 * 60 * 1000,
         path: '/',
       });
-      
+
       console.log('SUPABASE: Login successful for user:', users.id);
-      return res.json({ 
-        user: { 
-          id: users.id, 
+      const loginPayload = {
+        user: {
+          id: users.id,
           email: users.email,
           name: users.name,
           role: users.role,
@@ -239,9 +237,11 @@ function authRoutes() {
           division: users.division,
           department: users.department
         },
-        role: { label: users.role || 'Staff', level: 1 },
-        expiresAt 
-      });
+        role: { label: users.role || 'staff', level: users.role === 'admin' ? 3 : users.role === 'manager' ? 2 : 1 },
+        expiresAt
+      };
+      console.log('[Auth] /auth/supabase-login success', loginPayload);
+      return res.json(loginPayload);
       
     } catch (error) {
       console.error('SUPABASE: Login error:', error);
@@ -256,25 +256,20 @@ function authRoutes() {
   router.get('/me', authMiddleware(), async (req, res) => {
     try {
       const { session } = res.locals;
-      
-      // Get complete user information
-      const { data: users, error } = await supabase
+
+      // Get complete user information using Supabase
+      const { data: users, error: userError } = await supabase
         .from('users')
         .select('id, email, name, role, hierarchy, division, department')
         .eq('id', session.user_id)
         .limit(1);
-      
-      if (error) {
-        console.error('Database query error:', error);
-        return res.status(500).json({ error: 'Database query failed' });
-      }
-      
+
       const user = users?.[0];
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
-      
-      const role = await getEffectiveRole(session.user_id);
+
+      const role = await getEffectiveRole(null, session.user_id);
       return res.json({
         user: {
           id: user.id,

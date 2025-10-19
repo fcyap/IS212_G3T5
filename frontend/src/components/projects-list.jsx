@@ -7,11 +7,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Search, Filter, SortAsc, SortDesc } from "lucide-react"
 import { useProjects } from "@/contexts/project-context"
 import { CreateProjectDialog } from "@/components/create-project"
+import { userService } from "@/lib/api"
+import { useAuth } from "@/hooks/useAuth"
 
 export function ProjectsList({ onProjectSelect }) {
   const { projects, loading, loadProjects } = useProjects()
-  console.log('📋 [ProjectsList] Component rendered - projects:', projects?.length, 'loading:', loading);
-  
+  const { currentUserId } = useAuth()
   const [filteredProjects, setFilteredProjects] = useState([])
   const [searchTerm, setSearchTerm] = useState("")
   const [sortBy, setSortBy] = useState("name") // name, created_at, updated_at
@@ -19,16 +20,12 @@ export function ProjectsList({ onProjectSelect }) {
   const [filterStatus, setFilterStatus] = useState("all") // all, active, hold, completed, archived
   const [filterRole, setFilterRole] = useState("all") // all, owner, collaborator
   const [allUsers, setAllUsers] = useState([])
-  const currentUserId = parseInt(process.env.NEXT_PUBLIC_USER_ID || 1)
 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const usersRes = await fetch('http://localhost:3001/api/users')
-        if (usersRes.ok) {
-          const usersData = await usersRes.json()
-          setAllUsers(usersData.users || [])
-        }
+        const users = await userService.getAllUsers()
+        setAllUsers(users || [])
       } catch (error) {
         console.error('Error fetching users:', error)
       }
@@ -39,18 +36,7 @@ export function ProjectsList({ onProjectSelect }) {
   }, [])
 
   useEffect(() => {
-    console.log('🔍 [ProjectsList] Filtering projects - raw projects:', projects);
-    console.log('🔍 [ProjectsList] Projects type:', typeof projects, 'Array:', Array.isArray(projects));
-    
-    if (!projects) {
-      console.log('❌ [ProjectsList] No projects array');
-      setFilteredProjects([]);
-      return;
-    }
-
     let filtered = projects.filter(project => {
-      console.log('🔍 [ProjectsList] Filtering project:', project.name, 'status:', project.status);
-      
       // Search filter
       const matchesSearch = (project.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                            (project.description || '').toLowerCase().includes(searchTerm.toLowerCase())
@@ -69,11 +55,8 @@ export function ProjectsList({ onProjectSelect }) {
         matchesRole = project.creator_id !== currentUserId
       }
 
-      console.log('🔍 [ProjectsList] Filter results for', project.name, '- search:', matchesSearch, 'status:', matchesStatus, 'role:', matchesRole);
       return matchesSearch && matchesStatus && matchesRole
     })
-
-    console.log('🔍 [ProjectsList] Filtered projects:', filtered.length, 'from', projects.length);
 
     // Sort
     filtered.sort((a, b) => {
@@ -107,7 +90,7 @@ export function ProjectsList({ onProjectSelect }) {
 
   const getTaskCount = async (projectId) => {
     try {
-      const res = await fetch(`http://localhost:3001/api/tasks/project/${projectId}`)
+      const res = await fetch(`http://localhost:3001/api/tasks/project/${projectId}`, { credentials: 'include' })
       if (res.ok) {
         const data = await res.json()
         return data.tasks ? data.tasks.length : 0

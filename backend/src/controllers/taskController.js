@@ -9,20 +9,40 @@ const taskService = require('../services/taskService');
 
 const list = async (req, res) => {
   try {
-    const archived = String(req.query.archived ?? "false").toLowerCase() === "true";
-    const tasks = await taskService.listWithAssignees ?
-      await taskService.listWithAssignees({ archived }) :
-      await taskService.getAllTasks({ archived });
+    const archived = String(req.query.archived ?? 'false').toLowerCase() === 'true';
+    let parentId;
+    if ('parent_id' in req.query) {
+      if (req.query.parent_id === 'null') parentId = null;
+      else parentId = Number(req.query.parent_id);
+    }
+
+    // Get current user for RBAC filtering
+    const user = res.locals.session || req.user;
+    const userId = user ? (user.user_id || user.id) : null;
+
+    const tasks = taskService.listWithAssignees
+      ? await taskService.listWithAssignees({ archived, parentId, userId, userRole: user?.role, userHierarchy: user?.hierarchy, userDivision: user?.division })
+      : await taskService.getAllTasks({ archived, parentId, userId, userRole: user?.role, userHierarchy: user?.hierarchy, userDivision: user?.division });
+
     res.json(tasks);
   } catch (e) {
-    console.error("[GET /tasks]", e);
-    res.status(e.status || 500).json({ error: e.message || "Server error" });
+    console.error('[GET /tasks]', e);
+    res.status(e.status || 500).json({ error: e.message || 'Server error' });
   }
 };
 
+
 const create = async (req, res) => {
   try {
-    const task = await taskService.createTask(req.body);
+    const creatorId = req.user?.id ?? req.body?.creator_id ?? req.body?.creatorId ?? null;
+
+    // Always use the old taskService for creation
+    const task = await taskService.createTask({ ...req.body }, creatorId ?? null);
+
+    // Send deadline notifications regardless of project association
+    const projectTasksService = require('../services/projectTasksService');
+    await projectTasksService.sendDeadlineNotifications(task);
+
     res.status(201).json(task);
   } catch (e) {
     console.error("[POST /tasks]", e);
@@ -37,7 +57,7 @@ const update = async (req, res) => {
       return res.status(400).json({ error: "Invalid id" });
     }
     console.log("req.body:", req.body);
-    const task = await taskService.updateTask(id, req.body);
+    const task = await taskService.updateTask(id, req.body, req.user?.id ?? null);
     res.json(task);
   } catch (e) {
     console.error("[PUT /tasks/:id]", e);
@@ -64,6 +84,15 @@ const getAllTasks = async (req, res) => {
 
     if (filters.limit < 1 || filters.limit > 100) {
       return res.status(400).json({ success: false, message: 'Limit must be between 1 and 100' });
+    }
+
+    // Get current user for RBAC filtering
+    const user = res.locals.session || req.user;
+    if (user) {
+      filters.userId = user.user_id || user.id;
+      filters.userRole = user.role;
+      filters.userHierarchy = user.hierarchy;
+      filters.userDivision = user.division;
     }
 
     filters.offset = (filters.page - 1) * filters.limit;
@@ -157,7 +186,7 @@ const getTaskById = async (req, res) => {
 
 const createTask = async (req, res) => {
   try {
-    const { title, description, project_id, assigned_to, status, priority, deadline } = req.body;
+    const { title, description, project_id, assigned_to, status, priority, deadline, parent_id, recurrence   } = req.body;
     const creatorId = req.user?.id || 1;
 
     if (!title || title.trim() === '') {
@@ -187,7 +216,8 @@ const createTask = async (req, res) => {
       assigned_to: assigned_to || [],
       status: status || 'pending',
       priority: priority || 'medium',
-      deadline: deadline || null
+      deadline: deadline || null,
+      parent_id: (parent_id === null || parent_id === undefined) ? null : parseInt(parent_id),
     };
 
     const task = await taskService.createTask(taskData, creatorId);
@@ -203,7 +233,7 @@ const updateTask = async (req, res) => {
     // Log the full request body for debugging
     console.log('[TaskController] Full req.body:', req.body);
     const { taskId } = req.params;
-    const { title, description, assigned_to, status, priority, deadline } = req.body;
+    const { title, description, assigned_to, status, priority, deadline, tags, recurrence } = req.body;
     const requestingUserId = req.user?.id || 1;
 
     if (!taskId || isNaN(taskId)) {
@@ -219,6 +249,7 @@ const updateTask = async (req, res) => {
       updates.assigned_to = assigned_to;
       console.log(`[TaskController] Received update for task_id=${taskId}, assigned_to:`, assigned_to);
     }
+    if (recurrence !== undefined) updates.recurrence = recurrence; // {freq, interval} or null
 
     if (status !== undefined) {
       const validStatuses = ['pending', 'in_progress', 'completed', 'cancelled', 'blocked'];

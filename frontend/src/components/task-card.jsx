@@ -29,6 +29,14 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
       default: return "bg-gray-600 text-white"
     }
   }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+
+  const isOverdue =
+    (status === "pending" || status === "in_progress") &&
+    deadline &&
+    new Date(deadline) < today;
 
 
   return (
@@ -36,7 +44,11 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
       onClick={onClick}
       role="button"
       tabIndex={0}
-      className="bg-[#2a2a2e] border border-gray-600 rounded-lg p-4 hover:border-gray-500 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/40">      {/* Title + Description */}
+      className={`border rounded-lg p-4 hover:border-gray-500 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/40
+    ${isOverdue
+      ? "bg-red-950/40 border-red-500"
+      : "bg-[#2a2a2e] border-gray-600"}`}
+      >     
       <div className="flex items-start gap-3">
         <div className="flex-1">
           <h3 className="text-white font-medium">{title}</h3>
@@ -46,7 +58,7 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
             type="button"
             title="Unarchive"
             onClick={(e) => {
-              e.stopPropagation();     
+              e.stopPropagation();
               onUnarchive?.();
             }}
             className="p-1 rounded text-gray-200 hover:bg-gray-700"

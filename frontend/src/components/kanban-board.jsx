@@ -1,11 +1,10 @@
 "use client"
-import { CurrentUser } from "@/components/task-comment/test-task-comments";
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { TaskCard } from "./task-card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { getCsrfToken } from "@/lib/csrf"
+import { fetchWithCsrf } from "@/lib/csrf"
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select"
@@ -13,6 +12,8 @@ import { Trash, Check, X, Plus } from "lucide-react"
 import { useKanban } from "@/components/kanban-context"
 import { Badge } from "@/components/ui/badge"
 import { CommentSection } from "./task-comment/task-comment-section"
+import { useUserSearch } from "@/hooks/useUserSearch"
+import { useAuth } from "@/hooks/useAuth"
 
 const priorityChipClasses = {
   Low: "bg-teal-200 text-teal-900",
@@ -20,6 +21,17 @@ const priorityChipClasses = {
   High: "bg-fuchsia-300 text-fuchsia-950",
 }
 
+const prettyStatus = (s) => {
+  const key = String(s || "").toLowerCase();
+  const map = {
+    pending: "To do",
+    in_progress: "Doing",
+    completed: "Completed",
+    blocked: "Blocked",
+    cancelled: "Cancelled",
+  };
+  return map[key] ?? cap(key.replace("_", " "));
+};
 
 const API = process.env.NEXT_PUBLIC_API_URL
 const cap = (s) => (s ? s.toString().charAt(0).toUpperCase() + s.toString().slice(1).toLowerCase() : "")
@@ -31,6 +43,11 @@ function rowToCard(r) {
       : Array.isArray(r.assigned_to) ? r.assigned_to.map(id => ({ id }))
         : [];
 
+  const recurrence =
+    r.recurrence_freq
+      ? { freq: r.recurrence_freq, interval: r.recurrence_interval || 1 }
+      : null;
+
   return {
     id: r.id,
     title: r.title ?? '',
@@ -40,20 +57,82 @@ function rowToCard(r) {
     deadline: r.deadline || null,
     assignees: normalizedAssignees,  // <-- use this
     tags: Array.isArray(r.tags) ? r.tags : [],
+    recurrence,
   };
 }
 
-export function KanbanBoard() {
-  async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees }) {
+// --- RecurrencePicker --------------------------------------------
+function RecurrencePicker({ value, onChange, disabled = false }) {
+  const freq = value?.freq ?? "none";
+  const interval = value?.interval ?? 1;
+
+  function setFreq(next) {
+    if (next === "none") onChange(null);
+    else onChange({ freq: next, interval: interval || 1 });
+  }
+  function setInterval(next) {
+    const n = Math.max(1, Number(next) || 1);
+    if (!value) onChange({ freq: "daily", interval: n });
+    else onChange({ ...value, interval: n });
+  }
+
+  const label =
+    freq === "none"
+      ? "Does not repeat"
+      : `Repeats every ${interval} ${freq === "daily" ? (interval > 1 ? "days" : "day")
+        : freq === "weekly" ? (interval > 1 ? "weeks" : "week")
+          : (interval > 1 ? "months" : "month")}`;
+
+  return (
+    <div className={disabled ? "opacity-60 pointer-events-none" : ""}>
+      <label className="block text-xs text-gray-400 mb-1 mt-2">Repeat</label>
+      <div className="grid grid-cols-2 gap-2">
+        <Select
+          value={freq}
+          onValueChange={setFreq}
+          disabled={disabled}
+        >
+          <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+            <SelectValue placeholder="Repeat" />
+          </SelectTrigger>
+          <SelectContent className="bg-white">
+            <SelectItem value="none">None</SelectItem>
+            <SelectItem value="daily">Daily</SelectItem>
+            <SelectItem value="weekly">Weekly</SelectItem>
+            <SelectItem value="monthly">Monthly</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Input
+          type="number"
+          min={1}
+          value={interval}
+          onChange={(e) => setInterval(e.target.value)}
+          className="bg-transparent text-gray-100 border-gray-700"
+          disabled={disabled || freq === "none"}
+          placeholder="Interval"
+        />
+      </div>
+      <div className="mt-1 text-xs text-gray-400">{label}</div>
+    </div>
+  );
+}
+// ------------------------------------------------------------------
+
+
+export function KanbanBoard({ projectId = null }) {
+  const { user: currentUser } = useAuth()
+  async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees, recurrence }) {
+    if (!currentUser?.id) {
+      console.error('[KanbanBoard] Cannot create task without an authenticated user')
+      return
+    }
     try {
-      const csrfToken = await getCsrfToken();
-      const res = await fetch(`${API}/tasks`, {
+      const res = await fetchWithCsrf(`${API}/tasks`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-csrf-token": csrfToken
         },
-        credentials: "include",
         body: JSON.stringify({
           title,
           description: description || null,
@@ -61,8 +140,9 @@ export function KanbanBoard() {
           status: editorLane,
           deadline: dueDate || null,
           project_id: projectId,
-          assigned_to: Array.isArray(assignees) && assignees.length > 0 ? assignees.map(a => a.id) : [CurrentUser.id],
+          assigned_to: Array.isArray(assignees) && assignees.length > 0 ? assignees.map(a => a.id) : [currentUser.id],
           tags,
+          recurrence: recurrence ?? null,
         }),
       })
       if (!res.ok) {
@@ -71,15 +151,10 @@ export function KanbanBoard() {
       }
       const row = await res.json()
       const card = rowToCard(row)
-      const withAssignees = {
-     ...card,
-     assignees: [{ id: CurrentUser.id, name: CurrentUser.name }],
-   }
 
-      // setTasks(prev => editorPosition === "top" ? [card, ...prev] : [...prev, card])
       setTasks(prev =>
-     editorPosition === "top" ? [withAssignees, ...prev] : [...prev, withAssignees]
-   )
+        editorPosition === "top" ? [card, ...prev] : [...prev, card]
+      )
       setBanner("Task Successfully Created")
       cancelAddTask()
     } catch (err) {
@@ -101,7 +176,9 @@ export function KanbanBoard() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`${API}/tasks`)
+        const res = await fetch(`${API}/tasks?archived=false&parent_id=null`, {
+          credentials: 'include',
+        })
         if (!res.ok) throw new Error(`GET /tasks ${res.status}`)
         const rows = await res.json()
         setTasks(rows.map(rowToCard))
@@ -157,6 +234,7 @@ export function KanbanBoard() {
                   assignees={t.assignees}
                   deadline={t.deadline}
                   tags={t.tags}
+                  status={t.workflow}
                   onClick={() => openPanel(t)}
                 />
               ))}
@@ -201,6 +279,7 @@ export function KanbanBoard() {
                   assignees={t.assignees}
                   deadline={t.deadline}
                   tags={t.tags}
+                  status={t.workflow}
                   onClick={() => openPanel(t)}
                 />
               ))}
@@ -244,6 +323,7 @@ export function KanbanBoard() {
                   assignees={t.assignees}
                   deadline={t.deadline}
                   tags={t.tags}
+                  status={t.workflow}
                   onClick={() => openPanel(t)}
                 />
               ))}
@@ -287,6 +367,7 @@ export function KanbanBoard() {
                   assignees={t.assignees}
                   deadline={t.deadline}
                   tags={t.tags}
+                  status={t.workflow}
                   onClick={() => openPanel(t)}
                 />
               ))}
@@ -317,7 +398,20 @@ export function KanbanBoard() {
             try {
               // Convert assignees (array of user objects) to assigned_to (array of user IDs)
               const assigned_to = Array.isArray(patch.assignees)
-                ? patch.assignees.map(a => a.id)
+                ? Array.from(
+                    new Set(
+                      patch.assignees
+                        .map((assignee) => {
+                          const raw =
+                            assignee && typeof assignee === 'object'
+                              ? assignee.id ?? assignee.user_id ?? assignee.userId ?? null
+                              : assignee;
+                          const numeric = Number(raw);
+                          return Number.isFinite(numeric) ? Math.trunc(numeric) : null;
+                        })
+                        .filter((value) => value !== null)
+                    )
+                  )
                 : [];
               const payload = {
                 title: patch.title,
@@ -327,16 +421,14 @@ export function KanbanBoard() {
                 deadline: patch.deadline || null,
                 tags: patch.tags || [],
                 assigned_to,
+                recurrence: patch.recurrence ?? null,
               };
               console.log('[KanbanBoard] Sending payload to backend:', payload);
-              const csrfToken = await getCsrfToken();
-              const res = await fetch(`${API}/tasks/${panelTask.id}`, {
+              const res = await fetchWithCsrf(`${API}/tasks/${panelTask.id}`, {
                 method: "PUT",
                 headers: {
                   "Content-Type": "application/json",
-                  "x-csrf-token": csrfToken
                 },
-                credentials: "include",
                 body: JSON.stringify(payload),
               })
               if (!res.ok) {
@@ -364,10 +456,19 @@ export function KanbanBoard() {
 }
 
 
-function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
-    const canEdit =
+function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
+  const [childPanelTask, setChildPanelTask] = useState(null);
+  const { user: currentUser } = useAuth()
+  const currentUserId = currentUser?.id
+  const canEdit =
     Array.isArray(task.assignees) &&
-    task.assignees.some((a) => a.id === CurrentUser.id);
+    currentUserId != null &&
+    task.assignees.some((a) => a.id === currentUserId);
+  const isManager = currentUser?.role?.toLowerCase?.() === 'manager';
+  const isCreator = task.creator_id != null && currentUserId === task.creator_id;
+  const canAddAssignees = canEdit;
+  const canRemoveAssignees = isManager || (canEdit && isCreator);
+  const MAX_ASSIGNEES = 5
   const [title, setTitle] = useState(task.title || "");
   const [description, setDescription] = useState(task.description || "");
   const [priority, setPriority] = useState(task.priority || "Low");
@@ -376,44 +477,67 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted }) {
   const [tags, setTags] = useState(Array.isArray(task.tags) ? task.tags : []);
   const [tagInput, setTagInput] = useState("");
   const [assignees, setAssignees] = useState(Array.isArray(task.assignees) ? task.assignees : []);
-  const [userSearch, setUserSearch] = useState("");
-  const [userSearchResults, setUserSearchResults] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [recurrence, setRecurrence] = useState(task.recurrence ?? null);
 
-  // Fetch user suggestions from backend on each keydown
-  // Debounce timer for user search
-  const [userSearchDebounce, setUserSearchDebounce] = useState(null);
+  // Subtasks
+  const [subtasks, setSubtasks] = useState([]);
+  const [isSubtaskOpen, setIsSubtaskOpen] = useState(false);
 
-  function handleUserSearchInput(e) {
-       if (!canEdit) return;
-    const value = e.target.value;
-    console.log('[AssigneeSearch] (input onChange) value:', value);
-    setUserSearch(value);
-    if (userSearchDebounce) clearTimeout(userSearchDebounce);
-    if (!value.trim()) {
-      setUserSearchResults([]);
-      return;
-    }
-    setLoadingUsers(true);
-    const timer = setTimeout(async () => {
-      const apiUrl = `${API}/users/search?q=${encodeURIComponent(value)}&limit=8`;
-      console.log('[AssigneeSearch] Fetching:', apiUrl);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
       try {
-        const res = await fetch(apiUrl);
-        const data = await res.json();
-        setUserSearchResults(data.users || []);
-      } catch (err) {
-        console.log('[AssigneeSearch] Fetch error:', err);
-        setUserSearchResults([]);
-      } finally {
-        setLoadingUsers(false);
+        const res = await fetchWithCsrf(`${API}/tasks?archived=false&parent_id=${task.id}`);
+        if (!res.ok) throw new Error(`GET /tasks ${res.status}`);
+        const rows = await res.json();
+        // rows already have assignees hydrated by backend; if you map, keep tags/assignees as you do elsewhere
+        if (mounted) setSubtasks(rows.map(rowToCard));
+      } catch (e) {
+        console.error('[load subtasks]', e);
       }
-    }, 250);
-    setUserSearchDebounce(timer);
+    })();
+    return () => { mounted = false; };
+  }, [task.id]);
+
+  async function loadSubtasks() {
+    try {
+      // Prefer backend filter: /tasks?parent_id=ID
+      const res = await fetchWithCsrf(`${API}/tasks?parent_id=${task.id}`);
+      if (!res.ok) throw new Error(`GET /tasks?parent_id=${task.id} ${res.status}`);
+      const rows = await res.json();
+      setSubtasks(Array.isArray(rows) ? rows : []);
+    } catch (err) {
+      console.error("[load subtasks]", err);
+      // Fallback: fetch all then filter if your backend doesn't support parent_id
+      try {
+        const resAll = await fetchWithCsrf(`${API}/tasks`);
+        const rowsAll = await resAll.json();
+        setSubtasks((rowsAll || []).filter((r) => r.parent_id === task.id));
+      } catch (e) {
+        console.error("[load subtasks fallback]", e);
+        setSubtasks([]);
+      }
+    }
   }
 
-const canSave = canEdit && title.trim().length > 0 && priority;
+  const {
+    query: userSearch,
+    results: userSearchResults,
+    loading: loadingUsers,
+    search: searchUsers,
+    clear: clearUserSearch,
+  } = useUserSearch({ canSearch: canAddAssignees, minQueryLength: 1 })
+
+  function handleUserSearchInput(e) {
+    if (!canAddAssignees || assignees.length >= MAX_ASSIGNEES) return;
+    const value = e.target.value;
+    console.log('[AssigneeSearch] (input onChange) value:', value);
+    searchUsers(value);
+  }
+
+  const canSave = (canEdit || isManager) && title.trim().length > 0 && priority && assignees.length <= MAX_ASSIGNEES;
   function addTagFromInput() {
+    if (!canEdit) return;
     const t = tagInput.trim();
     if (!t) return;
     if (!tags.includes(t)) setTags((prev) => [...prev, t]);
@@ -421,33 +545,34 @@ const canSave = canEdit && title.trim().length > 0 && priority;
   }
 
   function removeTagAt(idx) {
+    if (!canEdit) return;
     setTags((prev) => prev.filter((_, i) => i !== idx));
   }
 
   function addAssignee(user) {
-    if (!canEdit) return;
-    if (!assignees.some((a) => a.id === user.id)) {
-      setAssignees((prev) => [...prev, user]);
-    }
-    setUserSearch("");
-    setUserSearchResults([]);
+    if (!canAddAssignees) return;
+    setAssignees((prev) => {
+      if (prev.length >= MAX_ASSIGNEES || prev.some((a) => a.id === user.id)) return prev;
+      return [...prev, user];
+    });
+    clearUserSearch();
   }
 
   function removeAssignee(userId) {
-    if (!canEdit) return;
-    setAssignees((prev) => prev.filter((a) => a.id !== userId));
+    if (!canRemoveAssignees) return;
+    setAssignees((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((a) => a.id !== userId);
+    });
   }
 
   async function handleDelete() {
     try {
-      const csrfToken = await getCsrfToken();
-      const res = await fetch(`${API}/tasks/${task.id}`, {
+      const res = await fetchWithCsrf(`${API}/tasks/${task.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "x-csrf-token": csrfToken
         },
-        credentials: "include",
         body: JSON.stringify({ archived: true }),
       });
       if (!res.ok) {
@@ -462,262 +587,387 @@ const canSave = canEdit && title.trim().length > 0 && priority;
   }
 
   return (
-    <div className="fixed inset-0 z-40">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      {/* Panel */}
-      <div className="absolute right-0 top-0 h-full w-[420px] bg-[#1f2023] border-l border-gray-700 p-6 overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-white text-lg font-semibold">Edit task</h3>
-          <button onClick={onClose} className="text-gray-300 hover:text-white text-xl leading-none">×</button>
-        </div>
-
-        <div className="space-y-4">
-          {/* Title */}
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Title</label>
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="bg-transparent text-gray-100 border-gray-700"
-               disabled={!canEdit}
-            />
+    <>
+      {childPanelTask && (
+        <TaskSidePanel
+          task={childPanelTask}
+          onClose={() => setChildPanelTask(null)}
+          onSave={async (patch) => {
+            const assigned_to = Array.isArray(patch.assignees)
+              ? patch.assignees.map(a => a.id)
+              : [];
+            const payload = {
+              title: patch.title,
+              description: patch.description || null,
+              priority: patch.priority,
+              status: patch.status,
+              deadline: patch.deadline || null,
+              tags: patch.tags || [],
+              assigned_to,
+              recurrence: patch.recurrence ?? null,
+            };
+            try {
+              const res = await fetchWithCsrf(`${API}/tasks/${childPanelTask.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+              if (!res.ok) {
+                const { error } = await res.json().catch(() => ({}));
+                throw new Error(error || `PUT /tasks/${childPanelTask.id} ${res.status}`);
+              }
+              const row = await res.json();
+              setSubtasks(prev => prev.map(s => (s.id === row.id ? rowToCard(row) : s)));
+              setChildPanelTask(null);
+            } catch (e) {
+              console.error("[update subtask]", e);
+              alert(e.message);
+            }
+          }}
+          onDeleted={(id) => {
+            setSubtasks(prev => prev.filter(s => s.id !== id));
+            setChildPanelTask(null);
+          }}
+          nested
+        />
+      )}
+      <div className={nested ? "fixed inset-0 z-50" : "fixed inset-0 z-40"}>
+        {/* Backdrop */}
+        <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+        {/* Panel */}
+        <div className="absolute right-0 top-0 h-full w-[420px] bg-[#1f2023] border-l border-gray-700 p-6 overflow-y-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-white text-lg font-semibold">Edit task</h3>
+            <button onClick={onClose} className="text-gray-300 hover:text-white text-xl leading-none">×</button>
           </div>
 
-          {/* Description */}
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Description</label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
-              className="bg-transparent text-gray-100 border-gray-700"
-               disabled={!canEdit}
-            />
-          </div>
+          {!canEdit && (
+            <div className="mb-4 rounded-md border border-amber-600/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              You are not assigned to this task, so the fields are read-only.
+            </div>
+          )}
 
-          {/* Priority */}
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Priority</label>
-            <Select value={priority} onValueChange={setPriority} disabled={!canEdit}>
-              <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
-                <SelectValue placeholder="Select priority" />
-              </SelectTrigger>
-              <SelectContent className="bg-white">
-                {["Low", "Medium", "High"].map((p) => (
-                  <SelectItem key={p} value={p}>
-                    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>{p}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {/* Tags */}
-          <div>
-            <label className="block text-xs text-gray-400">Tags</label>
-
-            {tags.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {tags.map((t, i) => (
-                  <span
-                    key={`${t}-${i}`}
-                    className="inline-flex items-center rounded-md px-2 py-0.5 mb-1 text-xs font-medium bg-gray-700 text-gray-200"
-                  >
-                    {t}
-                    <button
-  type="button"
-  className="ml-1 text-gray-300 hover:text-white disabled:opacity-50"
-  onClick={() => canEdit && removeTagAt(i)}
-  disabled={!canEdit}
-  aria-label={`Remove ${t}`}
->
-  ×
-</button>
-                  </span>
-                ))}
-              </div>
-
-            )}
-
-            <input
-              className="mt-1 w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === ",") {
-                  e.preventDefault()
-                  addTagFromInput()
-                }
-                if (e.key === "Backspace" && tagInput === "" && tags.length) {
-                  removeTagAt(tags.length - 1)
-                }
-              }}
-               disabled={!canEdit}
-              placeholder="Type a tag and press Enter (or comma)"
-            />
-          </div>
-
-          {/* Status */}
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Status</label>
-            <Select value={status} onValueChange={setStatus} disabled={!canEdit}>
-              <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
-                <SelectValue placeholder="Select status" />
-              </SelectTrigger>
-              <SelectContent className="bg-white">
-                <SelectItem value="pending">To do</SelectItem>
-                <SelectItem value="in_progress">Doing</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="blocked">Blocked</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {/* Assignees */}
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Assignees</label>
-            <div className="mb-2">
-              <input
-                type="text"
-                className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-                placeholder="Search users by name or email..."
-                value={userSearch}
-                onChange={handleUserSearchInput}
-                aria-busy={loadingUsers ? 'true' : 'false'}
-                autoComplete="off"
+          <div className="space-y-4">
+            {/* Title */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Title</label>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="bg-transparent text-gray-100 border-gray-700"
                 disabled={!canEdit}
               />
-              {canEdit && userSearchResults.length > 0 && (
-                <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
-                  {userSearchResults.map((u) => (
-                    <div
-                      key={u.id}
-                      className="px-3 py-2 hover:bg-gray-700 cursor-pointer text-gray-100"
-                      onClick={() => addAssignee(u)}
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Description</label>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={4}
+                className="bg-transparent text-gray-100 border-gray-700"
+                disabled={!canEdit}
+              />
+            </div>
+
+            {/* Priority */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Priority</label>
+              <Select value={priority} onValueChange={setPriority} disabled={!canEdit}>
+                <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent className="bg-white">
+                  {["Low", "Medium", "High"].map((p) => (
+                    <SelectItem key={p} value={p}>
+                      <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>{p}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Tags */}
+            <div>
+              <label className="block text-xs text-gray-400">Tags</label>
+
+              {tags.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {tags.map((t, i) => (
+                    <span
+                      key={`${t}-${i}`}
+                      className="inline-flex items-center rounded-md px-2 py-0.5 mb-1 text-xs font-medium bg-gray-700 text-gray-200"
                     >
-                      <span className="font-medium">{u.name}</span>
-                      <span className="ml-2 text-xs text-gray-400">{u.email}</span>
-                    </div>
+                      {t}
+                      <button
+                        type="button"
+                        className="ml-1 text-gray-300 hover:text-white disabled:opacity-50"
+                        onClick={() => canEdit && removeTagAt(i)}
+                        disabled={!canEdit}
+                        aria-label={`Remove ${t}`}
+                      >
+                        ×
+                      </button>
+                    </span>
                   ))}
                 </div>
+
+              )}
+
+              <input
+                className="mt-1 w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === ",") {
+                    e.preventDefault()
+                    addTagFromInput()
+                  }
+                  if (e.key === "Backspace" && tagInput === "" && tags.length) {
+                    removeTagAt(tags.length - 1)
+                  }
+                }}
+                disabled={!canEdit}
+                placeholder="Type a tag and press Enter (or comma)"
+              />
+            </div>
+
+            {/* Status */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Status</label>
+              <Select value={status} onValueChange={setStatus} disabled={!canEdit}>
+                <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent className="bg-white">
+                  <SelectItem value="pending">To do</SelectItem>
+                  <SelectItem value="in_progress">Doing</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="blocked">Blocked</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Assignees */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Assignees</label>
+              <div className="mb-2">
+                <input
+                  type="text"
+                  className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500 disabled:opacity-60"
+                  placeholder="Search users by name or email..."
+                  value={userSearch}
+                  onChange={handleUserSearchInput}
+                  aria-busy={loadingUsers ? 'true' : 'false'}
+                  autoComplete="off"
+                  disabled={!canAddAssignees || assignees.length >= MAX_ASSIGNEES}
+                />
+                {canAddAssignees && assignees.length < MAX_ASSIGNEES && userSearchResults.length > 0 && (
+                  <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
+                    {userSearchResults.map((u) => (
+                      <div
+                        key={u.id}
+                        className="px-3 py-2 hover:bg-gray-700 cursor-pointer text-gray-100"
+                        onClick={() => addAssignee(u)}
+                      >
+                        <span className="font-medium">{u.name}</span>
+                        <span className="ml-2 text-xs text-gray-400">{u.email}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {assignees.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {assignees.map((a) => (
+                    <Badge
+                      key={a.id}
+                      className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200 flex items-center"
+                      title={a.name}
+                    >
+                      {a.name}
+                      {canRemoveAssignees && (
+                        <button
+                          type="button"
+                          className="ml-1 text-gray-300 hover:text-white disabled:opacity-60"
+                          onClick={() => removeAssignee(a.id)}
+                          aria-label={`Remove ${a.name}`}
+                          disabled={assignees.length <= 1}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-xs text-gray-500">No assignees</span>
+              )}
+              {canAddAssignees && assignees.length >= MAX_ASSIGNEES && (
+                <p className="text-xs text-red-400 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
+              )}
+              {canRemoveAssignees && assignees.length === 1 && (
+                <p className="text-xs text-amber-400 mt-2">At least one assignee is required. Add another member before removing the last one.</p>
               )}
             </div>
-            {assignees.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {assignees.map((a) => (
-                  <Badge
-                    key={a.id}
-                    className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200 flex items-center"
-                    title={a.name}
-                  >
-                    {a.name}
-                    <button
-                      type="button"
-                      className="ml-1 text-gray-300 hover:text-white"
-                      onClick={() => removeAssignee(a.id)}
-                      aria-label={`Remove ${a.name}`}
-                    >
-                      ×
-                    </button>
-                  </Badge>
-                ))}
+            {/* Subtasks */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs text-gray-400">Subtasks</label>
+                <Button
+                  type="button"
+                  className="bg-gray-700 hover:bg-gray-600 text-white h-8 px-3"
+                  onClick={() => setIsSubtaskOpen(true)}
+                  disabled={!canEdit}
+                >
+                  + Add subtask
+                </Button>
               </div>
-            ) : (
-              <span className="text-xs text-gray-500">No assignees</span>
-            )}
+
+              {/* Table: Name + Status */}
+              {subtasks.length > 0 ? (
+                <div className="overflow-hidden rounded-md border border-gray-700">
+                  <table className="w-full text-sm">
+                    <thead className="bg-[#222428] text-gray-300">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium">Name</th>
+                        <th className="text-left px-3 py-2 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-700">
+                      {subtasks.map((st) => (
+                        <tr key={st.id} className="hover:bg-[#25272c]">
+                          <td className="px-3 py-2">
+                            <button
+                              type="button"
+                              className="text-left text-gray-100 hover:underline"
+                              onClick={() => setChildPanelTask(st)}
+                              title="Open subtask"
+                            >
+                              {st.title}
+                            </button>
+                          </td>                        <td className="px-3 py-2 text-gray-300">
+                            {prettyStatus(st.workflow || st.status || "pending")}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500">No subtasks yet.</div>
+              )}
+
+              {/* Modal */}
+              {isSubtaskOpen && (
+                <SubtaskDialog
+                  parentId={task.id}
+                  parentDeadline={deadline}
+                  onClose={() => setIsSubtaskOpen(false)}
+                  onCreated={(row) => {
+                    setSubtasks((prev) => [rowToCard(row), ...prev]);
+                    setIsSubtaskOpen(false);
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Deadline */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Deadline</label>
+              <Input
+                type="date"
+                value={deadline || ""}
+                onChange={(e) => setDeadline(e.target.value)}
+                className="bg-transparent text-gray-100 border-gray-700"
+                disabled={!canEdit}
+              />
+            </div>
+
+            <RecurrencePicker value={recurrence} onChange={setRecurrence} disabled={!canEdit} />
+
+
+            {/* Actions */}
+            <div className="mt-6 flex gap-2">
+              <Button
+                onClick={() => onSave({ title: title.trim(), description: description.trim(), priority, status, deadline, tags, assignees, recurrence })}
+                disabled={!canSave}
+                className="bg-white/90 text-black"
+              >
+                Save
+              </Button>
+              <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleDelete}
+                className="bg-red-400 hover:bg-red-700 text-white ml-auto"
+                type="button" disabled={!canEdit}>
+                <Trash className="w-4 h-4 mr-1" /> Delete
+              </Button>
+            </div>
+
+            {/* Comment Section */}
+            <div className="mt-8">
+              <CommentSection taskId={task.id} />
+            </div>
           </div>
-
-          {/* Deadline */}
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Deadline</label>
-            <Input
-              type="date"
-              value={deadline || ""}
-              onChange={(e) => setDeadline(e.target.value)}
-              className="bg-transparent text-gray-100 border-gray-700"
-              disabled={!canEdit}
-            />
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="mt-6 flex gap-2">
-          <Button
-            onClick={() => onSave({ title: title.trim(), description: description.trim(), priority, status, deadline, tags, assignees })}
-            disabled={!canSave}
-            className="bg-white/90 text-black"
-          >
-            Save
-          </Button>
-          <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleDelete}
-            className="bg-red-400 hover:bg-red-700 text-white ml-auto"
-            type="button" disabled={!canEdit}>
-            <Trash className="w-4 h-4 mr-1" /> Delete
-          </Button>
-        </div>
-
-        {/* Comment Section */}
-        <div className="mt-8">
-          <CommentSection taskId={task.id} />
         </div>
       </div>
-    </div>
+    </>
   )
 }
 function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
+  const { user: currentUser } = useAuth()
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
   const [priority, setPriority] = useState("")
   const PRIORITIES = ["Low", "Medium", "High"]
-  const canSave = title.trim().length > 0 && priority !== ""
+  const canEdit = true
+  const MAX_ASSIGNEES = 5
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState([]);
+  const [recurrence, setRecurrence] = useState(null);
 
   // --- Assignees & user search (copied from TaskSidePanel, trimmed) ---
   const [assignees, setAssignees] = useState([]);
-  const [userSearch, setUserSearch] = useState("");
-  const [userSearchResults, setUserSearchResults] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [userSearchDebounce, setUserSearchDebounce] = useState(null);
+  const {
+    query: userSearch,
+    results: userSearchResults,
+    loading: loadingUsers,
+    search: searchUsers,
+    clear: clearUserSearch,
+  } = useUserSearch({ canSearch: true, minQueryLength: 1 })
+
+  useEffect(() => {
+    if (!currentUser?.id) return
+    setAssignees(prev => {
+      if (prev.some(a => a.id === currentUser.id)) return prev
+      return [...prev, { id: currentUser.id, name: currentUser.name ?? 'You' }]
+    })
+  }, [currentUser])
+
+  const canSave = title.trim().length > 0 && priority !== "" && assignees.length <= MAX_ASSIGNEES
 
   function addAssignee(user) {
-    if (!assignees.some((a) => a.id === user.id)) {
-      setAssignees((prev) => [...prev, user]);
-    }
-    setUserSearch("");
-    setUserSearchResults([]);
+    setAssignees((prev) => {
+      if (prev.length >= MAX_ASSIGNEES || prev.some((a) => a.id === user.id)) return prev
+      return [...prev, user]
+    });
+    clearUserSearch();
   }
 
   function removeAssignee(userId) {
-    setAssignees((prev) => prev.filter((a) => a.id !== userId));
+    setAssignees((prev) => {
+      if (prev.length <= 1) return prev
+      return prev.filter((a) => a.id !== userId)
+    });
   }
 
   function handleUserSearchInput(e) {
     const value = e.target.value;
-    setUserSearch(value);
-    if (userSearchDebounce) clearTimeout(userSearchDebounce);
-    if (!value.trim()) {
-      setUserSearchResults([]);
-      return;
-    }
-    setLoadingUsers(true);
-    const timer = setTimeout(async () => {
-      const apiUrl = `${API}/users/search?q=${encodeURIComponent(value)}&limit=8`;
-      try {
-        const res = await fetch(apiUrl);
-        const data = await res.json();
-        setUserSearchResults(data.users || []);
-      } catch {
-        setUserSearchResults([]);
-      } finally {
-        setLoadingUsers(false);
-      }
-    }, 250);
-    setUserSearchDebounce(timer);
+    if (assignees.length >= MAX_ASSIGNEES) return;
+    searchUsers(value);
   }
 
   function addTagFromInput() {
@@ -740,14 +990,11 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
       return
     }
     try {
-      const csrfToken = await getCsrfToken();
-      const res = await fetch(`${API}/tasks/${taskId}`, {
+      const res = await fetchWithCsrf(`${API}/tasks/${taskId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "x-csrf-token": csrfToken
         },
-        credentials: "include",
         body: JSON.stringify({ archived: true }),
       })
       if (!res.ok) {
@@ -827,14 +1074,15 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
         <label className="block text-xs text-gray-400 mb-1">Assignees</label>
         <input
           type="text"
-          className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+          className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500 disabled:opacity-60"
           placeholder="Search users by name or email..."
           value={userSearch}
           onChange={handleUserSearchInput}
           aria-busy={loadingUsers ? 'true' : 'false'}
           autoComplete="off"
+          disabled={assignees.length >= MAX_ASSIGNEES}
         />
-        {userSearchResults.length > 0 && (
+        {assignees.length < MAX_ASSIGNEES && userSearchResults.length > 0 && (
           <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
             {userSearchResults.map((u) => (
               <div
@@ -872,6 +1120,12 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
         ) : (
           <span className="mt-1 block text-xs text-gray-500">No assignees</span>
         )}
+        {assignees.length === 1 && (
+          <p className="text-xs text-amber-400 mt-2">At least one assignee is required. Add another member before removing the last one.</p>
+        )}
+        {assignees.length >= MAX_ASSIGNEES && (
+          <p className="text-xs text-red-400 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -905,6 +1159,9 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
           </Select>
         </div>
       </div>
+      <div className="col-span-2 mt-1">
+        <RecurrencePicker value={recurrence} onChange={setRecurrence} />
+      </div>
 
       {/* Actions */}
       <div className="mt-4 flex items-center gap-2">
@@ -926,7 +1183,8 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
               dueDate: dueDate || undefined,
               priority,
               tags,
-              assignees
+              assignees,
+              recurrence,
             })
           }
           disabled={!canSave}
@@ -942,6 +1200,283 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
     </div>
   )
 }
+function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
+  const { user: currentUser } = useAuth()
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("Low");
+  const [status, setStatus] = useState("pending");
+  const [deadline, setDeadline] = useState("");
+  const [tags, setTags] = useState([]);
+  const [tagInput, setTagInput] = useState("");
+  const [assignees, setAssignees] = useState([]);
+  const [userSearch, setUserSearch] = useState("");
+  const [userSearchResults, setUserSearchResults] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [debounce, setDebounce] = useState(null);
+
+  const PRIORITIES = ["Low", "Medium", "High"];
+
+  const parentMax = parentDeadline
+    ? String(parentDeadline).slice(0, 10)
+    : null;
 
 
+  const deadlineError =
+    parentMax && deadline && deadline > parentMax
+      ? `Deadline must be on or before ${parentMax}`
+      : "";
 
+  const canSave = title.trim().length > 0 && !deadlineError;
+
+  function addTagFromInput() {
+    const v = tagInput.trim();
+    if (!v) return;
+    if (!tags.includes(v)) setTags((prev) => [...prev, v]);
+    setTagInput("");
+  }
+  function removeTagAt(i) {
+    setTags((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  function addAssignee(user) {
+    if (!assignees.some((a) => a.id === user.id)) {
+      setAssignees((prev) => [...prev, user]);
+    }
+    setUserSearch("");
+    setUserSearchResults([]);
+  }
+  function removeAssignee(id) {
+    setAssignees((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  function handleUserSearchInput(e) {
+    const value = e.target.value;
+    setUserSearch(value);
+    if (debounce) clearTimeout(debounce);
+    if (!value.trim()) {
+      setUserSearchResults([]);
+      return;
+    }
+    setLoadingUsers(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API}/users/search?q=${encodeURIComponent(value)}&limit=8`);
+        const data = await res.json();
+        setUserSearchResults(data.users || []);
+      } catch {
+        setUserSearchResults([]);
+      } finally {
+        setLoadingUsers(false);
+      }
+    }, 250);
+    setDebounce(t);
+  }
+
+  async function handleCreate() {
+    try {
+      if (parentMax && deadline && deadline > parentMax) {
+        alert(`Subtask deadline must be on or before ${parentMax}.`);
+        return;
+      }
+      const assignedTo =
+        assignees.length > 0 ? assignees.map(a => a.id) : [currentUser.id];
+      const payload = {
+        title: title.trim(),
+        description: description.trim() || null,
+        priority: priority.toLowerCase(),
+        status,
+        deadline: deadline || null,
+        tags,
+        parent_id: parentId,
+        assigned_to: assignedTo,
+      };
+
+      const res = await fetchWithCsrf(`${API}/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({}));
+        throw new Error(error || `POST /tasks ${res.status}`);
+      }
+      const row = await res.json();
+      onCreated?.(row); // push into list in parent
+    } catch (e) {
+      console.error("[create subtask]", e);
+      alert(e.message);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute right-1/2 top-12 translate-x-1/2 w-full max-w-lg rounded-xl border border-gray-700 bg-[#1f2023] p-5 shadow-xl">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-white font-semibold">Add subtask</h4>
+          <button onClick={onClose} className="text-gray-300 hover:text-white text-xl">×</button>
+        </div>
+
+        <div className="space-y-4">
+          {/* Title */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Title</label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="bg-transparent text-gray-100 border-gray-700"
+              placeholder="Subtask title"
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Description</label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              className="bg-transparent text-gray-100 border-gray-700"
+            />
+          </div>
+
+          {/* Priority & Status */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Priority</label>
+              <Select value={priority} onValueChange={setPriority}>
+                <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent className="bg-white">
+                  {PRIORITIES.map((p) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Status</label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent className="bg-white">
+                  <SelectItem value="pending">To do</SelectItem>
+                  <SelectItem value="in_progress">In progress</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="blocked">Blocked</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Deadline */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Deadline</label>
+            <Input
+              type="date"
+              value={deadline || ""}
+              onChange={(e) => setDeadline(e.target.value)}
+              className="bg-transparent text-gray-100 border-gray-700"
+              max={parentMax || undefined}
+            />
+            {deadlineError && (
+              <div className="mt-1 text-xs text-red-400">{deadlineError}</div>
+            )}
+          </div>
+
+          {/* Tags */}
+          <div>
+            <label className="block text-xs text-gray-400">Tags</label>
+            {tags.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {tags.map((t, i) => (
+                  <span key={`${t}-${i}`} className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200">
+                    {t}
+                    <button className="ml-1 text-gray-300 hover:text-white" onClick={() => removeTagAt(i)}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <input
+              className="mt-1 w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  addTagFromInput();
+                }
+                if (e.key === "Backspace" && tagInput === "" && tags.length) {
+                  removeTagAt(tags.length - 1);
+                }
+              }}
+              placeholder="Type a tag and press Enter (or comma)"
+            />
+          </div>
+
+          {/* Assignees */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Assignees</label>
+            <div className="mb-2 relative">
+              <input
+                type="text"
+                className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                placeholder="Search users…"
+                value={userSearch}
+                onChange={handleUserSearchInput}
+                aria-busy={loadingUsers ? "true" : "false"}
+                autoComplete="off"
+              />
+              {userSearchResults.length > 0 && (
+                <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
+                  {userSearchResults.map((u) => (
+                    <div
+                      key={u.id}
+                      className="px-3 py-2 hover:bg-gray-700 cursor-pointer text-gray-100"
+                      onClick={() => addAssignee(u)}
+                    >
+                      <span className="font-medium">{u.name}</span>
+                      <span className="ml-2 text-xs text-gray-400">{u.email}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {assignees.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {assignees.map((a) => (
+                  <span
+                    key={a.id}
+                    className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200"
+                    title={a.name}
+                  >
+                    {a.name}
+                    <button className="ml-1 text-gray-300 hover:text-white" onClick={() => removeAssignee(a.id)}>
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="text-xs text-gray-500">No assignees</span>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" className="text-gray-300 hover:text-white" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={!canSave} className="bg-white/90 text-black hover:bg-white" onClick={handleCreate}>
+            Create subtask
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

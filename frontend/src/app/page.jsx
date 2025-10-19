@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react"
-import { SessionProvider, useSession } from "@/components/session-provider"
+import { useSession } from "@/components/session-provider"
 import { SidebarNavigation } from "@/components/sidebar-navigation"
 import { ProjectHeader } from "@/components/project-header"
 import { KanbanBoard } from "@/components/kanban-board"
@@ -10,7 +10,8 @@ import { ProjectDetails } from "@/components/project-details"
 import { CommentBox } from "@/components/task-comment/task-comment"
 import { CommentItem } from "@/components/task-comment/task-comment-item"
 import { KanbanProvider } from "@/components/kanban-context"
-function RoleBadge() {
+
+/*function RoleBadge() {
   const { role } = useSession() || {};
   if (!role) return null;
   return (
@@ -18,7 +19,7 @@ function RoleBadge() {
       {role.label}
     </span>
   );
-}
+}*/
 
 function ProtectedProjectTimelinePage() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
@@ -53,9 +54,8 @@ function ProtectedProjectTimelinePage() {
       <div className={`flex-1 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? "ml-0" : "ml-0"}`}>
         <KanbanProvider>
           {currentView !== 'projects' && !selectedProjectId && (
-            <div className="flex items-center">
+            <div className="">
               <ProjectHeader currentView={currentView} />
-              <RoleBadge />
             </div>
           )}
           {selectedProjectId ? (
@@ -114,9 +114,5 @@ function ProtectedProjectTimelinePage() {
 }
 
 export default function Page() {
-  return (
-    <SessionProvider>
-      <ProtectedProjectTimelinePage />
-    </SessionProvider>
-  );
+  return <ProtectedProjectTimelinePage />;
 }
