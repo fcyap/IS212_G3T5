@@ -45,7 +45,7 @@ const NavItem = ({ icon: Icon, label, isActive, isCollapsed, onClick, hasChevron
 
 export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSelect, onViewSelect, selectedProjectId, currentView }) {
     const [isProjectsExpanded, setIsProjectsExpanded] = useState(true)
-    const [isTeamsExpanded, setIsTeamsExpanded] = useState(true)
+
     const { projects, loading, error, selectedProject, selectProject } = useProjects()
     const { user, role, loading: sessionLoading } = useSession()
 
@@ -191,26 +191,7 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                 </div>
                             )}
 
-                            {/* Teams Section */}
-                            <div className="mb-6">
-                                <div className="flex items-center justify-between px-3 py-2 text-sm font-medium text-white">
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => setIsTeamsExpanded(!isTeamsExpanded)}
-                                            className="p-0 bg-[#1f1f23] text-white"
-                                        >
-                                            {isTeamsExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                                        </button>
-                                        <span>Teams</span>
-                                    </div>
-                                    <Plus className="w-4 h-4" />
-                                </div>
-                                {isTeamsExpanded && (
-                                    <nav className="space-y-1">
-                                        <NavItem icon={Users} label="YANG's first team" hasChevron isCollapsed={isCollapsed} />
-                                    </nav>
-                                )}
-                            </div>
+
                         </>
                     )}
 
@@ -229,7 +210,7 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                     onClick={() => onProjectSelect(project.id)}
                                 />
                             ))}
-                            <NavItem icon={Users} label="YANG's first team" isCollapsed={isCollapsed} />
+                
                             <NavItem icon={Settings} label="Settings" isCollapsed={isCollapsed} />
                         </nav>
                     )}
@@ -264,19 +245,7 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                 </div>
             )}
 
-            {/* Bottom Section */}
-            <div className="p-4 border-t border-gray-700 space-y-3">
-                {isCollapsed ? (
-                    <Button variant="ghost" className="w-full text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg p-2">
-                        <Mail className="w-4 h-4" />
-                    </Button>
-                ) : (
-                    <Button variant="ghost" className="w-full text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg">
-                        <Users className="w-4 h-4 mr-2" />
-                        Invite teammates
-                    </Button>
-                )}
-            </div>
+
         </div>
     )
 }

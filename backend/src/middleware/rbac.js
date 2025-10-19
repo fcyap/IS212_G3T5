@@ -130,11 +130,29 @@ const requireProjectEdit = () => {
 const requireAddProjectMembers = () => {
   return async (req, res, next) => {
     try {
-      const user = res.locals.session || req.user;
+      const session = res.locals.session || req.user;
       const projectId = req.params.projectId || req.params.id;
       
-      if (!user || !projectId) {
+      if (!session || !projectId) {
         return res.status(401).json({ error: 'Authentication required' });
+      }
+      
+      // Get full user data from database using session user_id
+      const { data: users, error: userError } = await supabase
+        .from('users')
+        .select('id, role, hierarchy, division, department')
+        .eq('id', session.user_id)
+        .limit(1);
+      
+      if (userError) {
+        console.error('Database query error (user):', userError);
+        return res.status(500).json({ error: 'Database query failed' });
+      }
+      
+      const user = users?.[0];
+      if (!user) {
+        console.log('User not found in database:', session.user_id);
+        return res.status(404).json({ error: 'User not found' });
       }
       
       // Get project info
@@ -145,7 +163,7 @@ const requireAddProjectMembers = () => {
         .limit(1);
       
       if (error) {
-        console.error('Database query error:', error);
+        console.error('Database query error (project):', error);
         return res.status(500).json({ error: 'Database query failed' });
       }
       
@@ -155,7 +173,7 @@ const requireAddProjectMembers = () => {
       
       const project = projects[0];
       const userData = {
-        id: user.user_id || user.id,
+        id: user.id,
         role: user.role || 'staff',
         hierarchy: user.hierarchy || 1,
         division: user.division
@@ -167,7 +185,7 @@ const requireAddProjectMembers = () => {
           message: 'You do not have permission to add members to this project' 
         });
       }
-      
+
       next();
     } catch (error) {
       console.error('Error in requireAddProjectMembers middleware:', error);

@@ -5,11 +5,19 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 class ProjectService {
   async getAllProjects() {
-    const response = await fetch(`${API_BASE_URL}/api/projects`);
+    console.log('🌐 [API] getAllProjects called');
+    const response = await fetch(`${API_BASE_URL}/api/projects`, {
+      credentials: 'include', // Include session cookies
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    console.log('🌐 [API] getAllProjects response:', response.status, response.statusText);
     if (!response.ok) {
       throw new Error(`Failed to fetch projects: ${response.statusText}`);
     }
     const data = await response.json();
+    console.log('🌐 [API] getAllProjects data:', data);
     if (!data.success) {
       throw new Error(data.message || 'Failed to fetch projects');
     }
@@ -17,7 +25,12 @@ class ProjectService {
   }
 
   async getProjectById(id) {
-    const response = await fetch(`${API_BASE_URL}/api/projects/${id}`);
+    const response = await fetch(`${API_BASE_URL}/api/projects/${id}`, {
+      credentials: 'include', // Include session cookies
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch project ${id}: ${response.statusText}`);
     }

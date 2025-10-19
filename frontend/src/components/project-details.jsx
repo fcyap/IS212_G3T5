@@ -18,6 +18,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ArrowLeft, Plus, Search, X, Check, Filter, ChevronDown, ChevronRight, Edit, Trash, Archive } from "lucide-react"
 import { useProjects } from "@/contexts/project-context"
+import { useSession } from "@/components/session-provider"
 import toast from "react-hot-toast"
 
 export function ProjectDetails({ projectId, onBack }) {
@@ -46,6 +47,7 @@ export function ProjectDetails({ projectId, onBack }) {
 
   const currentUserId = parseInt(process.env.NEXT_PUBLIC_CURRENT_USER_ID || 1) // Allow override via env
   const { updateProject } = useProjects()
+  const { user } = useSession() // Get current user from session
 
   useEffect(() => {
     const fetchProjectData = async () => {
@@ -78,12 +80,13 @@ export function ProjectDetails({ projectId, onBack }) {
           console.log('🔍 DEBUG: currentUserMember =', currentUserMember)
           const isCurrentUserCreator = currentUserMember?.role === 'creator'
           const isCurrentUserProjectManager = currentUserMember?.role === 'manager'
-          console.log('🔍 DEBUG: Current user member:', currentUserMember, 'is creator:', isCurrentUserCreator, 'is project manager:', isCurrentUserProjectManager)
+          const isSystemManager = user?.role === 'manager' // Check if user is system-level manager
+          console.log('🔍 DEBUG: Current user member:', currentUserMember, 'is creator:', isCurrentUserCreator, 'is project manager:', isCurrentUserProjectManager, 'is system manager:', isSystemManager)
           setUserPermissions(prev => {
             const newPermissions = {
               ...prev,
               isCreator: isCurrentUserCreator,
-              canManageMembers: isCurrentUserCreator || isCurrentUserProjectManager
+              canManageMembers: isCurrentUserCreator || isCurrentUserProjectManager || isSystemManager
             }
             console.log('User permissions after members:', newPermissions)
             return newPermissions

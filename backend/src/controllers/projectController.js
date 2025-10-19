@@ -34,22 +34,31 @@ const createProject = async (req, res) => {
 
 const getAllProjects = async (req, res) => {
   try {
+    console.log('🔍 [ProjectController] getAllProjects called');
+    
     // Get current user from session or auth middleware
     const session = res.locals.session;
     if (!session) {
+      console.log('❌ [ProjectController] No session found');
       return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
-    // Get complete user information including hierarchy and division
-    const { sql } = require('../db');
-    const users = await sql/*sql*/`
-      select id, name, email, role, hierarchy, division, department
-      from public.users
-      where id = ${session.user_id}
-      limit 1
-    `;
+    console.log('✅ [ProjectController] Session found:', session.user_id);
 
-    if (!users.length) {
+    // Get complete user information including hierarchy and division
+    const supabase = require('../utils/supabase');
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('id, name, email, role, hierarchy, division, department')
+      .eq('id', session.user_id)
+      .limit(1);
+
+    if (error) {
+      console.error('Database query error:', error);
+      return res.status(500).json({ success: false, message: 'Database query failed' });
+    }
+
+    if (!users?.length) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
@@ -114,7 +123,8 @@ const addProjectMembers = async (req, res) => {
     // Input validation
     const { projectId } = req.params;
     const { userIds, message, role } = req.body;
-    const requestingUserId = req.user?.id || 1;
+    const session = res.locals.session;
+    const requestingUserId = session?.user_id;
 
     if (!projectId || isNaN(projectId)) {
       return res.status(400).json({ success: false, message: 'Valid project ID is required' });
@@ -173,7 +183,8 @@ const removeProjectMember = async (req, res) => {
   try {
     // Input validation
     const { projectId, userId } = req.params;
-    const requestingUserId = req.user?.id || 1;
+    const session = res.locals.session;
+    const requestingUserId = session?.user_id;
 
     if (!projectId || isNaN(projectId)) {
       return res.status(400).json({ success: false, message: 'Valid project ID is required' });
@@ -214,7 +225,8 @@ const archiveProject = async (req, res) => {
   try {
     // Input validation
     const { projectId } = req.params;
-    const requestingUserId = req.user?.id || 1;
+    const session = res.locals.session;
+    const requestingUserId = session?.user_id;
 
     if (!projectId || isNaN(projectId)) {
       return res.status(400).json({ success: false, message: 'Valid project ID is required' });

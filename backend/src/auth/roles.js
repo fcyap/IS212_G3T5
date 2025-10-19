@@ -123,9 +123,11 @@ const canEditProject = (user, project, projectCreator) => {
  * Only managers and project creators can add members
  */
 const canAddProjectMembers = (user, project) => {
-  return user.role === 'admin' || 
-         user.role === 'manager' || 
-         user.id === project.creator_id;
+  const result = user.role === 'admin' || 
+                 user.role === 'manager' || 
+                 user.id === project.creator_id;
+  
+  return result;
 };
 
 /**

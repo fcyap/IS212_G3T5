@@ -10,6 +10,8 @@ import { CreateProjectDialog } from "@/components/create-project"
 
 export function ProjectsList({ onProjectSelect }) {
   const { projects, loading, loadProjects } = useProjects()
+  console.log('📋 [ProjectsList] Component rendered - projects:', projects?.length, 'loading:', loading);
+  
   const [filteredProjects, setFilteredProjects] = useState([])
   const [searchTerm, setSearchTerm] = useState("")
   const [sortBy, setSortBy] = useState("name") // name, created_at, updated_at
@@ -37,7 +39,18 @@ export function ProjectsList({ onProjectSelect }) {
   }, [])
 
   useEffect(() => {
+    console.log('🔍 [ProjectsList] Filtering projects - raw projects:', projects);
+    console.log('🔍 [ProjectsList] Projects type:', typeof projects, 'Array:', Array.isArray(projects));
+    
+    if (!projects) {
+      console.log('❌ [ProjectsList] No projects array');
+      setFilteredProjects([]);
+      return;
+    }
+
     let filtered = projects.filter(project => {
+      console.log('🔍 [ProjectsList] Filtering project:', project.name, 'status:', project.status);
+      
       // Search filter
       const matchesSearch = (project.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                            (project.description || '').toLowerCase().includes(searchTerm.toLowerCase())
@@ -56,8 +69,11 @@ export function ProjectsList({ onProjectSelect }) {
         matchesRole = project.creator_id !== currentUserId
       }
 
+      console.log('🔍 [ProjectsList] Filter results for', project.name, '- search:', matchesSearch, 'status:', matchesStatus, 'role:', matchesRole);
       return matchesSearch && matchesStatus && matchesRole
     })
+
+    console.log('🔍 [ProjectsList] Filtered projects:', filtered.length, 'from', projects.length);
 
     // Sort
     filtered.sort((a, b) => {
