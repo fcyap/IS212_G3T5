@@ -4,8 +4,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Settings, CalendarDays, ArchiveRestore } from "lucide-react"
 import { CommentSection } from "./task-comment/task-comment-section"
+import { TaskAttachmentsDisplay } from "./task-attachments-display"
 
-export function TaskCard({ title, priority, status, assignees = [], dateRange, description, deadline, onClick, tags = [], onUnarchive, }) {
+export function TaskCard({ title, priority, status, assignees = [], dateRange, description, deadline, onClick, tags = [], onUnarchive, taskId, }) {
 
   const cap = (s) => (s ? s.toString().charAt(0).toUpperCase() + s.toString().slice(1).toLowerCase() : "")
   const p = (priority || "").toLowerCase()
@@ -102,6 +103,11 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
               <CalendarDays className="w-4 h-4" />
               <span>Due {dueText}</span>
             </span>
+          )}
+
+          {/* Attachment count */}
+          {taskId && (
+            <TaskAttachmentsDisplay taskId={taskId} compact={true} />
           )}
         </div>
 

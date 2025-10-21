@@ -3,6 +3,8 @@ const projectRepository = require('../repository/projectRepository');
 const userRepository = require('../repository/userRepository');
 const crypto = require('crypto');
 const notificationService = require('./notificationService');
+const taskAttachmentService = require('./taskAttachmentService');
+const taskFilesService = require('./taskFilesService');
 const supabase = require('../utils/supabase');
 
 /**
@@ -332,6 +334,33 @@ class TaskService {
 
     if (taskRepository.insert) {
       const created = await taskRepository.insert(newTaskData); // returns hydrated task object
+      
+      // Copy attachments if this is a recurring task with a parent
+      if (parent_id && recurrence) {
+        try {
+          await taskAttachmentService.copyAttachmentsToTask(
+            parent_id,
+            created.id,
+            validCreatorId || created.assigned_to[0]
+          );
+        } catch (attachmentError) {
+          console.error('Failed to copy attachments for recurring task:', attachmentError);
+          // Don't fail task creation if attachment copy fails
+        }
+
+        // Also copy files from Supabase Storage
+        try {
+          await taskFilesService.copyTaskFiles(
+            parent_id,
+            created.id,
+            validCreatorId || created.assigned_to[0]
+          );
+        } catch (fileError) {
+          console.error('Failed to copy files for recurring task:', fileError);
+          // Don't fail task creation if file copy fails
+        }
+      }
+      
       const notifyAssignees = uniqueAssignees.filter((id) => id !== validCreatorId);
       if (notifyAssignees.length) {
         notificationService
@@ -351,6 +380,33 @@ class TaskService {
       ...newTaskData,
       assigned_to: usingLegacyCreate ? newTaskData.assigned_to : newTaskData.assigned_to
     });
+    
+    // Copy attachments if this is a recurring task with a parent
+    if (parent_id && recurrence) {
+      try {
+        await taskAttachmentService.copyAttachmentsToTask(
+          parent_id,
+          createdTask.id,
+          validCreatorId || createdTask.assigned_to[0]
+        );
+      } catch (attachmentError) {
+        console.error('Failed to copy attachments for recurring task:', attachmentError);
+        // Don't fail task creation if attachment copy fails
+      }
+
+      // Also copy files from Supabase Storage
+      try {
+        await taskFilesService.copyTaskFiles(
+          parent_id,
+          createdTask.id,
+          validCreatorId || createdTask.assigned_to[0]
+        );
+      } catch (fileError) {
+        console.error('Failed to copy files for recurring task:', fileError);
+        // Don't fail task creation if file copy fails
+      }
+    }
+    
     const notifyAssignees = uniqueAssignees.filter((id) => id !== validCreatorId);
     if (notifyAssignees.length) {
       notificationService
@@ -626,6 +682,22 @@ class TaskService {
         err.status = 403;
         throw err;
       }
+    }
+
+    // Delete all attachments associated with the task
+    try {
+      await taskAttachmentService.deleteByTaskId(taskId);
+    } catch (attachmentError) {
+      console.error('Failed to delete task attachments:', attachmentError);
+      // Continue with task deletion even if attachment deletion fails
+    }
+
+    // Delete all files from Supabase Storage
+    try {
+      await taskFilesService.deleteTaskFiles(taskId);
+    } catch (fileError) {
+      console.error('Failed to delete task files from Supabase:', fileError);
+      // Continue with task deletion even if file deletion fails
     }
 
     return await taskRepository.deleteTask(taskId);

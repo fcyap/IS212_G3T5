@@ -195,6 +195,7 @@ const filterVisibleProjects = (sql) => {
  */
 const requireTaskCreation = (sql) => {
   return async (req, res, next) => {
+    console.log('🔐 requireTaskCreation middleware HIT!', req.params, req.originalUrl);
     try {
       const user = res.locals.session || req.user;
       const rawProjectId = req.params.projectId ?? req.body.project_id;
@@ -206,6 +207,7 @@ const requireTaskCreation = (sql) => {
             : rawProjectId;
 
       if (!user) {
+        console.log('❌ No user - returning 401');
         return res.status(401).json({ error: 'Authentication required' });
       }
 
@@ -296,6 +298,7 @@ const requireTaskCreation = (sql) => {
 
       // Managers can create tasks in projects from their division with lower hierarchy
       const hasManagerAccess = userData.role === 'manager' &&
+                               projectCreator &&
                                userData.division === projectCreator.division &&
                                (userData.hierarchy || 0) > (projectCreator.hierarchy || 0);
 

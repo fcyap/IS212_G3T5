@@ -141,7 +141,10 @@ async function initializeApp() {
 
   // Data APIs using the bypass wrapper during dev
   app.use('/api/tasks', authMw, taskCommentRoutes);
+  // Mount projectTasksRoutes first (more specific routes like /:projectId/tasks)
   app.use('/api/projects', authMw, projectTasksRoutes);
+  // Then mount projectRoutes (has catch-all /:projectId route)
+  // Note: This may cause conflicts - consider refactoring
   app.use('/api/projects', authMw, projectRoutes);
   app.use('/api/notifications', authMw, notificationRoutes);
   app.use('/tasks', authMw, tasksRouter);

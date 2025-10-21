@@ -19,7 +19,9 @@ class ProjectTasksService {
    * @returns {boolean} True if project exists
    */
   async validateProjectExists(projectId) {
+    console.log('Validating project exists:', projectId);
     const projectExists = await projectRepository.exists(projectId);
+    console.log('Project exists result:', projectExists);
     if (!projectExists) {
       throw new Error('Project not found');
     }

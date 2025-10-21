@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { TaskCard } from "./task-card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { fetchWithCsrf } from "@/lib/csrf"
+import { fetchWithCsrf, getCsrfToken } from "@/lib/csrf"
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select"
@@ -12,9 +12,12 @@ import { Trash, Check, X, Plus } from "lucide-react"
 import { useKanban } from "@/components/kanban-context"
 import { Badge } from "@/components/ui/badge"
 import { CommentSection } from "./task-comment/task-comment-section"
+import { TaskAttachmentsDisplay } from "./task-attachments-display"
+import { FileUploadInput } from "./file-upload-input"
 import { useUserSearch } from "@/hooks/useUserSearch"
 import { useAuth } from "@/hooks/useAuth"
 import { projectService } from "@/lib/api"
+import toast from "react-hot-toast"
 
 const priorityChipClasses = {
   Low: "bg-teal-200 text-teal-900",
@@ -164,7 +167,7 @@ export function KanbanBoard({ projectId = null }) {
       mounted = false;
     };
   }, []);
-  async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees, recurrence, projectId: selectedProjectId }) {
+  async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees, recurrence, projectId: selectedProjectId, attachments }) {
     if (!currentUser?.id) {
       console.error('[KanbanBoard] Cannot create task without an authenticated user')
       return
@@ -179,7 +182,8 @@ export function KanbanBoard({ projectId = null }) {
       recurrence,
       selectedProjectId,
       boardProjectId,
-      lane: editorLane
+      lane: editorLane,
+      attachments: attachments?.length || 0
     });
     try {
       const resolvedProjectIdRaw =
@@ -225,6 +229,33 @@ export function KanbanBoard({ projectId = null }) {
       }
       const row = await res.json()
       console.log('[KanbanBoard] Created task response:', row);
+      
+      // Upload attachments if any
+      if (attachments && attachments.length > 0) {
+        try {
+          const formData = new FormData()
+          attachments.forEach(file => {
+            formData.append('files', file)
+          })
+          
+          const uploadResponse = await fetchWithCsrf(`${API}/api/tasks/${row.id}/files`, {
+            method: 'POST',
+            body: formData
+          })
+          
+          if (!uploadResponse.ok) {
+            console.warn('Failed to upload some attachments')
+          } else {
+            const uploadResult = await uploadResponse.json()
+            if (uploadResult.data?.errors && uploadResult.data.errors.length > 0) {
+              console.warn('Some files failed:', uploadResult.data.errors)
+            }
+          }
+        } catch (uploadError) {
+          console.error('Error uploading attachments:', uploadError)
+        }
+      }
+      
       const card = rowToCard(row)
 
       setTasks(prev =>
@@ -313,6 +344,7 @@ export function KanbanBoard({ projectId = null }) {
               {todo.map((t) => (
                 <TaskCard
                   key={t.id ?? `${t.title}-${t.deadline}`}
+                  taskId={t.id}
                   title={t.title}
                   description={t.description}
                   priority={t.priority}
@@ -372,6 +404,7 @@ export function KanbanBoard({ projectId = null }) {
               {doing.map((t) => (
                 <TaskCard
                   key={t.id ?? `${t.title}-${t.deadline}`}
+                  taskId={t.id}
                   title={t.title}
                   description={t.description}
                   priority={t.priority}
@@ -430,6 +463,7 @@ export function KanbanBoard({ projectId = null }) {
               {done.map((t) => (
                 <TaskCard
                   key={t.id ?? `${t.title}-${t.deadline}`}
+                  taskId={t.id}
                   title={t.title}
                   description={t.description}
                   priority={t.priority}
@@ -488,6 +522,7 @@ export function KanbanBoard({ projectId = null }) {
               {blocked.map((t) => (
                 <TaskCard
                   key={t.id ?? `${t.title}-${t.deadline}`}
+                  taskId={t.id}
                   title={t.title}
                   description={t.description}
                   priority={t.priority}
@@ -616,6 +651,7 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
   const [tagInput, setTagInput] = useState("");
   const [assignees, setAssignees] = useState(Array.isArray(task.assignees) ? task.assignees : []);
   const [recurrence, setRecurrence] = useState(task.recurrence ?? null);
+  const [attachments, setAttachments] = useState([]);
   const normalizedProjectId = Number.isFinite(Number(task.projectId)) ? Number(task.projectId) : null;
   const projectEntry = normalizedProjectId != null ? projectLookup[normalizedProjectId] : null;
   const projectName = projectEntry?.name ;
@@ -837,6 +873,9 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
               />
             </div>
 
+            {/* Attachments */}
+            <TaskAttachmentsDisplay taskId={task.id} />
+
             {/* Priority */}
             <div>
               <label className="block text-xs text-gray-400 mb-1">Priority</label>
@@ -1049,6 +1088,47 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
               />
             </div>
 
+            {/* File Attachments */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Attachments</label>
+              <FileUploadInput
+                onFilesChange={setAttachments}
+                disabled={!canEdit}
+              />
+              {attachments.length > 0 && (
+                <Button
+                  onClick={async () => {
+                    try {
+                      const formData = new FormData()
+                      attachments.forEach((file) => {
+                        formData.append('files', file)
+                      })
+                      
+                      const response = await fetchWithCsrf(`${API}/api/tasks/${task.id}/files`, {
+                        method: 'POST',
+                        body: formData,
+                      })
+                      
+                      if (!response.ok) {
+                        throw new Error('Failed to upload files')
+                      }
+                      
+                      toast.success('Files uploaded successfully')
+                      setAttachments([])
+                      window.location.reload()
+                    } catch (error) {
+                      console.error('Error uploading files:', error)
+                      toast.error('Failed to upload files')
+                    }
+                  }}
+                  disabled={!canEdit || attachments.length === 0}
+                  className="mt-2 bg-white/90 text-black"
+                >
+                  Upload {attachments.length} File{attachments.length !== 1 ? 's' : ''}
+                </Button>
+              )}
+            </div>
+
             <RecurrencePicker value={recurrence} onChange={setRecurrence} disabled={!canEdit} />
 
 
@@ -1090,6 +1170,7 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultProjectI
   const [dueDate, setDueDate] = useState("")
   const [priority, setPriority] = useState("")
   const [status, setStatus] = useState("pending")
+  const [attachments, setAttachments] = useState([])
   const PRIORITIES = ["Low", "Medium", "High"]
   const STATUSES = [
     { value: "pending", label: "To do" },
@@ -1427,6 +1508,15 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultProjectI
         <RecurrencePicker value={recurrence} onChange={setRecurrence} />
       </div>
 
+      {/* File Attachments */}
+      <div className="mt-3">
+        <label className="block text-xs text-gray-400 mb-1">Attachments (optional)</label>
+        <FileUploadInput
+          onFilesChange={setAttachments}
+          disabled={false}
+        />
+      </div>
+
       {/* Actions */}
       <div className="mt-4 flex items-center gap-2">
         {taskId && (
@@ -1452,6 +1542,7 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultProjectI
                 assignees,
                 recurrence,
                 projectId: selectedProjectId,
+                attachments,
               };
               console.log('[EditableTaskCard] invoking onSave with payload:', payload);
               onSave(payload);
@@ -1484,8 +1575,17 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
   const [userSearchResults, setUserSearchResults] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [debounce, setDebounce] = useState(null);
+  const [attachments, setAttachments] = useState([]);
 
   const PRIORITIES = ["Low", "Medium", "High"];
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+  const ALLOWED_FILE_TYPES = [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'image/png',
+    'image/jpeg'
+  ];
 
   const parentMax = parentDeadline
     ? String(parentDeadline).slice(0, 10)
@@ -1518,6 +1618,43 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
   }
   function removeAssignee(id) {
     setAssignees((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  function handleFileChange(event) {
+    const files = Array.from(event.target.files || []);
+    const validFiles = [];
+    const errors = [];
+
+    files.forEach(file => {
+      if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+        errors.push(`${file.name}: Invalid file type. Only PDF, DOCX, XLSX, PNG, and JPG are allowed.`);
+        return;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        errors.push(`${file.name}: File too large. Maximum size is 50MB.`);
+        return;
+      }
+      validFiles.push(file);
+    });
+
+    if (errors.length > 0) {
+      alert(errors.join('\n'));
+    }
+
+    setAttachments(prev => [...prev, ...validFiles]);
+    event.target.value = '';
+  }
+
+  function removeAttachment(index) {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   }
 
   function handleUserSearchInput(e) {
@@ -1572,6 +1709,33 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
         throw new Error(error || `POST /tasks ${res.status}`);
       }
       const row = await res.json();
+      
+      // Upload attachments if any
+      if (attachments && attachments.length > 0) {
+        try {
+          const formData = new FormData();
+          attachments.forEach(file => {
+            formData.append('files', file);
+          });
+          
+          const uploadRes = await fetchWithCsrf(`${API}/tasks/${row.id}/files`, {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (!uploadRes.ok) {
+            console.warn('Failed to upload some attachments');
+          } else {
+            const uploadResult = await uploadRes.json();
+            if (uploadResult.data?.errors && uploadResult.data.errors.length > 0) {
+              console.warn('Some files failed:', uploadResult.data.errors);
+            }
+          }
+        } catch (uploadError) {
+          console.error('Error uploading attachments:', uploadError);
+        }
+      }
+      
       onCreated?.(row); // push into list in parent
     } catch (e) {
       console.error("[create subtask]", e);
@@ -1733,6 +1897,57 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
               </div>
             ) : (
               <span className="text-xs text-gray-500">No assignees</span>
+            )}
+          </div>
+
+          {/* File Attachments */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Attachments</label>
+            <div className="border-2 border-dashed border-gray-700 rounded-md p-3 hover:border-gray-600 transition-colors">
+              <input
+                type="file"
+                id="subtask-file-input"
+                multiple
+                accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <label
+                htmlFor="subtask-file-input"
+                className="flex flex-col items-center cursor-pointer"
+              >
+                <svg className="w-6 h-6 text-gray-500 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <span className="text-xs text-gray-400">Click to upload</span>
+                <span className="text-xs text-gray-500 mt-0.5">PDF, DOCX, XLSX, PNG, JPG (Max 50MB)</span>
+              </label>
+            </div>
+            
+            {attachments.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {attachments.map((file, index) => (
+                  <div key={index} className="flex items-center justify-between bg-gray-800/50 rounded px-2 py-1.5">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <svg className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                      </svg>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-gray-300 truncate">{file.name}</p>
+                        <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(index)}
+                      className="text-gray-400 hover:text-red-400 ml-2 text-sm"
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>

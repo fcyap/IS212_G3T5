@@ -290,18 +290,26 @@ router.get('/:projectId/tasks', async (req, res) => {
 
 // POST /projects/:projectId/tasks - Create a new task
 router.post('/:projectId/tasks', requireTaskCreation(null), async (req, res) => {
+  console.log('🎯 POST /:projectId/tasks route HIT!', req.params, req.originalUrl);
   try {
     const { projectId } = req.params;
     const taskData = req.body;
     const creatorId = req.user?.id || req.body?.creator_id || req.body?.creatorId || null;
 
+    console.log('=== CREATE TASK DEBUG ===');
+    console.log('Raw projectId from params:', projectId, 'Type:', typeof projectId);
+    console.log('Task data:', JSON.stringify(taskData, null, 2));
+    console.log('Creator ID:', creatorId);
+
     // Validate project exists
     const validatedProjectId = validatePositiveInteger(projectId, 'projectId');
+    console.log('Validated projectId:', validatedProjectId);
 
     // Import the service
     const projectTasksService = require('../services/projectTasksService');
 
     const result = await projectTasksService.createTask(validatedProjectId, taskData, creatorId);
+    console.log('Service result:', result);
 
     if (result.success) {
       return res.status(201).json(result);

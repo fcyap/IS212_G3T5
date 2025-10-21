@@ -593,9 +593,12 @@ class ProjectRepository {
    */
   async exists(projectId) {
     try {
+      console.log('ProjectRepository.exists called with:', projectId);
       const project = await this.getProjectById(projectId);
+      console.log('Project found:', !!project, project ? `(id: ${project.id})` : '(null)');
       return !!project;
     } catch (error) {
+      console.log('Error checking project existence:', error.message);
       if (error.message.includes('not found')) {
         return false;
       }
