@@ -197,7 +197,13 @@ const requireTaskCreation = (sql) => {
   return async (req, res, next) => {
     try {
       const user = res.locals.session || req.user;
-      const projectId = req.params.projectId || req.body.project_id;
+      const rawProjectId = req.params.projectId ?? req.body.project_id;
+      const projectId =
+        rawProjectId === null || rawProjectId === undefined || rawProjectId === ''
+          ? null
+          : Number.isFinite(Number(rawProjectId))
+            ? Number(rawProjectId)
+            : rawProjectId;
 
       if (!user) {
         return res.status(401).json({ error: 'Authentication required' });
@@ -211,20 +217,65 @@ const requireTaskCreation = (sql) => {
       // Get project and check access using Supabase
       const { data: projects, error: projectError } = await supabase
         .from('projects')
-        .select(`
-          id,
-          creator_id,
-          user_ids,
-          users!projects_creator_id_fkey(role, hierarchy, division)
-        `)
+        .select('id, creator_id, status')
         .eq('id', projectId)
         .limit(1);
 
+      if (projectError) {
+        console.error('[requireTaskCreation] Supabase error fetching project', {
+          projectId,
+          error: projectError
+        });
+      }
+
       if (!projects || !projects.length) {
+        console.warn('[requireTaskCreation] Project not found for id', projectId);
         return res.status(404).json({ error: 'Project not found' });
       }
 
       const project = projects[0];
+
+      if (project.status && String(project.status).toLowerCase() !== 'active') {
+        console.warn('[requireTaskCreation] Project is not active', {
+          projectId,
+          status: project.status
+        });
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      const { data: projectMembers, error: membersError } = await supabase
+        .from('project_members')
+        .select('user_id')
+        .eq('project_id', projectId);
+
+      if (membersError) {
+        console.error('[requireTaskCreation] Supabase error fetching project members', {
+          projectId,
+          error: membersError
+        });
+        return res.status(500).json({ error: 'Failed to verify project access' });
+      }
+
+      const memberIds = Array.isArray(projectMembers)
+        ? projectMembers.map((row) => Number(row.user_id)).filter(Number.isFinite)
+        : [];
+
+      let projectCreator = { role: null, hierarchy: null, division: null };
+      if (project.creator_id != null) {
+        const { data: creatorRows, error: creatorError } = await supabase
+          .from('users')
+          .select('id, role, hierarchy, division')
+          .eq('id', project.creator_id)
+          .limit(1);
+        if (creatorError) {
+          console.error('[requireTaskCreation] Supabase error fetching project creator', {
+            projectId,
+            error: creatorError
+          });
+        } else if (creatorRows && creatorRows.length) {
+          projectCreator = creatorRows[0];
+        }
+      }
       const userData = {
         id: user.user_id || user.id,
         role: user.role || 'staff',
@@ -238,18 +289,12 @@ const requireTaskCreation = (sql) => {
       }
 
       // Check if user is project member
-      const isProjectMember = project.user_ids && project.user_ids.includes(userData.id);
+      const isProjectMember = memberIds.includes(userData.id);
 
       // Check if user is project creator
       const isCreator = userData.id === project.creator_id;
 
       // Managers can create tasks in projects from their division with lower hierarchy
-      const projectCreator = project.users || {
-        role: null,
-        hierarchy: null,
-        division: null
-      };
-
       const hasManagerAccess = userData.role === 'manager' &&
                                userData.division === projectCreator.division &&
                                (userData.hierarchy || 0) > (projectCreator.hierarchy || 0);
@@ -284,26 +329,101 @@ const requireTaskModification = (sql) => {
       }
 
       // Get task and associated project using Supabase
+      const numericTaskId = Number(taskId);
+      const queryId = Number.isFinite(numericTaskId) ? numericTaskId : taskId;
+
       const { data: tasks, error: taskError } = await supabase
         .from('tasks')
-        .select(`
-          id,
-          project_id,
-          assigned_to,
-          projects!tasks_project_id_fkey(
-            creator_id,
-            user_ids,
-            users!projects_creator_id_fkey(role, hierarchy, division)
-          )
-        `)
-        .eq('id', taskId)
+        .select('id, project_id, assigned_to')
+        .eq('id', queryId)
         .limit(1);
+
+      if (taskError) {
+        console.error('[requireTaskModification] Supabase error fetching task', {
+          taskId,
+          error: taskError
+        });
+        return res.status(500).json({ error: 'Internal server error' });
+      }
 
       if (!tasks || !tasks.length) {
         return res.status(404).json({ error: 'Task not found' });
       }
 
       const task = tasks[0];
+      const normalizedAssigned =
+        Array.isArray(task.assigned_to)
+          ? task.assigned_to
+              .map((value) => {
+                const num = Number(value);
+                return Number.isFinite(num) ? num : null;
+              })
+              .filter((value) => value !== null)
+          : [];
+
+      let memberIds = [];
+      let projectCreator = { id: null, role: null, hierarchy: null, division: null };
+
+      if (task.project_id != null) {
+        const { data: projects, error: projectError } = await supabase
+          .from('projects')
+          .select('id, creator_id, status')
+          .eq('id', task.project_id)
+          .limit(1);
+
+        if (projectError) {
+          console.error('[requireTaskModification] Supabase error fetching project', {
+            taskId,
+            projectId: task.project_id,
+            error: projectError
+          });
+          return res.status(500).json({ error: 'Internal server error' });
+        }
+
+        if (!projects || !projects.length) {
+          return res.status(404).json({ error: 'Task not found' });
+        }
+
+        const project = projects[0];
+        if (project.status && String(project.status).toLowerCase() !== 'active') {
+          return res.status(404).json({ error: 'Task not found' });
+        }
+
+        const { data: projectMembers, error: membersError } = await supabase
+          .from('project_members')
+          .select('user_id')
+          .eq('project_id', task.project_id);
+
+        if (membersError) {
+          console.error('[requireTaskModification] Supabase error fetching project members', {
+            taskId,
+            projectId: task.project_id,
+            error: membersError
+          });
+          return res.status(500).json({ error: 'Internal server error' });
+        }
+
+        memberIds = Array.isArray(projectMembers)
+          ? projectMembers.map((row) => Number(row.user_id)).filter(Number.isFinite)
+          : [];
+
+        if (project.creator_id != null) {
+          const { data: creatorRows, error: creatorError } = await supabase
+            .from('users')
+            .select('id, role, hierarchy, division')
+            .eq('id', project.creator_id)
+            .limit(1);
+          if (creatorError) {
+            console.error('[requireTaskModification] Supabase error fetching project creator', {
+              taskId,
+              projectId: task.project_id,
+              error: creatorError
+            });
+          } else if (creatorRows && creatorRows.length) {
+            projectCreator = creatorRows[0];
+          }
+        }
+      }
       const userData = {
         id: user.user_id || user.id,
         role: user.role || 'staff',
@@ -317,24 +437,18 @@ const requireTaskModification = (sql) => {
       }
 
       // Check if user is assigned to the task
-      const isAssigned = task.assigned_to && task.assigned_to.includes(userData.id);
+      const isAssigned = normalizedAssigned.includes(userData.id);
 
       // Check if user is project member
-      const isProjectMember = task.projects?.user_ids && task.projects.user_ids.includes(userData.id);
+      const isProjectMember = memberIds.includes(userData.id);
 
       // Check if user is project creator
-      const isProjectCreator = userData.id === task.projects?.creator_id;
+      const isProjectCreator = userData.id === projectCreator.id;
 
-      // Managers can modify tasks in projects from their division
-      const projectCreator = task.projects?.users || {
-        role: null,
-        hierarchy: null,
-        division: null
-      };
-
+      const sameDivision = projectCreator.division == null || userData.division === projectCreator.division;
       const hasManagerAccess = userData.role === 'manager' &&
                                task.project_id && // Only for project tasks
-                               userData.division === projectCreator.division &&
+                               sameDivision &&
                                (userData.hierarchy || 0) > (projectCreator.hierarchy || 0);
 
       if (isAssigned || isProjectMember || isProjectCreator || hasManagerAccess) {

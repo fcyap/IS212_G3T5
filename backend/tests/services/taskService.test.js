@@ -16,6 +16,15 @@ describe('TaskService', () => {
     notificationService.createTaskAssignmentNotifications.mockResolvedValue({ notificationsSent: 0 });
     notificationService.createTaskRemovalNotifications = jest.fn().mockResolvedValue({ notificationsSent: 0 });
     notificationService.createTaskUpdateNotifications = jest.fn().mockResolvedValue({ notificationsSent: 0 });
+    projectRepository.getProjectById.mockReset();
+    projectRepository.getProjectById.mockImplementation(async (id) => ({ id, status: 'active' }));
+    taskRepository.getTaskById.mockReset();
+    if (taskRepository.updateById?.mockReset) {
+      taskRepository.updateById.mockReset();
+    }
+    if (taskRepository.updateTask?.mockReset) {
+      taskRepository.updateTask.mockReset();
+    }
   });
 
   describe('listWithAssignees', () => {
@@ -96,7 +105,7 @@ describe('TaskService', () => {
       ];
 
       taskRepository.list.mockResolvedValue({ data: null, error: new Error('Database error') });
-      taskService.getAllTasks = jest.fn().mockResolvedValue(mockTasks);
+      taskService.getAllTasks = jest.fn().mockResolvedValue({ tasks: mockTasks });
 
       const result = await taskService.listWithAssignees();
 
@@ -111,7 +120,7 @@ describe('TaskService', () => {
 
       taskRepository.list.mockResolvedValue({ data: mockTasks, error: null });
       taskRepository.getUsersByIds.mockResolvedValue({ data: null, error: new Error('User fetch error') });
-      taskService.getAllTasks = jest.fn().mockResolvedValue(mockTasks);
+      taskService.getAllTasks = jest.fn().mockResolvedValue({ tasks: mockTasks });
 
       const result = await taskService.listWithAssignees();
 
@@ -211,6 +220,7 @@ describe('TaskService', () => {
 
       const result = await taskService.createTask(taskData);
 
+      expect(projectRepository.getProjectById).toHaveBeenCalledWith(1);
       expect(taskRepository.insert).toHaveBeenCalledWith(expect.objectContaining({
         title: 'New Task',
         description: 'Task description',
@@ -231,6 +241,7 @@ describe('TaskService', () => {
         notificationType: 'task_assignment'
       }));
       expect(notificationService.createTaskRemovalNotifications).not.toHaveBeenCalled();
+      expect(taskRepository.getTaskById).not.toHaveBeenCalled();
     });
 
     test('should ensure creator is assigned when missing', async () => {
@@ -255,6 +266,7 @@ describe('TaskService', () => {
       expect(taskRepository.insert).toHaveBeenCalledWith(expect.objectContaining({
         assigned_to: [5]
       }));
+      expect(projectRepository.getProjectById).not.toHaveBeenCalled();
       expect(result).toEqual(mockCreatedTask);
     });
 
@@ -267,6 +279,7 @@ describe('TaskService', () => {
       userRepository.getUserById.mockResolvedValue({ id: 1 });
 
       await expect(taskService.createTask(taskData, 1)).rejects.toThrow('at most 5 assignees');
+      expect(projectRepository.getProjectById).not.toHaveBeenCalled();
     });
 
     test('should handle creation error', async () => {
@@ -280,6 +293,7 @@ describe('TaskService', () => {
 
       await expect(taskService.createTask(taskData))
         .rejects.toThrow('Validation failed');
+      expect(projectRepository.getProjectById).not.toHaveBeenCalled();
     });
 
     test('should handle missing required fields', async () => {
@@ -333,6 +347,8 @@ describe('TaskService', () => {
       expect(insertPayload.priority).toBe('high');
       expect(insertPayload.status).toBe('in_progress');
       expect(insertPayload.parent_id).toBe(5);
+      expect(insertPayload.project_id).toBe(10);
+      expect(taskRepository.getTaskById).not.toHaveBeenCalled();
       expect(result).toEqual(normalizedInsertResult);
     });
 
@@ -361,13 +377,90 @@ describe('TaskService', () => {
         title: 'Legacy path'
       }));
       expect(result).toEqual(fallbackCreated);
+      expect(projectRepository.getProjectById).not.toHaveBeenCalled();
 
       taskRepository.insert = originalInsert;
       taskRepository.createTask = originalCreateTask;
     });
+
+    test('should reject task creation when project is not active', async () => {
+      projectRepository.getProjectById.mockResolvedValue({ id: 2, status: 'archived' });
+      const taskData = {
+        title: 'Inactive project task',
+        project_id: 2,
+        assigned_to: [1]
+      };
+
+      await expect(taskService.createTask(taskData))
+        .rejects.toThrow('Tasks can only be assigned to active projects.');
+      expect(taskRepository.insert).not.toHaveBeenCalled();
+    });
+
+    test('should inherit project from parent task when creating a subtask', async () => {
+      const parentTask = { id: 7, project_id: 42 };
+      taskRepository.getTaskById.mockResolvedValueOnce(parentTask);
+      projectRepository.getProjectById.mockResolvedValueOnce({ id: 42, status: 'active' });
+
+      const taskData = {
+        title: 'Subtask',
+        parent_id: 7,
+        project_id: 999, // Should be ignored
+        assigned_to: [3]
+      };
+
+      const created = {
+        id: 101,
+        title: 'Subtask',
+        project_id: 42,
+        assigned_to: [3]
+      };
+      taskRepository.insert = jest.fn().mockResolvedValue(created);
+
+      const result = await taskService.createTask(taskData);
+
+      expect(taskRepository.getTaskById).toHaveBeenCalledWith(7);
+      expect(projectRepository.getProjectById).toHaveBeenCalledWith(42);
+      expect(taskRepository.insert).toHaveBeenCalledWith(expect.objectContaining({
+        project_id: 42,
+        parent_id: 7
+      }));
+      expect(result).toEqual(created);
+    });
+
+    test('should throw when parent task cannot be found', async () => {
+      taskRepository.getTaskById.mockResolvedValueOnce(null);
+
+      const taskData = {
+        title: 'Orphan subtask',
+        parent_id: 123,
+        assigned_to: [1]
+      };
+
+      await expect(taskService.createTask(taskData)).rejects.toThrow('Parent task not found');
+      expect(taskRepository.insert).not.toHaveBeenCalled();
+    });
   });
 
   describe('updateTask', () => {
+    test('should reject attempts to change project assignment', async () => {
+      const taskId = 5;
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        title: 'Original',
+        status: 'pending',
+        recurrence_freq: null,
+        recurrence_interval: 1,
+        assigned_to: [1],
+        tags: [],
+        project_id: 10
+      });
+
+      await expect(taskService.updateTask(taskId, { project_id: 99 }, 1))
+        .rejects.toThrow('Project assignment cannot be changed after creation.');
+      expect(taskRepository.updateById).not.toHaveBeenCalled();
+      expect(taskRepository.updateTask).not.toHaveBeenCalled();
+    });
+
     test('should update task successfully', async () => {
       const taskId = 1;
       const updateData = {

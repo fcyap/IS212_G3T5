@@ -282,11 +282,9 @@ const updateTask = async (req, res) => {
     console.log("[taskcontroller]:", res.json(updatedTask));
   } catch (err) {
     console.error('Error in updateTask:', err);
-    if (err.message.includes('permission')) {
-      res.status(403).json({ success: false, message: err.message });
-    } else {
-      res.status(500).json({ success: false, message: err.message });
-    }
+    const statusCode = err.status
+      || (err.message && err.message.includes('permission') ? 403 : 500);
+    res.status(statusCode).json({ success: false, message: err.message });
   }
 };
 

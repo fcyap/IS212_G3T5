@@ -5,16 +5,34 @@ import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link"
 import { fetchWithCsrf } from "@/lib/csrf";
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API = process.env.NEXT_PUBLIC_API_URL ;
 
 export default function ArchivePage() {
   const [tasks, setTasks] = useState([]);
 
   useEffect(() => {
     (async () => {
-      const res = await fetch(`${API}/tasks?archived=true`);
-      const rows = await res.json();
-      setTasks(rows);
+      try {
+        const res = await fetchWithCsrf(`${API}/tasks?archived=true`);
+        if (!res.ok) {
+          if (res.status === 401) {
+            console.warn('[ArchivePage] Unauthorized when fetching archived tasks.');
+            setTasks([]);
+            return;
+          }
+          throw new Error(`GET /tasks?archived=true ${res.status}`);
+        }
+        const rows = await res.json();
+        const normalized = Array.isArray(rows)
+          ? rows
+          : Array.isArray(rows?.tasks)
+            ? rows.tasks
+            : [];
+        setTasks(normalized);
+      } catch (err) {
+        console.error('[ArchivePage] Failed to load archived tasks:', err);
+        setTasks([]);
+      }
     })();
   }, []);
 

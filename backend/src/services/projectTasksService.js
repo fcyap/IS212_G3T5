@@ -2,6 +2,8 @@ const projectTasksRepository = require('../repository/projectTasksRepository');
 const projectRepository = require('../repository/projectRepository');
 const notificationService = require('./notificationService');
 
+const MAX_ASSIGNEES = 5;
+
 class ProjectTasksService {
   /**
    * Validation constants
@@ -320,6 +322,11 @@ class ProjectTasksService {
         assignees.push(validCreatorId);
       }
 
+      const uniqueAssignees = Array.from(new Set(assignees));
+      if (uniqueAssignees.length > MAX_ASSIGNEES) {
+        throw new Error(`A task can have at most ${MAX_ASSIGNEES} assignees.`);
+      }
+
       // Validate deadline format if provided
       if (deadline && isNaN(Date.parse(deadline))) {
         throw new Error('Invalid deadline format. Use ISO 8601 format');
@@ -331,7 +338,7 @@ class ProjectTasksService {
         status,
         priority,
         project_id: validatedProjectId,
-        assigned_to: assignees,
+        assigned_to: uniqueAssignees,
         deadline: deadline || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -463,6 +470,20 @@ class ProjectTasksService {
       if (filteredUpdateData.assigned_to && (!Array.isArray(filteredUpdateData.assigned_to) ||
           filteredUpdateData.assigned_to.some(id => isNaN(parseInt(id)) || parseInt(id) <= 0))) {
         throw new Error('assigned_to must be an array of positive integers');
+      }
+
+      if (Array.isArray(filteredUpdateData.assigned_to)) {
+        const normalizedAssignees = filteredUpdateData.assigned_to
+          .map((value) => (typeof value === 'string' ? value.trim() : value))
+          .filter((value) => value !== '' && value !== null && value !== undefined)
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value))
+          .map((value) => Math.trunc(value));
+        const uniqueAssignees = Array.from(new Set(normalizedAssignees));
+        if (uniqueAssignees.length > MAX_ASSIGNEES) {
+          throw new Error(`A task can have at most ${MAX_ASSIGNEES} assignees.`);
+        }
+        filteredUpdateData.assigned_to = uniqueAssignees;
       }
 
       if (filteredUpdateData.deadline && isNaN(Date.parse(filteredUpdateData.deadline))) {

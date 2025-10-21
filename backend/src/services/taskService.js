@@ -81,7 +81,14 @@ class TaskService {
         return { ...t, assignees };
       });
     } catch (error) {
-      return await this.getAllTasks({ archived, userId, userRole, userHierarchy, userDivision });
+      const fallback = await this.getAllTasks({ archived, userId, userRole, userHierarchy, userDivision });
+      if (Array.isArray(fallback)) {
+        return fallback;
+      }
+      if (fallback && Array.isArray(fallback.tasks)) {
+        return fallback.tasks;
+      }
+      return [];
     }
   }
 
@@ -195,8 +202,55 @@ class TaskService {
       await userRepository.getUserById(validCreatorId);
     }
 
-    if (project_id && projectRepository.getProjectById) {
-      await projectRepository.getProjectById(project_id);
+    const normalizedProjectId =
+      project_id === null || project_id === undefined || project_id === ''
+        ? null
+        : Number(project_id);
+    if (normalizedProjectId !== null && !Number.isFinite(normalizedProjectId)) {
+      const err = new Error('Invalid project_id');
+      err.status = 400;
+      throw err;
+    }
+
+    const normalizedParentId =
+      parent_id === null || parent_id === undefined || parent_id === ''
+        ? null
+        : Number(parent_id);
+    if (normalizedParentId !== null && !Number.isFinite(normalizedParentId)) {
+      const err = new Error('Invalid parent_id');
+      err.status = 400;
+      throw err;
+    }
+
+    let parentTask = null;
+    if (normalizedParentId !== null) {
+      parentTask = await taskRepository.getTaskById(normalizedParentId);
+      if (!parentTask) {
+        const err = new Error('Parent task not found');
+        err.status = 404;
+        throw err;
+      }
+    }
+
+    // Determine final project assignment (subtasks inherit from parent)
+    let effectiveProjectId = parentTask
+      ? parentTask.project_id ?? null
+      : normalizedProjectId;
+
+    if (parentTask && normalizedProjectId !== null && parentTask.project_id !== normalizedProjectId) {
+      console.warn(
+        `[TaskService] Ignoring mismatched project_id (${normalizedProjectId}) for subtask; using parent project ${parentTask.project_id}`
+      );
+    }
+
+    if (effectiveProjectId !== null && projectRepository.getProjectById) {
+      const project = await projectRepository.getProjectById(effectiveProjectId);
+      const statusValue = project?.status ? String(project.status).toLowerCase() : null;
+      if (statusValue && statusValue !== 'active') {
+        const err = new Error('Tasks can only be assigned to active projects.');
+        err.status = 400;
+        throw err;
+      }
     }
 
     // Normalize priority and status
@@ -265,12 +319,10 @@ class TaskService {
       priority: normPriority,
       status: normStatus,
       deadline: deadline || null,
-      project_id: project_id || null,
+      project_id: effectiveProjectId,
       assigned_to: uniqueAssignees,
       tags: normTags,
-      parent_id: parent_id === null || parent_id === undefined
-     ? null
-     : Number(parent_id),
+      parent_id: normalizedParentId,
       created_at: new Date(),
       updated_at: new Date(),
       recurrence_freq: (recurrence && ['daily','weekly','monthly'].includes(recurrence.freq)) ? recurrence.freq : null,
@@ -341,6 +393,12 @@ class TaskService {
 
     // Normalize patch (your existing logic, trimmed to keep the important bits)
     const patch = {};
+    if (input.project_id !== undefined) {
+      const err = new Error('Project assignment cannot be changed after creation.');
+      err.status = 400;
+      throw err;
+    }
+
     if (input.title !== undefined) patch.title = input.title;
     if (input.description !== undefined) patch.description = input.description;
     if (input.priority !== undefined) patch.priority = String(input.priority).toLowerCase();

@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import { CommentSection } from "./task-comment/task-comment-section"
 import { useUserSearch } from "@/hooks/useUserSearch"
 import { useAuth } from "@/hooks/useAuth"
+import { projectService } from "@/lib/api"
 
 const priorityChipClasses = {
   Low: "bg-teal-200 text-teal-900",
@@ -58,6 +59,7 @@ function rowToCard(r) {
     assignees: normalizedAssignees,  // <-- use this
     tags: Array.isArray(r.tags) ? r.tags : [],
     recurrence,
+    projectId: r.project_id ?? null,
   };
 }
 
@@ -121,35 +123,108 @@ function RecurrencePicker({ value, onChange, disabled = false }) {
 
 
 export function KanbanBoard({ projectId = null }) {
+  const boardProjectId = projectId != null ? Number(projectId) : null;
   const { user: currentUser } = useAuth()
-  async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees, recurrence }) {
+  const [activeProjects, setActiveProjects] = useState([]);
+  const [projectLookup, setProjectLookup] = useState({});
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsError, setProjectsError] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadProjects() {
+      setProjectsLoading(true);
+      setProjectsError(null);
+      try {
+        const allProjects = await projectService.getAllProjects();
+        if (!mounted) return;
+        const normalizedProjects = Array.isArray(allProjects) ? allProjects : [];
+        const active = normalizedProjects.filter((project) => String(project.status || '').toLowerCase() === 'active');
+        const lookupEntries = normalizedProjects
+          .map((project) => {
+            const id = Number(project.id);
+            return Number.isFinite(id) ? [id, project] : null;
+          })
+          .filter(Boolean);
+        const lookup = Object.fromEntries(lookupEntries);
+        setActiveProjects(active);
+        setProjectLookup(lookup);
+      } catch (err) {
+        if (!mounted) return;
+        console.error('[KanbanBoard] Failed to load projects:', err);
+        setProjectsError(err);
+        setActiveProjects([]);
+        setProjectLookup({});
+      } finally {
+        if (mounted) setProjectsLoading(false);
+      }
+    }
+    loadProjects();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+  async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees, recurrence, projectId: selectedProjectId }) {
     if (!currentUser?.id) {
       console.error('[KanbanBoard] Cannot create task without an authenticated user')
       return
     }
+    console.log('[KanbanBoard] handleSaveNewTask called', {
+      title,
+      description,
+      dueDate,
+      priority,
+      tags,
+      assignees,
+      recurrence,
+      selectedProjectId,
+      boardProjectId,
+      lane: editorLane
+    });
     try {
+      const resolvedProjectIdRaw =
+        selectedProjectId != null
+          ? selectedProjectId
+          : boardProjectId;
+      const resolvedProjectId =
+        resolvedProjectIdRaw != null && Number.isFinite(Number(resolvedProjectIdRaw))
+          ? Number(resolvedProjectIdRaw)
+          : null;
+      console.log('[KanbanBoard] Resolved project id:', { resolvedProjectIdRaw, resolvedProjectId });
+      if (resolvedProjectId == null) {
+        alert('Please select an active project before creating a task.');
+        return;
+      }
+      const payload = {
+        title,
+        description: description || null,
+        priority: (priority || "Low").toLowerCase(),
+        status: editorLane,
+        deadline: dueDate || null,
+        project_id: resolvedProjectId,
+        assigned_to: Array.isArray(assignees) && assignees.length > 0 ? assignees.map(a => a.id) : [currentUser.id],
+        tags,
+        recurrence: recurrence ?? null,
+      };
+      console.log('[KanbanBoard] POST /tasks payload:', payload);
       const res = await fetchWithCsrf(`${API}/tasks`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          title,
-          description: description || null,
-          priority: (priority || "Low").toLowerCase(),
-          status: editorLane,
-          deadline: dueDate || null,
-          project_id: projectId,
-          assigned_to: Array.isArray(assignees) && assignees.length > 0 ? assignees.map(a => a.id) : [currentUser.id],
-          tags,
-          recurrence: recurrence ?? null,
-        }),
+        body: JSON.stringify(payload),
       })
+      console.log('[KanbanBoard] POST /tasks status:', res.status);
+      if (res.status === 401) {
+        alert('Your session has expired. Please sign in again and retry.');
+        return;
+      }
       if (!res.ok) {
         const { error } = await res.json().catch(() => ({}))
         throw new Error(error || `POST /tasks ${res.status}`)
       }
       const row = await res.json()
+      console.log('[KanbanBoard] Created task response:', row);
       const card = rowToCard(row)
 
       setTasks(prev =>
@@ -159,6 +234,7 @@ export function KanbanBoard({ projectId = null }) {
       cancelAddTask()
     } catch (err) {
       console.error("[save task]", err)
+      alert(err.message || 'Failed to create task.');
     }
   }
   const [panelTask, setPanelTask] = useState(null)
@@ -179,8 +255,10 @@ export function KanbanBoard({ projectId = null }) {
         const res = await fetch(`${API}/tasks?archived=false&parent_id=null`, {
           credentials: 'include',
         })
+        console.log('[KanbanBoard] GET /tasks status:', res.status);
         if (!res.ok) throw new Error(`GET /tasks ${res.status}`)
         const rows = await res.json()
+        console.log('[KanbanBoard] Loaded tasks:', Array.isArray(rows) ? rows.length : 'unknown');
         setTasks(rows.map(rowToCard))
       } catch (err) {
         console.error("[load tasks]", err)
@@ -222,7 +300,14 @@ export function KanbanBoard({ projectId = null }) {
 
             <div className="space-y-3">
               {isAdding && editorLane === "pending" && editorPosition === "top" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
 
               {todo.map((t) => (
@@ -240,7 +325,14 @@ export function KanbanBoard({ projectId = null }) {
               ))}
 
               {isAdding && editorLane === "pending" && editorPosition === "bottom" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
 
               {!isAdding && (
@@ -267,7 +359,14 @@ export function KanbanBoard({ projectId = null }) {
             </div>
             <div className="space-y-3">
               {isAdding && editorLane === "in_progress" && editorPosition === "top" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
 
               {doing.map((t) => (
@@ -285,7 +384,14 @@ export function KanbanBoard({ projectId = null }) {
               ))}
 
               {isAdding && editorLane === "in_progress" && editorPosition === "bottom" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
 
               {!isAdding && (
@@ -312,7 +418,14 @@ export function KanbanBoard({ projectId = null }) {
             </div>
             <div className="space-y-3">
               {isAdding && editorLane === "completed" && editorPosition === "top" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
               {done.map((t) => (
                 <TaskCard
@@ -328,7 +441,14 @@ export function KanbanBoard({ projectId = null }) {
                 />
               ))}
               {isAdding && editorLane === "completed" && editorPosition === "bottom" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
 
               {!isAdding && (
@@ -355,7 +475,14 @@ export function KanbanBoard({ projectId = null }) {
 
             <div className="space-y-3">
               {isAdding && editorLane === "blocked" && editorPosition === "top" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
 
               {blocked.map((t) => (
@@ -373,7 +500,14 @@ export function KanbanBoard({ projectId = null }) {
               ))}
 
               {isAdding && editorLane === "blocked" && editorPosition === "bottom" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
 
               {/* {!isAdding && (
@@ -393,6 +527,9 @@ export function KanbanBoard({ projectId = null }) {
       {panelTask && (
         <TaskSidePanel
           task={panelTask}
+          projectLookup={projectLookup}
+          projectsLoading={projectsLoading}
+          projectsError={projectsError}
           onClose={closePanel}
           onSave={async (patch) => {
             try {
@@ -456,10 +593,11 @@ export function KanbanBoard({ projectId = null }) {
 }
 
 
-function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
+function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, projectsError = null, onClose, onSave, onDeleted, nested = false }) {
   const [childPanelTask, setChildPanelTask] = useState(null);
   const { user: currentUser } = useAuth()
   const currentUserId = currentUser?.id
+  console.log('[TaskSidePanel] opened for task:', task);
   const canEdit =
     Array.isArray(task.assignees) &&
     currentUserId != null &&
@@ -478,6 +616,9 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
   const [tagInput, setTagInput] = useState("");
   const [assignees, setAssignees] = useState(Array.isArray(task.assignees) ? task.assignees : []);
   const [recurrence, setRecurrence] = useState(task.recurrence ?? null);
+  const normalizedProjectId = Number.isFinite(Number(task.projectId)) ? Number(task.projectId) : null;
+  const projectEntry = normalizedProjectId != null ? projectLookup[normalizedProjectId] : null;
+  const projectName = projectEntry?.name ;
 
   // Subtasks
   const [subtasks, setSubtasks] = useState([]);
@@ -490,6 +631,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
         const res = await fetchWithCsrf(`${API}/tasks?archived=false&parent_id=${task.id}`);
         if (!res.ok) throw new Error(`GET /tasks ${res.status}`);
         const rows = await res.json();
+        console.log('[TaskSidePanel] initial subtasks load status:', res.status, 'count:', Array.isArray(rows) ? rows.length : 'unknown');
         // rows already have assignees hydrated by backend; if you map, keep tags/assignees as you do elsewhere
         if (mounted) setSubtasks(rows.map(rowToCard));
       } catch (e) {
@@ -505,6 +647,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
       const res = await fetchWithCsrf(`${API}/tasks?parent_id=${task.id}`);
       if (!res.ok) throw new Error(`GET /tasks?parent_id=${task.id} ${res.status}`);
       const rows = await res.json();
+      console.log('[TaskSidePanel] reload subtasks status:', res.status, 'count:', Array.isArray(rows) ? rows.length : 'unknown');
       setSubtasks(Array.isArray(rows) ? rows : []);
     } catch (err) {
       console.error("[load subtasks]", err);
@@ -591,6 +734,9 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
       {childPanelTask && (
         <TaskSidePanel
           task={childPanelTask}
+          projectLookup={projectLookup}
+          projectsLoading={projectsLoading}
+          projectsError={projectsError}
           onClose={() => setChildPanelTask(null)}
           onSave={async (patch) => {
             const assigned_to = Array.isArray(patch.assignees)
@@ -639,6 +785,26 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-white text-lg font-semibold">Edit task</h3>
             <button onClick={onClose} className="text-gray-300 hover:text-white text-xl leading-none">×</button>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-xs text-gray-400 mb-1">Project</label>
+            <div className="text-sm text-gray-100">
+              {projectsLoading && <span>Loading project…</span>}
+              {!projectsLoading && normalizedProjectId == null && (
+                <span className="text-xs text-gray-500">No project assigned.</span>
+              )}
+              {!projectsLoading && normalizedProjectId != null && projectEntry && (
+                <span className="font-medium">
+                  {projectName}
+                </span>
+              )}
+              {!projectsLoading && normalizedProjectId != null && !projectEntry && (
+                <span className="text-xs text-red-400">
+                  {projectsError ? 'Unable to load project details.' : 'Project not accessible.'}
+                </span>
+              )}
+            </div>
           </div>
 
           {!canEdit && (
@@ -803,7 +969,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
                 <span className="text-xs text-gray-500">No assignees</span>
               )}
               {canAddAssignees && assignees.length >= MAX_ASSIGNEES && (
-                <p className="text-xs text-red-400 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
+                <p className="text-xs text-gray-500 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
               )}
               {canRemoveAssignees && assignees.length === 1 && (
                 <p className="text-xs text-amber-400 mt-2">At least one assignee is required. Add another member before removing the last one.</p>
@@ -916,18 +1082,51 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
     </>
   )
 }
-function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
+function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultProjectId = null, projects = [], projectsLoading = false, projectsError = null }) {
   const { user: currentUser } = useAuth()
+  const normalizedDefaultProjectId = defaultProjectId != null ? Number(defaultProjectId) : null
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
   const [priority, setPriority] = useState("")
+  const [status, setStatus] = useState("pending")
   const PRIORITIES = ["Low", "Medium", "High"]
+  const STATUSES = [
+    { value: "pending", label: "To do" },
+    { value: "in_progress", label: "Doing" },
+    { value: "completed", label: "Completed" },
+    { value: "blocked", label: "Blocked" },
+    { value: "cancelled", label: "Cancelled" }
+  ];
   const canEdit = true
   const MAX_ASSIGNEES = 5
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState([]);
   const [recurrence, setRecurrence] = useState(null);
+  const [selectedProjectId, setSelectedProjectId] = useState(normalizedDefaultProjectId);
+
+  const normalizedSelectedProjectId = Number.isFinite(Number(selectedProjectId))
+    ? Number(selectedProjectId)
+    : null;
+  const selectedProjectEntry = normalizedSelectedProjectId != null
+    ? projects.find((p) => Number(p.id) === normalizedSelectedProjectId)
+    : null;
+  const selectedProjectName = selectedProjectEntry?.name
+    ?? (normalizedSelectedProjectId != null ? `Project #${normalizedSelectedProjectId}` : null);
+
+  useEffect(() => {
+    setSelectedProjectId((prev) => {
+      if (normalizedDefaultProjectId != null && projects.some((p) => Number(p.id) === normalizedDefaultProjectId)) {
+        return normalizedDefaultProjectId;
+      }
+      if (prev != null) return prev;
+      if (projects.length === 1) {
+        const soleId = Number(projects[0].id);
+        return Number.isFinite(soleId) ? soleId : prev;
+      }
+      return prev;
+    });
+  }, [normalizedDefaultProjectId, projects]);
 
   // --- Assignees & user search (copied from TaskSidePanel, trimmed) ---
   const [assignees, setAssignees] = useState([]);
@@ -947,7 +1146,14 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
     })
   }, [currentUser])
 
-  const canSave = title.trim().length > 0 && priority !== "" && assignees.length <= MAX_ASSIGNEES
+  const hasTitle = title.trim().length > 0;
+  const hasDescription = description.trim().length > 0;
+  const hasPriority = !!priority;
+  const hasStatus = !!status;
+  const hasDueDate = !!dueDate;
+  const hasAssignees = assignees.length > 0;
+  const hasProject = selectedProjectId != null;
+  const canSave = hasTitle && hasDescription && hasPriority && hasStatus && hasDueDate && hasAssignees && hasProject;
 
   function addAssignee(user) {
     setAssignees((prev) => {
@@ -1123,8 +1329,49 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
         {assignees.length === 1 && (
           <p className="text-xs text-amber-400 mt-2">At least one assignee is required. Add another member before removing the last one.</p>
         )}
-        {assignees.length >= MAX_ASSIGNEES && (
+        {assignees.length > MAX_ASSIGNEES && (
           <p className="text-xs text-red-400 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
+        )}
+      </div>
+
+      <div className="mt-4">
+        <label className="block text-xs text-gray-400 mb-1">Project</label>
+        <Select
+          value={selectedProjectId != null ? String(selectedProjectId) : ""}
+          onValueChange={(value) => {
+            const num = Number(value);
+            const next = Number.isFinite(num) ? num : null;
+            console.log('[EditableTaskCard] project selection changed:', { value, next });
+            setSelectedProjectId(next);
+          }}
+          disabled={projectsLoading || projects.length === 0}
+        >
+          <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+            <SelectValue placeholder={projectsLoading ? "Loading projects..." : "Select project"} />
+          </SelectTrigger>
+          <SelectContent className="bg-white">
+            {projects.map((project) => (
+              <SelectItem key={project.id} value={String(project.id)}>
+                {project.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {projectsLoading && (
+          <p className="text-xs text-gray-500 mt-2">Loading active projects…</p>
+        )}
+        {!projectsLoading && projectsError && (
+          <p className="text-xs text-red-400 mt-2">Failed to load projects.</p>
+        )}
+        {!projectsLoading && projects.length === 0 && (
+          <p className="text-xs text-red-400 mt-2">
+            No active projects available. Create or reactivate a project before adding tasks.
+          </p>
+        )}
+        {!projectsLoading && projects.length > 0 && selectedProjectId == null && (
+          <p className="text-xs text-amber-400 mt-2">
+            Select a project to enable task creation.
+          </p>
         )}
       </div>
 
@@ -1158,6 +1405,23 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
             </SelectContent>
           </Select>
         </div>
+
+        {/* Status dropdown */}
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Status</label>
+          <Select value={status} onValueChange={(v) => setStatus(v)}>
+            <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+              <SelectValue placeholder="Select status" />
+            </SelectTrigger>
+            <SelectContent className="bg-white">
+              {STATUSES.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <div className="col-span-2 mt-1">
         <RecurrencePicker value={recurrence} onChange={setRecurrence} />
@@ -1176,18 +1440,24 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
         )}
 
         <Button
-          onClick={() =>
-            onSave({
-              title: title.trim(),
-              description: description.trim() || undefined,
-              dueDate: dueDate || undefined,
-              priority,
-              tags,
-              assignees,
-              recurrence,
-            })
-          }
-          disabled={!canSave}
+        onClick={() =>
+            {
+              const payload = {
+                title: title.trim(),
+                description: description.trim() || undefined,
+                dueDate: dueDate || undefined,
+                priority,
+                status,
+                tags,
+                assignees,
+                recurrence,
+                projectId: selectedProjectId,
+              };
+              console.log('[EditableTaskCard] invoking onSave with payload:', payload);
+              onSave(payload);
+            }
+        }
+        disabled={!canSave || projectsLoading}
           className="bg-white/90 text-black hover:bg-white"
         >
           <Check className="w-4 h-4 mr-1" /> Save

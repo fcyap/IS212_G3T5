@@ -199,6 +199,22 @@ describe('ProjectTasksService', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe('Project not found');
     });
+
+    test('should reject creation when more than 5 assignees provided', async () => {
+      const projectId = 3;
+      const taskData = {
+        title: 'Overloaded',
+        assigned_to: [1, 2, 3, 4, 5, 6]
+      };
+
+      projectRepository.exists.mockResolvedValue(true);
+
+      const result = await projectTasksService.createTask(projectId, taskData);
+
+      expect(projectTasksRepository.create).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('A task can have at most 5 assignees.');
+    });
   });
 
   describe('updateTask', () => {
@@ -288,6 +304,19 @@ describe('ProjectTasksService', () => {
       expect(result.success).toBe(false);
       expect(result.statusCode).toBe(404);
       expect(result.error).toBe('Task not found');
+    });
+
+    test('should reject updates that exceed the assignee limit', async () => {
+      const taskId = 21;
+      const updateData = {
+        assigned_to: [1, 2, 3, 4, 5, 6]
+      };
+
+      const result = await projectTasksService.updateTask(taskId, updateData);
+
+      expect(projectTasksRepository.update).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('A task can have at most 5 assignees.');
     });
   });
 
