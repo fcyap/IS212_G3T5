@@ -144,6 +144,7 @@ async function initializeApp() {
   app.use('/api/projects', authMw, projectTasksRoutes);
   app.use('/api/projects', authMw, projectRoutes);
   app.use('/api/notifications', authMw, notificationRoutes);
+  app.use('/api/reports', authMw, require('./routes/reports'));
   app.use('/tasks', authMw, tasksRouter);
 
   // UAA Protected route example

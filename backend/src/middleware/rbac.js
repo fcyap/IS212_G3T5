@@ -6,7 +6,7 @@ const supabase = require('../utils/supabase');
  * Middleware to check if user can create projects
  */
 const requireProjectCreation = (req, res, next) => {
-  const user = res.locals.session || req.user;
+  const user = req.user; // Use req.user which has full user data from DB
   
   if (!user) {
     return res.status(401).json({ error: 'Authentication required' });
@@ -14,7 +14,7 @@ const requireProjectCreation = (req, res, next) => {
   
   // Get user data from database to ensure we have latest role/hierarchy info
   const userData = {
-    id: user.user_id || user.id,
+    id: user.id,
     role: user.role || 'staff',
     hierarchy: user.hierarchy || 1,
     division: user.division
@@ -36,7 +36,7 @@ const requireProjectCreation = (req, res, next) => {
 const requireProjectEdit = (sql) => {
   return async (req, res, next) => {
     try {
-      const user = res.locals.session || req.user;
+      const user = req.user; // Use req.user which has full user data from DB
       const projectId = req.params.projectId || req.params.id;
 
       if (!user || !projectId) {
@@ -60,7 +60,7 @@ const requireProjectEdit = (sql) => {
 
       const project = projects[0];
       const userData = {
-        id: user.user_id || user.id,
+        id: user.id,
         role: user.role || 'staff',
         hierarchy: user.hierarchy || 1,
         division: user.division
@@ -93,7 +93,7 @@ const requireProjectEdit = (sql) => {
 const requireAddProjectMembers = (sql) => {
   return async (req, res, next) => {
     try {
-      const user = res.locals.session || req.user;
+      const user = req.user; // Use req.user which has full user data from DB
       const projectId = req.params.projectId || req.params.id;
 
       if (!user || !projectId) {
@@ -113,7 +113,7 @@ const requireAddProjectMembers = (sql) => {
 
       const project = projects[0];
       const userData = {
-        id: user.user_id || user.id,
+        id: user.id,
         role: user.role || 'staff',
         hierarchy: user.hierarchy || 1,
         division: user.division
@@ -140,7 +140,7 @@ const requireAddProjectMembers = (sql) => {
 const filterVisibleProjects = (sql) => {
   return async (req, res, next) => {
     try {
-      const user = res.locals.session || req.user;
+      const user = req.user; // Use req.user which has full user data from DB
 
       if (!user) {
         return res.status(401).json({ error: 'Authentication required' });
@@ -150,7 +150,7 @@ const filterVisibleProjects = (sql) => {
       const { data: users, error: userError } = await supabase
         .from('users')
         .select('id, role, hierarchy, division, department')
-        .eq('id', user.user_id || user.id)
+        .eq('id', user.id)
         .limit(1);
 
       if (!users || !users.length) {
@@ -196,7 +196,7 @@ const filterVisibleProjects = (sql) => {
 const requireTaskCreation = (sql) => {
   return async (req, res, next) => {
     try {
-      const user = res.locals.session || req.user;
+      const user = req.user; // Use req.user which has full user data from DB
       const projectId = req.params.projectId || req.body.project_id;
 
       if (!user) {
@@ -226,7 +226,7 @@ const requireTaskCreation = (sql) => {
 
       const project = projects[0];
       const userData = {
-        id: user.user_id || user.id,
+        id: user.id,
         role: user.role || 'staff',
         hierarchy: user.hierarchy || 1,
         division: user.division
@@ -276,7 +276,7 @@ const requireTaskCreation = (sql) => {
 const requireTaskModification = (sql) => {
   return async (req, res, next) => {
     try {
-      const user = res.locals.session || req.user;
+      const user = req.user; // Use req.user which has full user data from DB
       const taskId = req.params.id || req.params.taskId;
 
       if (!user || !taskId) {
@@ -305,7 +305,7 @@ const requireTaskModification = (sql) => {
 
       const task = tasks[0];
       const userData = {
-        id: user.user_id || user.id,
+        id: user.id,
         role: user.role || 'staff',
         hierarchy: user.hierarchy || 1,
         division: user.division
@@ -352,11 +352,96 @@ const requireTaskModification = (sql) => {
   };
 };
 
+/**
+ * Middleware to require specific role(s)
+ */
+const requireRole = (allowedRoles) => {
+  return (req, res, next) => {
+    const user = req.user; // Use req.user which has full user data from DB
+
+    console.log('[requireRole] User object:', user);
+    console.log('[requireRole] Allowed roles:', allowedRoles);
+
+    if (!user) {
+      console.log('[requireRole] No user found');
+      return res.status(401).json({ 
+        error: 'Unauthorized: Authentication required' 
+      });
+    }
+
+    if (!user.role) {
+      console.log('[requireRole] User has no role');
+      return res.status(403).json({ 
+        error: 'Forbidden: Insufficient permissions' 
+      });
+    }
+
+    console.log('[requireRole] User role:', user.role);
+
+    if (!allowedRoles.includes(user.role)) {
+      console.log('[requireRole] Role not in allowed list');
+      return res.status(403).json({ 
+        error: 'Forbidden: Insufficient permissions' 
+      });
+    }
+
+    console.log('[requireRole] Access granted');
+    next();
+  };
+};
+
+/**
+ * Helper function to filter departments by hierarchy
+ */
+const filterByDepartmentHierarchy = (parentDepartment, departments) => {
+  return departments.filter(dept => {
+    return dept === parentDepartment || dept.startsWith(parentDepartment + '.');
+  });
+};
+
+/**
+ * Middleware to check department access
+ */
+const checkDepartmentAccess = () => {
+  return (req, res, next) => {
+    const user = req.user; // Use req.user which has full user data from DB
+
+    if (!user) {
+      return res.status(401).json({ 
+        error: 'Unauthorized: Authentication required' 
+      });
+    }
+
+    // Admin can access all departments
+    if (user.role === 'admin') {
+      return next();
+    }
+
+    const requestedDepartments = req.body.departments || [];
+    
+    if (requestedDepartments.length > 0) {
+      // Check if all requested departments are within user's hierarchy
+      const allowedDepartments = filterByDepartmentHierarchy(user.department, requestedDepartments);
+      
+      if (allowedDepartments.length !== requestedDepartments.length) {
+        return res.status(403).json({ 
+          error: 'Forbidden: Cannot access data from other departments' 
+        });
+      }
+    }
+
+    next();
+  };
+};
+
 module.exports = {
   requireProjectCreation,
   requireProjectEdit,
   requireAddProjectMembers,
   filterVisibleProjects,
   requireTaskCreation,
-  requireTaskModification
+  requireTaskModification,
+  requireRole,
+  checkDepartmentAccess,
+  filterByDepartmentHierarchy
 };

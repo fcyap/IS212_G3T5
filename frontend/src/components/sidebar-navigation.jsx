@@ -138,7 +138,13 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                     <Plus className="w-4 h-4" />
                                 </div>
                                 <nav className="space-y-1">
-                                    <NavItem icon={BarChart3} label="Reporting" isCollapsed={isCollapsed} />
+                                    <NavItem 
+                                      icon={BarChart3} 
+                                      label="Reports" 
+                                      isCollapsed={isCollapsed}
+                                      isActive={currentView === 'reports'}
+                                      onClick={() => onViewSelect('reports')}
+                                    />
                                     <NavItem icon={Briefcase} label="Portfolios" isCollapsed={isCollapsed} />
                                     <NavItem icon={Target} label="Goals" isCollapsed={isCollapsed} />
                                 </nav>

@@ -10,6 +10,10 @@ import { ProjectDetails } from "@/components/project-details"
 import { CommentBox } from "@/components/task-comment/task-comment"
 import { CommentItem } from "@/components/task-comment/task-comment-item"
 import { KanbanProvider } from "@/components/kanban-context"
+import dynamic from 'next/dynamic'
+
+// Dynamically import ReportsPage to avoid SSR issues
+const ReportsPage = dynamic(() => import('./reports/page'), { ssr: false })
 
 /*function RoleBadge() {
   const { role } = useSession() || {};
@@ -63,6 +67,8 @@ function ProtectedProjectTimelinePage() {
               projectId={selectedProjectId}
               onBack={handleBackToBoard}
             />
+          ) : currentView === 'reports' ? (
+            <ReportsPage />
           ) : currentView === 'projects' ? (
             <ProjectsList onProjectSelect={handleProjectSelect} />
           ) : currentView === 'board' ? (
