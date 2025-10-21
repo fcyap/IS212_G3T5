@@ -320,6 +320,7 @@ describe('TaskService', () => {
       userRepository.getUserById = jest.fn().mockResolvedValue({ id: 42 });
       projectRepository.getProjectById = jest.fn().mockResolvedValue({ id: 10 });
       userRepository.getUsersByIds = jest.fn().mockResolvedValue([{ id: 1 }, { id: 2 }, { id: 3 }]);
+      taskRepository.getTaskById.mockResolvedValueOnce({ id: 5, project_id: 10 });
 
       const normalizedInsertResult = {
         id: 77,
@@ -348,7 +349,7 @@ describe('TaskService', () => {
       expect(insertPayload.status).toBe('in_progress');
       expect(insertPayload.parent_id).toBe(5);
       expect(insertPayload.project_id).toBe(10);
-      expect(taskRepository.getTaskById).not.toHaveBeenCalled();
+      expect(taskRepository.getTaskById).toHaveBeenCalledWith(5);
       expect(result).toEqual(normalizedInsertResult);
     });
 
