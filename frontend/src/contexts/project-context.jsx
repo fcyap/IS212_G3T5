@@ -100,15 +100,19 @@ export function ProjectProvider({ children }) {
 
   // Load all projects on mount
   useEffect(() => {
+    console.log('🚀 [ProjectProvider] useEffect triggered, calling loadProjects');
     loadProjects();
   }, []);
 
   const loadProjects = async () => {
     try {
+      console.log('🔄 [ProjectProvider] loadProjects called');
       dispatch({ type: PROJECT_ACTIONS.SET_LOADING, payload: true });
       const projects = await projectService.getAllProjects();
+      console.log('✅ [ProjectProvider] Received projects:', projects);
       dispatch({ type: PROJECT_ACTIONS.SET_PROJECTS, payload: projects });
     } catch (error) {
+      console.error('❌ [ProjectProvider] Error loading projects:', error);
       dispatch({ type: PROJECT_ACTIONS.SET_ERROR, payload: error.message });
     }
   };
