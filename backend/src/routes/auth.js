@@ -55,7 +55,7 @@ function authRoutes() {
     });
 
     console.log('Getting user role...');
-    const role = await getEffectiveRole(null, user.id);
+    const role = await getEffectiveRole(user.id);
     console.log('Login successful for user:', user.id);
     const payload = {
       user: {
@@ -256,6 +256,8 @@ function authRoutes() {
   router.get('/me', authMiddleware(), async (req, res) => {
     try {
       const { session } = res.locals;
+      console.log('[Auth] /auth/me - session:', session);
+      console.log('[Auth] /auth/me - session.user_id:', session.user_id, 'type:', typeof session.user_id);
 
       // Get complete user information using Supabase
       const { data: users, error: userError } = await supabase
@@ -269,7 +271,7 @@ function authRoutes() {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      const role = await getEffectiveRole(null, session.user_id);
+      const role = await getEffectiveRole(session.user_id);
       return res.json({
         user: {
           id: user.id,
