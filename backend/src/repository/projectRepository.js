@@ -266,7 +266,66 @@ class ProjectRepository {
    * Check if user can manage members (has 'creator' or 'manager' role in project)
    */
   async canUserManageMembers(projectId, userId) {
-    // Check if user has 'creator' or 'manager' role in project_members
+    console.log('[canUserManageMembers] Checking permissions - projectId:', projectId, 'userId:', userId);
+
+    // Get project data
+    const { data: projectData, error: projectError } = await supabase
+      .from('projects')
+      .select('id, creator_id')
+      .eq('id', projectId)
+      .single();
+
+    console.log('[canUserManageMembers] Project data:', projectData);
+    console.log('[canUserManageMembers] Project error:', projectError);
+
+    if (projectError || !projectData) {
+      console.log('[canUserManageMembers] Project not found - DENIED');
+      return false;
+    }
+
+    // Check if user is project creator
+    if (projectData.creator_id === userId) {
+      console.log('[canUserManageMembers] User is project creator - ALLOWED');
+      return true;
+    }
+
+    // Get user data to check system-level permissions
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('role, hierarchy, division')
+      .eq('id', userId)
+      .single();
+
+    console.log('[canUserManageMembers] User data:', userData);
+
+    // System-level managers can manage projects in their division with lower hierarchy
+    if (!userError && userData?.role === 'manager') {
+      // Get project creator's data
+      const { data: creatorData, error: creatorError } = await supabase
+        .from('users')
+        .select('role, hierarchy, division')
+        .eq('id', projectData.creator_id)
+        .single();
+
+      console.log('[canUserManageMembers] Project creator data:', creatorData);
+
+      if (!creatorError && creatorData) {
+        console.log('[canUserManageMembers] Checking hierarchy:', {
+          userDivision: userData.division,
+          creatorDivision: creatorData.division,
+          userHierarchy: userData.hierarchy,
+          creatorHierarchy: creatorData.hierarchy
+        });
+        const canManageByHierarchy = userData.division === creatorData.division &&
+                                     (userData.hierarchy || 0) > (creatorData.hierarchy || 0);
+        console.log('[canUserManageMembers] Can manage by hierarchy:', canManageByHierarchy);
+        if (canManageByHierarchy) {
+          return true;
+        }
+      }
+    }
+
+    // Check if user has 'manager' role within the specific project
     const { data: memberData, error } = await supabase
       .from('project_members')
       .select('member_role')
@@ -687,7 +746,7 @@ class ProjectRepository {
   async getAllProjectsEnhanced() {
     console.log('🔍 [ProjectRepository] Getting all projects with user details');
 
-    // Get all projects first
+    // Get projects first
     const { data: projects, error } = await supabase
       .from('projects')
       .select('*')
@@ -698,10 +757,22 @@ class ProjectRepository {
       throw new Error(error.message);
     }
 
-    console.log('✅ [ProjectRepository] Found all projects:', projects?.length || 0);
+    // Get creator data for each project separately
+    if (projects && projects.length > 0) {
+      const creatorIds = [...new Set(projects.map(p => p.creator_id))];
+      const { data: creators } = await supabase
+        .from('users')
+        .select('id, name, email, role, hierarchy, division')
+        .in('id', creatorIds);
 
-    // For now, return just the projects without joined creator data
-    // The foreign key relationship might not be properly configured in Supabase
+      // Map creators to projects
+      const creatorsMap = new Map(creators?.map(c => [c.id, c]) || []);
+      projects.forEach(project => {
+        project.users = creatorsMap.get(project.creator_id) || null;
+      });
+    }
+
+    console.log('✅ [ProjectRepository] Found all projects:', projects?.length || 0);
     return projects || [];
   }
 

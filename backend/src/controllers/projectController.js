@@ -174,19 +174,25 @@ const removeProjectMember = async (req, res) => {
     const { projectId, userId } = req.params;
     const requestingUserId = req.user?.id || 1;
 
+    console.log('[removeProjectMember] Called with:', { projectId, userId, requestingUserId });
+
     if (!projectId || isNaN(projectId)) {
+      console.log('[removeProjectMember] Invalid projectId:', projectId);
       return res.status(400).json({ success: false, message: 'Valid project ID is required' });
     }
 
     if (!userId || isNaN(userId)) {
+      console.log('[removeProjectMember] Invalid userId:', userId);
       return res.status(400).json({ success: false, message: 'Valid user ID is required' });
     }
 
     if (!requestingUserId) {
+      console.log('[removeProjectMember] Invalid requestingUserId:', requestingUserId);
       return res.status(400).json({ success: false, message: 'Requesting user ID is required' });
     }
 
     // Call service layer
+    console.log('[removeProjectMember] Calling service...');
     const updatedProject = await projectService.removeUserFromProject(
       parseInt(projectId),
       parseInt(userId),
@@ -194,6 +200,7 @@ const removeProjectMember = async (req, res) => {
     );
 
     // Format response
+    console.log('[removeProjectMember] Success!');
     res.json({
       success: true,
       project: updatedProject,

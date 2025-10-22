@@ -1,5 +1,12 @@
 const express = require('express');
 const router = express.Router();
+
+// Debug middleware to log all requests
+router.use((req, res, next) => {
+  console.log(`[ProjectRouter] ${req.method} ${req.path}`);
+  next();
+});
+
 // No longer need sql import - RBAC middleware now uses Supabase directly
 const {
   createProject,
@@ -10,6 +17,9 @@ const {
   removeProjectMember,
   archiveProject
 } = require('../controllers/projectController');
+
+// Import auth middleware
+const { authMiddleware } = require('../middleware/auth');
 
 // Import RBAC middleware
 const {
@@ -57,14 +67,18 @@ const deleteProject = async (req, res) => {
   }
 };
 
-router.post('/', requireProjectCreation, createProject);
-router.get('/', filterVisibleProjects(null), getAllProjects);
-router.get('/:projectId', getProjectById);
-router.put('/:projectId', requireProjectEdit(null), updateProject);
-router.delete('/:projectId', requireProjectEdit(null), deleteProject);
-router.get('/:projectId/members', getProjectMembers);
-router.post('/:projectId/members', requireAddProjectMembers(null), addProjectMembers);
-router.delete('/:projectId/members/:userId', requireProjectEdit(null), removeProjectMember);
-router.patch('/:projectId/archive', requireProjectEdit(null), archiveProject);
+router.post('/', authMiddleware(), requireProjectCreation, createProject);
+router.get('/', authMiddleware(), filterVisibleProjects(), getAllProjects);
+
+// More specific routes must come before less specific ones to prevent route shadowing
+router.get('/:projectId/members', authMiddleware(), getProjectMembers);
+router.post('/:projectId/members', authMiddleware(), requireAddProjectMembers(), addProjectMembers);
+router.delete('/:projectId/members/:userId', authMiddleware(), requireProjectEdit(), removeProjectMember);
+router.patch('/:projectId/archive', authMiddleware(), requireProjectEdit(), archiveProject);
+
+// Less specific routes come after
+router.get('/:projectId', authMiddleware(), getProjectById);
+router.put('/:projectId', authMiddleware(), requireProjectEdit(), updateProject);
+router.delete('/:projectId', authMiddleware(), requireProjectEdit(), deleteProject);
 
 module.exports = router;

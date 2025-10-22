@@ -256,6 +256,8 @@ function authRoutes() {
   router.get('/me', authMiddleware(), async (req, res) => {
     try {
       const { session } = res.locals;
+      console.log('[Auth] /auth/me - session:', session);
+      console.log('[Auth] /auth/me - session.user_id:', session.user_id, 'type:', typeof session.user_id);
 
       // Get complete user information using Supabase
       const { data: users, error: userError } = await supabase
