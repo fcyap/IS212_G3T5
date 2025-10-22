@@ -618,6 +618,18 @@ class TaskService {
 
     const newParent = await taskRepository.insert(newTaskPayload);
 
+    // Copy attachments and files from the completed task to the new recurring instance
+    try {
+      await taskFilesService.copyTaskFiles(
+        currentTask.id,
+        newParent.id,
+        currentTask.assigned_to[0] || normalizedRequesterId
+      );
+    } catch (fileError) {
+      console.error('[recurrence] Failed to copy files to new recurring task:', fileError);
+      // Non-blocking - don't fail recurrence if file copy fails
+    }
+
     // Ensure the whole chain shares a series id
     if (!currentTask.recurrence_series_id && seriesId) {
       try {
