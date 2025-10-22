@@ -73,6 +73,8 @@ export async function fetchWithCsrf(input, init = {}, { retryOnForbidden = true 
     opts.headers = {
       ...ensureHeaders(opts),
       'x-csrf-token': token,
+      'csrf-token': token,  // Try both headers for lusca compatibility
+      '_csrf': token,       // Some CSRF libraries look for this
     };
   } else if (opts.headers) {
     opts.headers = ensureHeaders(opts);
@@ -89,6 +91,8 @@ export async function fetchWithCsrf(input, init = {}, { retryOnForbidden = true 
       headers: {
         ...ensureHeaders(opts),
         'x-csrf-token': freshToken,
+        'csrf-token': freshToken,
+        '_csrf': freshToken,
       },
     };
     response = await fetch(input, retryOpts);

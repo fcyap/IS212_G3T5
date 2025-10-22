@@ -276,11 +276,7 @@ const requireTaskCreation = () => {
       // Get project and check access using Supabase
       const { data: projects, error: projectError } = await supabase
         .from('projects')
-        .select(`
-          id,
-          creator_id,
-          users!projects_creator_id_fkey(role, hierarchy, division)
-        `)
+        .select('id, creator_id')
         .eq('id', projectId)
         .limit(1);
 
@@ -320,7 +316,14 @@ const requireTaskCreation = () => {
       const isProjectMember = memberData && memberData.length > 0;
 
       // Managers can create tasks in projects from their division with lower hierarchy
-      const projectCreator = project.users || {
+      // Get project creator's data separately
+      const { data: creatorData } = await supabase
+        .from('users')
+        .select('role, hierarchy, division')
+        .eq('id', project.creator_id)
+        .single();
+
+      const projectCreator = creatorData || {
         role: null,
         hierarchy: null,
         division: null
@@ -362,15 +365,7 @@ const requireTaskModification = () => {
       // Get task and associated project using Supabase
       const { data: tasks, error: taskError } = await supabase
         .from('tasks')
-        .select(`
-          id,
-          project_id,
-          assigned_to,
-          projects!tasks_project_id_fkey(
-            creator_id,
-            users!projects_creator_id_fkey(role, hierarchy, division)
-          )
-        `)
+        .select('id, project_id, assigned_to')
         .eq('id', taskId)
         .limit(1);
 
@@ -399,33 +394,48 @@ const requireTaskModification = () => {
       // Check if user is assigned to the task
       const isAssigned = task.assigned_to && task.assigned_to.includes(userData.id);
 
-      // Check if user is project creator
-      const isProjectCreator = userData.id === task.projects?.creator_id;
-
-      // Check if user is project member
+      // Get project data if this is a project task
+      let isProjectCreator = false;
       let isProjectMember = false;
+      let hasManagerAccess = false;
+
       if (task.project_id) {
-        const { data: memberData } = await supabase
-          .from('project_members')
-          .select('user_id')
-          .eq('project_id', task.project_id)
-          .eq('user_id', userData.id)
-          .limit(1);
+        // Get project data
+        const { data: projectData } = await supabase
+          .from('projects')
+          .select('creator_id')
+          .eq('id', task.project_id)
+          .single();
 
-        isProjectMember = memberData && memberData.length > 0;
+        if (projectData) {
+          // Check if user is project creator
+          isProjectCreator = userData.id === projectData.creator_id;
+
+          // Check if user is project member
+          const { data: memberData } = await supabase
+            .from('project_members')
+            .select('user_id')
+            .eq('project_id', task.project_id)
+            .eq('user_id', userData.id)
+            .limit(1);
+
+          isProjectMember = memberData && memberData.length > 0;
+
+          // Check manager access
+          if (userData.role === 'manager') {
+            const { data: creatorData } = await supabase
+              .from('users')
+              .select('role, hierarchy, division')
+              .eq('id', projectData.creator_id)
+              .single();
+
+            if (creatorData) {
+              hasManagerAccess = userData.division === creatorData.division &&
+                                (userData.hierarchy || 0) > (creatorData.hierarchy || 0);
+            }
+          }
+        }
       }
-
-      // Managers can modify tasks in projects from their division
-      const projectCreator = task.projects?.users || {
-        role: null,
-        hierarchy: null,
-        division: null
-      };
-
-      const hasManagerAccess = userData.role === 'manager' &&
-                               task.project_id && // Only for project tasks
-                               userData.division === projectCreator.division &&
-                               (userData.hierarchy || 0) > (projectCreator.hierarchy || 0);
 
       if (isAssigned || isProjectMember || isProjectCreator || hasManagerAccess) {
         return next();
