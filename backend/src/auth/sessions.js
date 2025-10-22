@@ -34,6 +34,15 @@ async function getSession(_sql, token) {
     throw error;
   }
 
+  console.log('[getSession] Retrieved session:', session);
+  console.log('[getSession] user_id:', session.user_id, 'type:', typeof session.user_id);
+
+  // Validate user_id before querying
+  if (!session.user_id || session.user_id === 'null' || session.user_id === 'undefined') {
+    console.error('[getSession] Invalid user_id in session:', session.user_id);
+    return null;
+  }
+
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('email')
@@ -41,6 +50,7 @@ async function getSession(_sql, token) {
     .single();
 
   if (userError && userError.code !== 'PGRST116') {
+    console.error('[getSession] Error fetching user:', userError);
     throw userError;
   }
 
