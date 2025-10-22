@@ -1,7 +1,7 @@
 /*path: backend/src/auth.roles*/
 const { supabase } = require('../supabase-client');
 
-const getEffectiveRole = async (userId) => {
+const getEffectiveRole = async (sql, userId) => {
   try {
     // Use Supabase instead of direct SQL connection
     const { data: user, error } = await supabase
