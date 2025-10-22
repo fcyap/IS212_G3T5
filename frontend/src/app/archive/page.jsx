@@ -1,14 +1,18 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TaskCard } from "@/components/task-card";
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link"
 import { fetchWithCsrf } from "@/lib/csrf";
+import { useAuth } from "@/hooks/useAuth";
+import { userService } from "@/lib/api";
 const API = process.env.NEXT_PUBLIC_API_URL ;
 
 export default function ArchivePage() {
-  const [tasks, setTasks] = useState([]);
+  const { user: currentUser } = useAuth();
+  const [rawTasks, setRawTasks] = useState([]);
+  const [usersById, setUsersById] = useState({});
 
   useEffect(() => {
     (async () => {
@@ -28,13 +32,137 @@ export default function ArchivePage() {
           : Array.isArray(rows?.tasks)
             ? rows.tasks
             : [];
-        setTasks(normalized);
+        setRawTasks(normalized);
       } catch (err) {
         console.error('[ArchivePage] Failed to load archived tasks:', err);
-        setTasks([]);
+        setRawTasks([]);
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (!currentUser?.id) {
+      setUsersById({});
+      return;
+    }
+
+    const roleLabel = typeof currentUser?.role === 'string'
+      ? currentUser.role.toLowerCase()
+      : typeof currentUser?.role?.label === 'string'
+        ? currentUser.role.label.toLowerCase()
+        : '';
+
+    if (roleLabel !== 'manager') {
+      setUsersById({});
+      return;
+    }
+
+    let active = true;
+    (async () => {
+      try {
+        const users = await userService.getAllUsers();
+        if (!active) return;
+        const map = Array.isArray(users)
+          ? users.reduce((acc, user) => {
+              if (user?.id != null) {
+                acc[user.id] = user;
+              }
+              return acc;
+            }, {})
+          : {};
+        setUsersById(map);
+      } catch (err) {
+        if (!active) return;
+        console.error('[ArchivePage] Failed to load users for RBAC filtering:', err);
+        setUsersById({});
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [currentUser?.id, currentUser?.role]);
+
+  const currentUserId = currentUser?.id != null ? Number(currentUser.id) : null;
+  const rawRoleValue = currentUser?.role;
+  const normalizedRole = typeof rawRoleValue === 'string'
+    ? rawRoleValue.toLowerCase()
+    : typeof rawRoleValue?.label === 'string'
+      ? rawRoleValue.label.toLowerCase()
+      : '';
+  const managerDivision = currentUser?.division ? String(currentUser.division).toLowerCase() : null;
+  const managerHierarchySource =
+    currentUser?.hierarchy ??
+    currentUser?.level ??
+    currentUser?.hierarchy_level ??
+    currentUser?.role_level ??
+    null;
+  const hierarchyAsNumber = Number(managerHierarchySource);
+  const managerHierarchy = Number.isFinite(hierarchyAsNumber) ? hierarchyAsNumber : null;
+  const hasUserDirectory = usersById && Object.keys(usersById).length > 0;
+
+  const visibleTasks = useMemo(() => {
+    if (!Array.isArray(rawTasks)) {
+      return [];
+    }
+    if (!currentUserId || !normalizedRole) {
+      return rawTasks;
+    }
+    if (normalizedRole === 'admin') {
+      return rawTasks;
+    }
+
+    const extractAssigneeIds = (task) =>
+      (task?.assignees || [])
+        .map((assignee) => Number(assignee?.id))
+        .filter(Number.isFinite);
+
+    if (normalizedRole === 'manager') {
+      return rawTasks.filter((task) => {
+        const assigneeIds = extractAssigneeIds(task);
+        if (!assigneeIds.length) {
+          return false;
+        }
+
+        if (assigneeIds.includes(currentUserId)) {
+          return true;
+        }
+
+        if (!hasUserDirectory || !managerDivision) {
+          return false;
+        }
+
+        return assigneeIds.some((assigneeId) => {
+          const assignee = usersById[assigneeId];
+          if (!assignee) return false;
+
+          const subordinateDivision = assignee?.division ? String(assignee.division).toLowerCase() : null;
+          if (!subordinateDivision || subordinateDivision !== managerDivision) {
+            return false;
+          }
+
+          const subordinateHierarchySource =
+            assignee?.hierarchy ??
+            assignee?.level ??
+            assignee?.hierarchy_level ??
+            assignee?.role_level ??
+            null;
+          const subordinateHierarchy = Number(subordinateHierarchySource);
+          const comparable =
+            managerHierarchy != null &&
+            Number.isFinite(managerHierarchy) &&
+            Number.isFinite(subordinateHierarchy);
+
+          return comparable ? subordinateHierarchy < managerHierarchy : true;
+        });
+      });
+    }
+
+    return rawTasks.filter((task) => {
+      const assigneeIds = extractAssigneeIds(task);
+      return assigneeIds.includes(currentUserId);
+    });
+  }, [rawTasks, currentUserId, normalizedRole, usersById, hasUserDirectory, managerDivision, managerHierarchy]);
 
   async function handleUnarchive(id) {
     const res = await fetchWithCsrf(`${API}/tasks/${id}`, {
@@ -50,7 +178,7 @@ export default function ArchivePage() {
       return;
     }
 
-    setTasks((prev) => prev.filter((t) => t.id !== id));
+    setRawTasks((prev) => prev.filter((t) => t.id !== id));
   }
 
   return (
@@ -67,7 +195,7 @@ export default function ArchivePage() {
         </Button>
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {tasks.map((t) => (
+        {visibleTasks.map((t) => (
           <TaskCard
             key={t.id}
             id={t.id}

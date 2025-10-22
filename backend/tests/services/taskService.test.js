@@ -1,21 +1,50 @@
 const crypto = require('crypto');
+
+jest.mock('../../src/utils/supabase', () => ({
+  from: jest.fn()
+}));
+
+const supabase = require('../../src/utils/supabase');
+
+const createEqLimitResponse = (data, error = null) => ({
+  select: jest.fn(() => ({
+    eq: jest.fn(() => ({
+      limit: jest.fn(() => Promise.resolve({ data, error }))
+    })),
+    in: jest.fn(() => Promise.resolve({ data: [], error: null }))
+  }))
+});
+
+const createInResponse = (data, error = null) => ({
+  select: jest.fn(() => ({
+    eq: jest.fn(() => ({
+      limit: jest.fn(() => Promise.resolve({ data: [], error: null }))
+    })),
+    in: jest.fn(() => Promise.resolve({ data, error }))
+  }))
+});
 const taskService = require('../../src/services/taskService');
 const taskRepository = require('../../src/repository/taskRepository');
 const projectRepository = require('../../src/repository/projectRepository');
+const projectMemberRepository = require('../../src/repository/projectMemberRepository');
 const userRepository = require('../../src/repository/userRepository');
 const notificationService = require('../../src/services/notificationService');
 
 jest.mock('../../src/repository/taskRepository');
 jest.mock('../../src/repository/projectRepository');
+jest.mock('../../src/repository/projectMemberRepository');
 jest.mock('../../src/repository/userRepository');
 jest.mock('../../src/services/notificationService');
 
 describe('TaskService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    supabase.from.mockReset();
+    supabase.from.mockImplementation(() => createInResponse([]));
     notificationService.createTaskAssignmentNotifications.mockResolvedValue({ notificationsSent: 0 });
     notificationService.createTaskRemovalNotifications = jest.fn().mockResolvedValue({ notificationsSent: 0 });
     notificationService.createTaskUpdateNotifications = jest.fn().mockResolvedValue({ notificationsSent: 0 });
+    projectMemberRepository.getProjectIdsForUser.mockResolvedValue([]);
     projectRepository.getProjectById.mockReset();
     projectRepository.getProjectById.mockImplementation(async (id) => ({ id, status: 'active' }));
     taskRepository.getTaskById.mockReset();
@@ -741,7 +770,7 @@ describe('TaskService', () => {
 
       await taskService.updateTask(taskId, updates, 200);
 
-      expect(canUpdateSpy).toHaveBeenCalledWith(currentTask.project_id, 200);
+      expect(canUpdateSpy).toHaveBeenCalledWith(currentTask.project_id, 200, currentTask);
       canUpdateSpy.mockRestore();
     });
 
@@ -1212,7 +1241,7 @@ describe('TaskService', () => {
 
       await taskService.deleteTask(taskId, 900);
 
-      expect(canUpdateSpy).toHaveBeenCalledWith(currentTask.project_id, 900);
+      expect(canUpdateSpy).toHaveBeenCalledWith(currentTask.project_id, 900, currentTask);
       expect(taskRepository.deleteTask).toHaveBeenCalledWith(taskId);
       canUpdateSpy.mockRestore();
     });
@@ -1234,36 +1263,92 @@ describe('TaskService', () => {
     });
   });
 
-  describe('_canUserUpdateTask', () => {
-    test('should delegate to project repository when available', async () => {
-      const original = projectRepository.canUserManageMembers;
-      projectRepository.canUserManageMembers = jest.fn().mockResolvedValue(true);
-
-      const result = await taskService._canUserUpdateTask(1, 2);
-
-      expect(projectRepository.canUserManageMembers).toHaveBeenCalledWith(1, 2);
-      expect(result).toBe(true);
-      projectRepository.canUserManageMembers = original;
+  describe('_filterTasksByRBAC', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
     });
 
-    test('should return false when permission check throws', async () => {
-      const original = projectRepository.canUserManageMembers;
-      projectRepository.canUserManageMembers = jest.fn().mockRejectedValue(new Error('fail'));
+    test('allows managers to see their own tasks and those in accessible projects', async () => {
+      const managerId = 40;
+      const tasks = [
+        { id: 1, project_id: 90, assigned_to: [managerId] },
+        { id: 2, project_id: 55, assigned_to: [301] },
+        { id: 3, project_id: 77, assigned_to: [302] }
+      ];
 
-      const result = await taskService._canUserUpdateTask(1, 2);
+      const spy = jest.spyOn(taskService, '_getAccessibleProjectIds').mockResolvedValue([55]);
 
-      expect(result).toBe(false);
-      projectRepository.canUserManageMembers = original;
+      const filtered = await taskService._filterTasksByRBAC(tasks, managerId, 'manager', 3, 'sales');
+
+      expect(spy).toHaveBeenCalledWith(managerId, 'manager', 3, 'sales');
+      expect(filtered.map((t) => t.id)).toEqual([1, 2]);
     });
 
-    test('should default to true when permission hook absent', async () => {
-      const original = projectRepository.canUserManageMembers;
-      delete projectRepository.canUserManageMembers;
+    test('restricts staff users to tasks assigned to them or projects they belong to', async () => {
+      const staffId = 22;
+      const tasks = [
+        { id: 1, project_id: 11, assigned_to: [99] },
+        { id: 2, project_id: null, assigned_to: [staffId] },
+        { id: 3, project_id: 12, assigned_to: [staffId, 44] }
+      ];
 
-      const result = await taskService._canUserUpdateTask(1, 2);
+      const accessibleSpy = jest.spyOn(taskService, '_getAccessibleProjectIds').mockResolvedValue([]);
+      const membershipSpy = jest.spyOn(taskService, '_getProjectMemberships').mockResolvedValue([12]);
+
+      const filtered = await taskService._filterTasksByRBAC(tasks, staffId, 'staff', 1, 'marketing');
+
+      expect(filtered.map((t) => t.id)).toEqual([2, 3]);
+      expect(accessibleSpy).toHaveBeenCalledWith(staffId, 'staff', 1, 'marketing');
+      expect(membershipSpy).toHaveBeenCalledWith(staffId);
+      accessibleSpy.mockRestore();
+      membershipSpy.mockRestore();
+    });
+  });
+
+  describe('_canUserUpdateTask RBAC checks', () => {
+    beforeEach(() => {
+      supabase.from.mockReset();
+      supabase.from.mockImplementation(() => createInResponse([]));
+      projectRepository.canUserManageMembers.mockResolvedValue(false);
+      projectRepository.getProjectById.mockResolvedValue({ id: 55, creator_id: 200 });
+    });
+
+    test('grants managers with higher hierarchy in the same division edit access', async () => {
+      supabase.from
+        .mockImplementationOnce(() => createEqLimitResponse([{ id: 100, role: 'manager', hierarchy: 4, division: 'Sales' }]))
+        .mockImplementationOnce(() => createEqLimitResponse([{ id: 200, hierarchy: 2, division: 'Sales' }]))
+        .mockImplementation(() => createInResponse([]));
+
+      const task = { assigned_to: [301], project_id: 55 };
+      const result = await taskService._canUserUpdateTask(55, 100, task);
 
       expect(result).toBe(true);
-      projectRepository.canUserManageMembers = original;
+    });
+
+    test('grants managers edit access when task assignees report to them', async () => {
+      supabase.from
+        .mockImplementationOnce(() => createEqLimitResponse([{ id: 150, role: 'manager', hierarchy: 5, division: 'Sales' }]))
+        .mockImplementationOnce(() => createEqLimitResponse([{ id: 200, hierarchy: 6, division: 'Marketing' }]))
+        .mockImplementation(() => createInResponse([
+          { id: 305, hierarchy: 2, division: 'Sales' },
+          { id: 306, hierarchy: 3, division: 'Finance' }
+        ]));
+
+      const task = { assigned_to: [305, 306], project_id: 55 };
+      const result = await taskService._canUserUpdateTask(55, 150, task);
+
+      expect(result).toBe(true);
+    });
+
+    test('denies non-managers who are not assigned to the task', async () => {
+      supabase.from
+        .mockImplementationOnce(() => createEqLimitResponse([{ id: 250, role: 'staff', hierarchy: 1, division: 'Sales' }]))
+        .mockImplementation(() => createEqLimitResponse([]));
+
+      const task = { assigned_to: [999], project_id: 10 };
+      const result = await taskService._canUserUpdateTask(10, 250, task);
+
+      expect(result).toBeUndefined();
     });
   });
 

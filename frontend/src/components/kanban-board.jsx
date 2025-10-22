@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { TaskCard } from "./task-card"
 import { Input } from "@/components/ui/input"
@@ -16,7 +16,7 @@ import { TaskAttachmentsDisplay } from "./task-attachments-display"
 import { FileUploadInput } from "./file-upload-input"
 import { useUserSearch } from "@/hooks/useUserSearch"
 import { useAuth } from "@/hooks/useAuth"
-import { projectService } from "@/lib/api"
+import { projectService, userService } from "@/lib/api"
 import toast from "react-hot-toast"
 
 const priorityChipClasses = {
@@ -132,6 +132,7 @@ export function KanbanBoard({ projectId = null }) {
   const [projectLookup, setProjectLookup] = useState({});
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectsError, setProjectsError] = useState(null);
+  const [usersById, setUsersById] = useState({});
 
   useEffect(() => {
     let mounted = true;
@@ -167,6 +168,80 @@ export function KanbanBoard({ projectId = null }) {
       mounted = false;
     };
   }, []);
+
+  const ensureProjectLookup = useCallback(async (projectId) => {
+    const numericId = Number(projectId);
+    if (!Number.isFinite(numericId)) {
+      return null;
+    }
+
+    if (projectLookup[numericId]) {
+      return projectLookup[numericId];
+    }
+
+    try {
+      const data = await projectService.getProjectById(numericId);
+
+      const projectPayload = data?.project ?? (data?.success === true ? data.project : null);
+      const project =
+        projectPayload && Number.isFinite(projectPayload?.id)
+          ? projectPayload
+          : (data && Number.isFinite(data?.id) ? data : null);
+
+      if (project && Number.isFinite(project.id)) {
+        setProjectLookup((prev) => ({
+          ...prev,
+          [project.id]: project
+        }));
+        return project;
+      }
+    } catch (err) {
+      console.error('[KanbanBoard] Failed to fetch project for lookup:', err);
+    }
+    return null;
+  }, [projectLookup]);
+  useEffect(() => {
+    if (!currentUser?.id) {
+      setUsersById({});
+      return;
+    }
+
+    const roleLabel = typeof currentUser?.role === 'string'
+      ? currentUser.role.toLowerCase()
+      : typeof currentUser?.role?.label === 'string'
+        ? currentUser.role.label.toLowerCase()
+        : '';
+
+    // Only managers need the user directory to evaluate subordinate access
+    if (roleLabel !== 'manager') {
+      setUsersById({});
+      return;
+    }
+
+    let active = true;
+    (async () => {
+      try {
+        const users = await userService.getAllUsers();
+        if (!active) return;
+        const map = Array.isArray(users)
+          ? users.reduce((acc, user) => {
+              if (user?.id != null) {
+                acc[user.id] = user;
+              }
+              return acc;
+            }, {})
+          : {};
+        setUsersById(map);
+      } catch (err) {
+        if (!active) return;
+        console.error('[KanbanBoard] Failed to load users for RBAC filtering:', err);
+        setUsersById({});
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [currentUser?.id, currentUser?.role]);
   async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees, recurrence, projectId: selectedProjectId, attachments }) {
     if (!currentUser?.id) {
       console.error('[KanbanBoard] Cannot create task without an authenticated user')
@@ -258,7 +333,7 @@ export function KanbanBoard({ projectId = null }) {
       
       const card = rowToCard(row)
 
-      setTasks(prev =>
+      setRawTasks(prev =>
         editorPosition === "top" ? [card, ...prev] : [...prev, card]
       )
       setBanner("Task Successfully Created")
@@ -271,7 +346,7 @@ export function KanbanBoard({ projectId = null }) {
   const [panelTask, setPanelTask] = useState(null)
   const openPanel = (task) => setPanelTask(task)
   const closePanel = () => setPanelTask(null)
-  const [tasks, setTasks] = useState([])
+  const [rawTasks, setRawTasks] = useState([])
   const [banner, setBanner] = useState("")
 
   useEffect(() => {
@@ -290,7 +365,7 @@ export function KanbanBoard({ projectId = null }) {
         if (!res.ok) throw new Error(`GET /tasks ${res.status}`)
         const rows = await res.json()
         console.log('[KanbanBoard] Loaded tasks:', Array.isArray(rows) ? rows.length : 'unknown');
-        setTasks(rows.map(rowToCard))
+        setRawTasks(rows.map(rowToCard))
       } catch (err) {
         console.error("[load tasks]", err)
       }
@@ -298,12 +373,137 @@ export function KanbanBoard({ projectId = null }) {
     load()
   }, [])
 
+  const currentUserId = currentUser?.id != null ? Number(currentUser.id) : null;
+  const rawRoleValue = currentUser?.role;
+  const normalizedRole = typeof rawRoleValue === 'string'
+    ? rawRoleValue.toLowerCase()
+    : typeof rawRoleValue?.label === 'string'
+      ? rawRoleValue.label.toLowerCase()
+      : '';
+  const managerDivision = currentUser?.division ? String(currentUser.division).toLowerCase() : null;
+  const managerHierarchySource =
+    currentUser?.hierarchy ??
+    currentUser?.level ??
+    currentUser?.hierarchy_level ??
+    currentUser?.role_level ??
+    null;
+  const hierarchyAsNumber = Number(managerHierarchySource);
+  const managerHierarchy = Number.isFinite(hierarchyAsNumber) ? hierarchyAsNumber : null;
+  const hasUserDirectory = usersById && Object.keys(usersById).length > 0;
+  const accessibleProjectIds = useMemo(
+    () =>
+      Object.keys(projectLookup || {})
+        .map((key) => Number(key))
+        .filter(Number.isFinite),
+    [projectLookup]
+  );
+
+  const visibleTasks = useMemo(() => {
+    if (!Array.isArray(rawTasks)) {
+      return [];
+    }
+    if (!currentUserId || !normalizedRole) {
+      return rawTasks;
+    }
+    if (normalizedRole === 'admin') {
+      return rawTasks;
+    }
+
+    const extractAssigneeIds = (task) => {
+      if (Array.isArray(task?.assignees) && task.assignees.length) {
+        return task.assignees
+          .map((assignee) => Number(
+            typeof assignee === 'object' ? assignee?.id ?? assignee?.user_id : assignee
+          ))
+          .filter(Number.isFinite)
+          .map((value) => Math.trunc(value));
+      }
+
+      const raw = Array.isArray(task?.assigned_to)
+        ? task.assigned_to
+        : task?.assigned_to != null
+          ? [task.assigned_to]
+          : [];
+
+      return raw
+        .map((value) => Number(value))
+        .filter(Number.isFinite)
+        .map((value) => Math.trunc(value));
+    };
+
+    if (normalizedRole === 'manager') {
+      return rawTasks.filter((task) => {
+        const assigneeIds = extractAssigneeIds(task);
+        if (!assigneeIds.length) {
+          return false;
+        }
+
+        if (assigneeIds.includes(currentUserId)) {
+          return true;
+        }
+
+        if (!hasUserDirectory || !managerDivision) {
+          return false;
+        }
+
+        return assigneeIds.some((assigneeId) => {
+          const assignee = usersById[assigneeId];
+          if (!assignee) return false;
+
+          const subordinateDivision = assignee?.division ? String(assignee.division).toLowerCase() : null;
+          if (!subordinateDivision || subordinateDivision !== managerDivision) {
+            return false;
+          }
+
+          const subordinateHierarchySource =
+            assignee?.hierarchy ??
+            assignee?.level ??
+            assignee?.hierarchy_level ??
+            assignee?.role_level ??
+            null;
+          const subordinateHierarchy = Number(subordinateHierarchySource);
+          const comparable =
+            managerHierarchy != null &&
+            Number.isFinite(managerHierarchy) &&
+            Number.isFinite(subordinateHierarchy);
+
+          return comparable ? subordinateHierarchy < managerHierarchy : true;
+        });
+      });
+    }
+
+    // Staff: show tasks they are assigned to or within accessible projects
+    return rawTasks.filter((task) => {
+      const assigneeIds = extractAssigneeIds(task);
+      if (assigneeIds.includes(currentUserId)) {
+        return true;
+      }
+
+      const projectId = Number(task.projectId ?? task.project_id);
+      if (
+        Number.isFinite(projectId) &&
+        accessibleProjectIds.includes(projectId)
+      ) {
+        return true;
+      }
+
+      return false;
+    });
+  }, [rawTasks, currentUserId, normalizedRole, usersById, hasUserDirectory, managerDivision, managerHierarchy, accessibleProjectIds]);
+
+  useEffect(() => {
+    if (!panelTask) return;
+    const isVisible = visibleTasks.some((task) => task.id === panelTask.id);
+    if (!isVisible) {
+      setPanelTask(null);
+    }
+  }, [panelTask, visibleTasks]);
 
   const { isAdding, editorPosition, startAddTask, cancelAddTask, editorLane } = useKanban()
-  const todo = tasks.filter(t => t.workflow === "pending")
-  const doing = tasks.filter(t => t.workflow === "in_progress")
-  const done = tasks.filter(t => t.workflow === "completed")
-  const blocked = tasks.filter(t => t.workflow === "blocked")
+  const todo = visibleTasks.filter(t => t.workflow === "pending")
+  const doing = visibleTasks.filter(t => t.workflow === "in_progress")
+  const done = visibleTasks.filter(t => t.workflow === "completed")
+  const blocked = visibleTasks.filter(t => t.workflow === "blocked")
 
   return (
     <div className="flex-1 bg-[#1a1a1d] p-6">
@@ -565,6 +765,7 @@ export function KanbanBoard({ projectId = null }) {
           projectLookup={projectLookup}
           projectsLoading={projectsLoading}
           projectsError={projectsError}
+          ensureProject={ensureProjectLookup}
           onClose={closePanel}
           onSave={async (patch) => {
             try {
@@ -610,7 +811,7 @@ export function KanbanBoard({ projectId = null }) {
               const row = await res.json()
               console.log("[kanban board]", row);
               const updated = rowToCard(row)
-              setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+              setRawTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
               closePanel()
             } catch (e) {
               console.error("[update task]", e)
@@ -618,7 +819,7 @@ export function KanbanBoard({ projectId = null }) {
             }
           }}
           onDeleted={(id) => {
-            setTasks((prev) => prev.filter((t) => t.id !== id))
+            setRawTasks((prev) => prev.filter((t) => t.id !== id))
             closePanel()
           }}
         />
@@ -628,19 +829,26 @@ export function KanbanBoard({ projectId = null }) {
 }
 
 
-function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, projectsError = null, onClose, onSave, onDeleted, nested = false }) {
+function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, projectsError = null, ensureProject = async () => null, onClose, onSave, onDeleted, nested = false }) {
   const [childPanelTask, setChildPanelTask] = useState(null);
   const { user: currentUser } = useAuth()
   const currentUserId = currentUser?.id
   console.log('[TaskSidePanel] opened for task:', task);
-  const canEdit =
+  const normalizedRole =
+    typeof currentUser?.role === 'string'
+      ? currentUser.role.toLowerCase()
+      : typeof currentUser?.role?.label === 'string'
+        ? currentUser.role.label.toLowerCase()
+        : '';
+  const isManager = normalizedRole === 'manager' || normalizedRole === 'admin';
+  const isSelfAssignee =
     Array.isArray(task.assignees) &&
     currentUserId != null &&
     task.assignees.some((a) => a.id === currentUserId);
-  const isManager = currentUser?.role?.toLowerCase?.() === 'manager';
+  const canEdit = isManager || isSelfAssignee;
   const isCreator = task.creator_id != null && currentUserId === task.creator_id;
   const canAddAssignees = canEdit;
-  const canRemoveAssignees = isManager || (canEdit && isCreator);
+  const canRemoveAssignees = isManager;
   const MAX_ASSIGNEES = 5
   const [title, setTitle] = useState(task.title || "");
   const [description, setDescription] = useState(task.description || "");
@@ -654,11 +862,42 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
   const [attachments, setAttachments] = useState([]);
   const normalizedProjectId = Number.isFinite(Number(task.projectId)) ? Number(task.projectId) : null;
   const projectEntry = normalizedProjectId != null ? projectLookup[normalizedProjectId] : null;
-  const projectName = projectEntry?.name ;
+  const [projectName, setProjectName] = useState(projectEntry?.name ?? null);
 
   // Subtasks
   const [subtasks, setSubtasks] = useState([]);
   const [isSubtaskOpen, setIsSubtaskOpen] = useState(false);
+
+  useEffect(() => {
+    if (projectEntry?.name) {
+      setProjectName(projectEntry.name);
+    }
+  }, [projectEntry?.name]);
+
+  useEffect(() => {
+    if (projectEntry?.name) {
+      return;
+    }
+    if (!normalizedProjectId) {
+      return;
+    }
+
+    let active = true;
+    ensureProject(normalizedProjectId)
+      .then((project) => {
+        if (!active) return;
+        if (project?.name) {
+          setProjectName(project.name);
+        }
+      })
+      .catch((err) => {
+        console.error('[TaskSidePanel] ensureProject failed:', err);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [ensureProject, normalizedProjectId, projectEntry?.name]);
 
   useEffect(() => {
     let mounted = true;
@@ -773,6 +1012,7 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
           projectLookup={projectLookup}
           projectsLoading={projectsLoading}
           projectsError={projectsError}
+          ensureProject={ensureProjectLookup}
           onClose={() => setChildPanelTask(null)}
           onSave={async (patch) => {
             const assigned_to = Array.isArray(patch.assignees)
@@ -830,12 +1070,12 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
               {!projectsLoading && normalizedProjectId == null && (
                 <span className="text-xs text-gray-500">No project assigned.</span>
               )}
-              {!projectsLoading && normalizedProjectId != null && projectEntry && (
+              {!projectsLoading && normalizedProjectId != null && projectName && (
                 <span className="font-medium">
                   {projectName}
                 </span>
               )}
-              {!projectsLoading && normalizedProjectId != null && !projectEntry && (
+              {!projectsLoading && normalizedProjectId != null && !projectName && (
                 <span className="text-xs text-red-400">
                   {projectsError ? 'Unable to load project details.' : 'Project not accessible.'}
                 </span>
@@ -845,7 +1085,7 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
 
           {!canEdit && (
             <div className="mb-4 rounded-md border border-amber-600/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-              You are not assigned to this task, so the fields are read-only.
+              You can review this task but do not have edit permissions.
             </div>
           )}
 
