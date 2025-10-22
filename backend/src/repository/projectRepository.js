@@ -266,26 +266,35 @@ class ProjectRepository {
    * Check if user can manage members (has 'creator' or 'manager' role in project)
    */
   async canUserManageMembers(projectId, userId) {
-    // First check if user has system-level manager role
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', userId)
-      .single();
-
-    if (!userError && userData?.role === 'manager') {
-      return true; // System-level managers can manage all projects
-    }
-
-    // Check if user is project creator
+    // Check if user is project creator first
     const { data: projectData, error: projectError } = await supabase
       .from('projects')
-      .select('creator_id')
+      .select(`
+        creator_id,
+        users!projects_creator_id_fkey(role, hierarchy, division)
+      `)
       .eq('id', projectId)
       .single();
 
     if (!projectError && projectData?.creator_id === userId) {
       return true; // Project creators can manage members
+    }
+
+    // Get user data to check system-level permissions
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('role, hierarchy, division')
+      .eq('id', userId)
+      .single();
+
+    // System-level managers can manage projects in their division with lower hierarchy
+    if (!userError && userData?.role === 'manager' && projectData?.users) {
+      const projectCreator = projectData.users;
+      const canManageByHierarchy = userData.division === projectCreator.division &&
+                                   (userData.hierarchy || 0) > (projectCreator.hierarchy || 0);
+      if (canManageByHierarchy) {
+        return true;
+      }
     }
 
     // Check if user has 'manager' role within the specific project
