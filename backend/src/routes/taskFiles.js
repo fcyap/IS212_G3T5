@@ -13,6 +13,8 @@ const fileFilter = (req, file, cb) => {
     'application/pdf',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/csv',
+    'application/csv',
     'image/png',
     'image/jpeg',
   ];
@@ -20,7 +22,7 @@ const fileFilter = (req, file, cb) => {
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type. Only PDF, DOCX, XLSX, PNG, and JPG are allowed.'), false);
+    cb(new Error('Invalid file type. Only PDF, DOCX, XLSX, CSV, PNG, and JPG are allowed.'), false);
   }
 };
 

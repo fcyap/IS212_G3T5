@@ -9,6 +9,8 @@ const ALLOWED_TYPES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/csv',
+  'application/csv',
   'image/png',
   'image/jpeg',
 ]
@@ -24,7 +26,7 @@ export function FileUploadInput({ onFilesChange, disabled = false }) {
     
     const validFiles = files.filter(file => {
       if (!ALLOWED_TYPES.includes(file.type)) {
-        toast.error(`${file.name}: Invalid file type. Only PDF, DOCX, XLSX, PNG, and JPG allowed.`)
+        toast.error(`${file.name}: Invalid file type. Only PDF, DOCX, XLSX, CSV, PNG, and JPG allowed.`)
         return false
       }
       if (file.size > MAX_FILE_SIZE) {
@@ -59,7 +61,7 @@ export function FileUploadInput({ onFilesChange, disabled = false }) {
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg"
+          accept=".pdf,.docx,.xlsx,.csv,.png,.jpg,.jpeg"
           onChange={handleFileSelect}
           className="hidden"
           disabled={disabled}
@@ -76,7 +78,7 @@ export function FileUploadInput({ onFilesChange, disabled = false }) {
           Add Files
         </Button>
         <span className="text-xs text-gray-400">
-          PDF, DOCX, XLSX, PNG, JPG (max 50MB each)
+          PDF, DOCX, XLSX, CSV, PNG, JPG (max 50MB each)
         </span>
       </div>
 

@@ -2143,16 +2143,29 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
                     })
 
                     if (!response.ok) {
-                      throw new Error('Failed to upload files')
+                      const errorData = await response.json().catch(() => ({}))
+                      throw new Error(errorData.message || 'Failed to upload files')
                     }
 
-                    toast.success('Files uploaded successfully')
+                    const result = await response.json()
+                    
+                    // Check if there were any errors during upload
+                    if (result.data?.errors && result.data.errors.length > 0) {
+                      result.data.errors.forEach(error => {
+                        toast.error(error, { duration: 5000 })
+                      })
+                    }
+                    
+                    if (result.data?.uploaded && result.data.uploaded.length > 0) {
+                      toast.success(`${result.data.uploaded.length} file(s) uploaded successfully`)
+                    }
+
                     setAttachments([])
                     // Optionally refresh attachments display
                     window.location.reload()
                   } catch (error) {
                     console.error('Error uploading files:', error)
-                    toast.error('Failed to upload files')
+                    toast.error(error.message || 'Failed to upload files', { duration: 5000 })
                   }
                 }}
                 className="mt-2 bg-blue-500 hover:bg-blue-600 text-white"

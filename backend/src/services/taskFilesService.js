@@ -11,6 +11,8 @@ class TaskFilesService {
       'application/pdf',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'text/csv', // .csv
+      'application/csv', // .csv (alternative)
       'image/png',
       'image/jpeg',
     ];
@@ -51,15 +53,17 @@ class TaskFilesService {
         const uniqueFilename = this._generateUniqueFilename(file.originalname);
         const filePath = `tasks/${taskId}/${uniqueFilename}`;
 
-        // Upload to Supabase Storage
+        // Upload to Supabase Storage with explicit options
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from(this.BUCKET_NAME)
           .upload(filePath, file.buffer, {
             contentType: file.mimetype,
             upsert: false,
+            duplex: 'half'
           });
 
         if (uploadError) {
+          console.error(`Upload error for ${file.originalname}:`, uploadError);
           errors.push(`${file.originalname}: ${uploadError.message}`);
           continue;
         }
@@ -275,7 +279,7 @@ class TaskFilesService {
 
     if (!this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       throw new Error(
-        `File ${file.originalname} has invalid type. Only PDF, DOCX, XLSX, PNG, and JPG are allowed`
+        `File ${file.originalname} has invalid type. Only PDF, DOCX, XLSX, CSV, PNG, and JPG are allowed`
       );
     }
   }
