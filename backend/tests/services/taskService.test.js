@@ -1196,4 +1196,86 @@ describe('TaskService', () => {
       });
     });
   });
+
+  describe('getSubtasks', () => {
+    test('should get subtasks for a parent task', async () => {
+      const parentId = 1;
+      const mockSubtasks = [
+        { id: 10, title: 'Subtask 1', parent_id: 1, status: 'pending' },
+        { id: 11, title: 'Subtask 2', parent_id: 1, status: 'in_progress' }
+      ];
+
+      taskRepository.getSubtasks.mockResolvedValue(mockSubtasks);
+
+      const result = await taskService.getSubtasks(parentId);
+
+      expect(taskRepository.getSubtasks).toHaveBeenCalledWith(parentId);
+      expect(result).toEqual(mockSubtasks);
+      expect(result).toHaveLength(2);
+    });
+
+    test('should return empty array when no subtasks exist', async () => {
+      const parentId = 2;
+
+      taskRepository.getSubtasks.mockResolvedValue([]);
+
+      const result = await taskService.getSubtasks(parentId);
+
+      expect(taskRepository.getSubtasks).toHaveBeenCalledWith(parentId);
+      expect(result).toEqual([]);
+    });
+
+    test('should handle repository error', async () => {
+      const parentId = 3;
+
+      taskRepository.getSubtasks.mockRejectedValue(new Error('Database error'));
+
+      await expect(taskService.getSubtasks(parentId))
+        .rejects.toThrow('Database error');
+    });
+  });
+
+  describe('getTasksWithSubtasks', () => {
+    test('should get tasks with their subtasks', async () => {
+      const mockTasks = [
+        { id: 1, title: 'Parent Task 1', parent_id: null },
+        { id: 2, title: 'Parent Task 2', parent_id: null }
+      ];
+
+      const mockSubtasksTask1 = [
+        { id: 10, title: 'Subtask 1-1', parent_id: 1 }
+      ];
+
+      const mockSubtasksTask2 = [
+        { id: 20, title: 'Subtask 2-1', parent_id: 2 },
+        { id: 21, title: 'Subtask 2-2', parent_id: 2 }
+      ];
+
+      taskRepository.getTasksWithFilters.mockResolvedValue(mockTasks);
+      taskRepository.getSubtasks
+        .mockResolvedValueOnce(mockSubtasksTask1)
+        .mockResolvedValueOnce(mockSubtasksTask2);
+
+      const result = await taskService.getTasksWithSubtasks({ projectId: 1 });
+
+      expect(result[0].subtasks).toEqual(mockSubtasksTask1);
+      expect(result[0].subtaskCount).toBe(1);
+      expect(result[1].subtasks).toEqual(mockSubtasksTask2);
+      expect(result[1].subtaskCount).toBe(2);
+    });
+
+    test('should handle tasks with no subtasks', async () => {
+      const mockTasks = [
+        { id: 1, title: 'Parent Task 1', parent_id: null }
+      ];
+
+      taskRepository.getTasksWithFilters.mockResolvedValue(mockTasks);
+      taskRepository.getSubtasks.mockResolvedValue([]);
+
+      const result = await taskService.getTasksWithSubtasks({ projectId: 1 });
+
+      expect(result[0].subtasks).toEqual([]);
+      expect(result[0].subtaskCount).toBe(0);
+    });
+  });
 });
