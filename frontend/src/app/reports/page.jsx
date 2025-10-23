@@ -13,7 +13,8 @@ import {
   TrendingUp,
   Search,
   X,
-  RefreshCw
+  RefreshCw,
+  ChevronDown
 } from "lucide-react";
 
 export default function ReportsPage() {
@@ -22,6 +23,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [csrfToken, setCsrfToken] = useState(null);
+  const [openFilter, setOpenFilter] = useState(null);
   
   const [filters, setFilters] = useState({
     startDate: '',
@@ -271,7 +273,7 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0f0f12] via-[#1a1a1d] to-[#1a1a1d]">
+    <div className="min-h-full bg-gradient-to-br from-[#0f0f12] via-[#1a1a1d] to-[#1a1a1d]">
       <div className="max-w-[1600px] mx-auto p-6">
         {/* Header with Gradient */}
         <div className="mb-8">
@@ -288,9 +290,9 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
           {/* Enhanced Filters Sidebar */}
-          <div className="lg:col-span-1">
+          <div className="xl:col-span-1">
             <div className="bg-[#2a2a2e] border border-gray-700/50 rounded-xl shadow-xl sticky top-6 overflow-hidden">
               {/* Filter Header */}
               <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-4 border-b border-gray-700">
@@ -341,131 +343,145 @@ export default function ReportsPage() {
 
                 {/* Projects Filter with Badge */}
                 <div className="space-y-3">
-                  <label className="flex items-center justify-between text-sm font-semibold text-gray-200">
+                  <button onClick={() => setOpenFilter(openFilter === 'project' ? null : 'project')} className="w-full flex items-center justify-between text-sm font-semibold text-gray-200">
                     <span className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-green-400" />
                       Projects
                     </span>
-                    {filters.projectIds.length > 0 && (
-                      <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs font-bold rounded-full border border-blue-500/30">
-                        {filters.projectIds.length}
-                      </span>
-                    )}
-                  </label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                    <input
-                      type="text"
-                      value={searchTerms.project}
-                      onChange={(e) => setSearchTerms({ ...searchTerms, project: e.target.value })}
-                      placeholder="Search projects..."
-                      className="w-full pl-10 pr-4 py-2.5 bg-[#1a1a1d] border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    />
-                  </div>
-                  <div className="max-h-52 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar">
-                    {filteredProjects.length === 0 ? (
-                      <div className="text-center py-6">
-                        <div className="w-12 h-12 bg-gray-700/30 rounded-full flex items-center justify-center mx-auto mb-2">
-                          <FileText className="w-6 h-6 text-gray-600" />
-                        </div>
-                        <p className="text-xs text-gray-500">No projects found</p>
+                    <div className="flex items-center gap-2">
+                      {filters.projectIds.length > 0 && (
+                        <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs font-bold rounded-full border border-blue-500/30">
+                          {filters.projectIds.length}
+                        </span>
+                      )}
+                      <ChevronDown className={`w-4 h-4 transition-transform ${openFilter === 'project' ? 'rotate-180' : ''}`} />
+                    </div>
+                  </button>
+                  {openFilter === 'project' && (
+                    <div className="pt-2">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={searchTerms.project}
+                          onChange={(e) => setSearchTerms({ ...searchTerms, project: e.target.value })}
+                          placeholder="Search projects..."
+                          className="w-full pl-10 pr-4 py-2.5 bg-[#1a1a1d] border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        />
                       </div>
-                    ) : (
-                      filteredProjects.map(project => (
-                        <label key={project.id} className="flex items-center gap-3 p-2.5 hover:bg-[#1a1a1d] rounded-lg cursor-pointer transition-colors group">
-                          <input
-                            type="checkbox"
-                            checked={filters.projectIds.includes(project.id)}
-                            onChange={() => toggleProjectFilter(project.id)}
-                            className="w-4 h-4 rounded border-2 border-gray-600 bg-[#1a1a1d] text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
-                          />
-                          <span className="text-sm text-gray-300 truncate group-hover:text-white transition-colors flex-1">{project.name}</span>
-                        </label>
-                      ))
-                    )}
-                  </div>
+                      <div className="mt-2 max-h-52 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar">
+                        {filteredProjects.length === 0 ? (
+                          <div className="text-center py-6">
+                            <div className="w-12 h-12 bg-gray-700/30 rounded-full flex items-center justify-center mx-auto mb-2">
+                              <FileText className="w-6 h-6 text-gray-600" />
+                            </div>
+                            <p className="text-xs text-gray-500">No projects found</p>
+                          </div>
+                        ) : (
+                          filteredProjects.map(project => (
+                            <label key={project.id} className="flex items-center gap-3 p-2.5 hover:bg-[#1a1a1d] rounded-lg cursor-pointer transition-colors group">
+                              <input
+                                type="checkbox"
+                                checked={filters.projectIds.includes(project.id)}
+                                onChange={() => toggleProjectFilter(project.id)}
+                                className="w-4 h-4 rounded border-2 border-gray-600 bg-[#1a1a1d] text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                              />
+                              <span className="text-sm text-gray-300 truncate group-hover:text-white transition-colors flex-1">{project.name}</span>
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Users Filter with Enhanced Styling */}
                 <div className="space-y-3">
-                  <label className="flex items-center justify-between text-sm font-semibold text-gray-200">
+                  <button onClick={() => setOpenFilter(openFilter === 'user' ? null : 'user')} className="w-full flex items-center justify-between text-sm font-semibold text-gray-200">
                     <span className="flex items-center gap-2">
                       <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                       </svg>
                       Users
                     </span>
-                    {filters.userIds.length > 0 && (
-                      <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs font-bold rounded-full border border-purple-500/30">
-                        {filters.userIds.length}
-                      </span>
-                    )}
-                  </label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                    <input
-                      type="text"
-                      value={searchTerms.user}
-                      onChange={(e) => setSearchTerms({ ...searchTerms, user: e.target.value })}
-                      placeholder="Search users..."
-                      className="w-full pl-10 pr-4 py-2.5 bg-[#1a1a1d] border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    />
-                  </div>
-                  <div className="max-h-52 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar">
-                    {filteredUsers.length === 0 ? (
-                      <div className="text-center py-6">
-                        <div className="w-12 h-12 bg-gray-700/30 rounded-full flex items-center justify-center mx-auto mb-2">
-                          <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                          </svg>
-                        </div>
-                        <p className="text-xs text-gray-500">No users found</p>
+                    <div className="flex items-center gap-2">
+                      {filters.userIds.length > 0 && (
+                        <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs font-bold rounded-full border border-purple-500/30">
+                          {filters.userIds.length}
+                        </span>
+                      )}
+                      <ChevronDown className={`w-4 h-4 transition-transform ${openFilter === 'user' ? 'rotate-180' : ''}`} />
+                    </div>
+                  </button>
+                  {openFilter === 'user' && (
+                    <div className="pt-2">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={searchTerms.user}
+                          onChange={(e) => setSearchTerms({ ...searchTerms, user: e.target.value })}
+                          placeholder="Search users..."
+                          className="w-full pl-10 pr-4 py-2.5 bg-[#1a1a1d] border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        />
                       </div>
-                    ) : (
-                      filteredUsers.map(user => (
-                        <label key={user.id} className="flex items-center gap-3 p-2.5 hover:bg-[#1a1a1d] rounded-lg cursor-pointer transition-colors group">
-                          <input
-                            type="checkbox"
-                            checked={filters.userIds.includes(user.id)}
-                            onChange={() => toggleUserFilter(user.id)}
-                            className="w-4 h-4 rounded border-2 border-gray-600 bg-[#1a1a1d] text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer flex-shrink-0"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-300 truncate group-hover:text-white transition-colors">{user.name}</p>
-                            <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                      <div className="mt-2 max-h-52 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar">
+                        {filteredUsers.length === 0 ? (
+                          <div className="text-center py-6">
+                            <div className="w-12 h-12 bg-gray-700/30 rounded-full flex items-center justify-center mx-auto mb-2">
+                              <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                              </svg>
+                            </div>
+                            <p className="text-xs text-gray-500">No users found</p>
                           </div>
-                        </label>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Enhanced Generate Button */}
-              <div className="p-5 border-t border-gray-700/50">
-                <Button
-                  onClick={generateReport}
-                  disabled={loading}
-                  className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 rounded-lg shadow-lg shadow-blue-500/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
-                      Generating Report...
-                    </>
-                  ) : (
-                    <>
-                      <BarChart3 className="w-5 h-5 mr-2" />
-                      Generate Report
-                    </>
+                        ) : (
+                          filteredUsers.map(user => (
+                            <label key={user.id} className="flex items-center gap-3 p-2.5 hover:bg-[#1a1a1d] rounded-lg cursor-pointer transition-colors group">
+                              <input
+                                type="checkbox"
+                                checked={filters.userIds.includes(user.id)}
+                                onChange={() => toggleUserFilter(user.id)}
+                                className="w-4 h-4 rounded border-2 border-gray-600 bg-[#1a1a1d] text-purple-600 focus:ring-2 focus:ring-purple-500 focus:ring-offset-0 cursor-pointer"
+                              />
+                              <div className="flex-1 truncate">
+                                <p className="text-sm text-gray-300 truncate group-hover:text-white transition-colors">{user.name}</p>
+                                <p className="text-xs text-gray-500 truncate group-hover:text-gray-400 transition-colors">{user.email}</p>
+                              </div>
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    </div>
                   )}
-                </Button>
+                </div>
+
+                {/* Generate Button with Enhanced Styling */}
+                <div className="pt-4 border-t border-gray-700/50">
+                  <Button
+                    onClick={generateReport}
+                    disabled={loading}
+                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 rounded-lg shadow-lg shadow-blue-500/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                        Generating Report...
+                      </>
+                    ) : (
+                      <>
+                        <BarChart3 className="w-5 h-5 mr-2" />
+                        Generate Report
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Main Content Area - Enhanced & Responsive */}
-          <div className="lg:col-span-3 space-y-6">
+          <div className="xl:col-span-3 space-y-6">
             {/* Export Buttons - Enhanced */}
             {reportData && (
               <div className="bg-[#2a2a2e] border border-gray-700/50 rounded-xl p-5 shadow-lg">
@@ -590,31 +606,31 @@ export default function ReportsPage() {
 
                   <div className="overflow-x-auto">
                     {reportData.tasks && (
-                      <table className="w-full text-left text-sm">
+                      <table className="w-full text-left text-sm min-w-[600px]">
                         <thead className="border-b border-gray-700">
                           <tr>
-                            <th className="pb-3 pr-4 text-gray-300 font-medium">ID</th>
+                            <th className="pb-3 pr-4 text-gray-300 font-medium w-16">ID</th>
                             <th className="pb-3 pr-4 text-gray-300 font-medium">Title</th>
                             <th className="pb-3 pr-4 text-gray-300 font-medium">Project</th>
-                            <th className="pb-3 pr-4 text-gray-300 font-medium">Status</th>
-                            <th className="pb-3 pr-4 text-gray-300 font-medium">Priority</th>
-                            <th className="pb-3 text-gray-300 font-medium">Deadline</th>
+                            <th className="pb-3 pr-4 text-gray-300 font-medium w-24">Status</th>
+                            <th className="pb-3 pr-4 text-gray-300 font-medium w-20 hidden md:table-cell">Priority</th>
+                            <th className="pb-3 text-gray-300 font-medium w-24 hidden lg:table-cell">Deadline</th>
                           </tr>
                         </thead>
                         <tbody>
                           {reportData.tasks.length === 0 ? (
                             <tr>
-                              <td colSpan="6" className="py-8 text-center text-gray-500">
+                              <td colSpan="4" className="py-8 text-center text-gray-500">
                                 No tasks found matching your filters
                               </td>
                             </tr>
                           ) : (
                             reportData.tasks.map((task) => (
                               <tr key={task.id} className="border-b border-gray-800 hover:bg-[#1a1a1d]">
-                                <td className="py-3 pr-4 text-gray-400">#{task.id}</td>
-                                <td className="py-3 pr-4 text-white font-medium">{task.title}</td>
-                                <td className="py-3 pr-4 text-gray-400">{task.project_name || 'N/A'}</td>
-                                <td className="py-3 pr-4">
+                                <td className="py-3 pr-4 text-gray-400 w-16">#{task.id}</td>
+                                <td className="py-3 pr-4 text-white font-medium max-w-0 truncate" title={task.title}>{task.title}</td>
+                                <td className="py-3 pr-4 text-gray-400 truncate max-w-32" title={task.project_name || 'N/A'}>{task.project_name || 'N/A'}</td>
+                                <td className="py-3 pr-4 w-24">
                                   <span className={`px-2 py-1 rounded text-xs font-medium ${
                                     task.status === 'completed' ? 'bg-green-900/50 text-green-300 border border-green-700' :
                                     task.status === 'in_progress' ? 'bg-blue-900/50 text-blue-300 border border-blue-700' :
@@ -624,8 +640,8 @@ export default function ReportsPage() {
                                     {task.status?.replace('_', ' ')}
                                   </span>
                                 </td>
-                                <td className="py-3 pr-4 text-gray-400 capitalize">{task.priority || 'N/A'}</td>
-                                <td className="py-3 text-gray-400">{task.deadline || 'N/A'}</td>
+                                <td className="py-3 pr-4 text-gray-400 capitalize w-20 hidden md:table-cell">{task.priority || 'N/A'}</td>
+                                <td className="py-3 text-gray-400 w-24 hidden lg:table-cell">{task.deadline || 'N/A'}</td>
                               </tr>
                             ))
                           )}

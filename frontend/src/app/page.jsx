@@ -55,9 +55,9 @@ function ProtectedProjectTimelinePage() {
         selectedProjectId={selectedProjectId}
         currentView={currentView}
       />
-      <div className={`flex-1 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? "ml-0" : "ml-0"}`}>
+      <div className={`flex-1 flex flex-col overflow-y-auto transition-all duration-300 ${isSidebarCollapsed ? "ml-0" : "ml-0"}`}>
         <KanbanProvider>
-          {currentView !== 'projects' && !selectedProjectId && (
+          {currentView !== 'projects' && currentView !== 'reports' && !selectedProjectId && (
             <div className="">
               <ProjectHeader currentView={currentView} />
             </div>
