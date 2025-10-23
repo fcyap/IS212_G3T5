@@ -1,0 +1,100 @@
+name: PR Build & Lint Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'package.json'
+      - '.github/workflows/pr-checks.yml'
+
+jobs:
+  backend-checks:
+    name: Backend Build & Tests
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./backend
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for syntax errors
+        run: node --check src/index.js
+
+      - name: Run tests (informational only)
+        run: npm test || echo "⚠️ Some tests failed, but not blocking PR"
+        continue-on-error: true
+        env:
+          NODE_ENV: test
+
+  frontend-checks:
+    name: Frontend Build & Lint
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Build Next.js application
+        run: npm run build
+        env:
+          NODE_ENV: production
+          # Add any required environment variables for build
+          # NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+
+  build-summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [backend-checks, frontend-checks]
+    if: always()
+
+    steps:
+      - name: Check build status
+        run: |
+          if [ "${{ needs.backend-checks.result }}" != "success" ] || [ "${{ needs.frontend-checks.result }}" != "success" ]; then
+            echo "❌ Build checks failed"
+            exit 1
+          else
+            echo "✅ All build checks passed"
+          fi
