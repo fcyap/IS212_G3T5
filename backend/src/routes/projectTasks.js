@@ -1,11 +1,13 @@
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
-// No longer need sql import - RBAC middleware now uses Supabase directly
+// RBAC middleware now uses Supabase directly
 const {
   requireProjectEdit,
   requireTaskCreation,
   requireTaskModification
 } = require('../middleware/rbac');
+// Import authentication middleware
+const { authMiddleware } = require('../middleware/auth');
 const router = express.Router();
 
 // Constants for validation
@@ -155,7 +157,7 @@ const getMockTasks = (projectId = null) => [
 ].filter(task => projectId ? task.project_id == projectId : true);
 
 // GET /projects/:projectId/tasks - Get all tasks for a specific project
-router.get('/:projectId/tasks', async (req, res) => {
+router.get('/:projectId/tasks', authMiddleware(), async (req, res) => {
   try {
     const { projectId } = req.params;
     const { status, assignedTo, priority, page, limit } = req.query;
@@ -289,8 +291,7 @@ router.get('/:projectId/tasks', async (req, res) => {
 });
 
 // POST /projects/:projectId/tasks - Create a new task
-router.post('/:projectId/tasks', requireTaskCreation(null), async (req, res) => {
-  console.log('🎯 POST /:projectId/tasks route HIT!', req.params, req.originalUrl);
+router.post('/:projectId/tasks', authMiddleware(), requireTaskCreation(), async (req, res) => {
   try {
     const { projectId } = req.params;
     const taskData = req.body;
@@ -330,7 +331,7 @@ router.post('/:projectId/tasks', requireTaskCreation(null), async (req, res) => 
 });
 
 // GET /projects/:projectId/tasks/stats - Get project task statistics
-router.get('/:projectId/tasks/stats', async (req, res) => {
+router.get('/:projectId/tasks/stats', authMiddleware(), async (req, res) => {
   try {
     const { projectId } = req.params;
 
@@ -399,7 +400,7 @@ router.get('/:projectId/tasks/stats', async (req, res) => {
 });
 
 // GET /projects/:projectId/tasks/:taskId - Get a specific task
-router.get('/:projectId/tasks/:taskId', async (req, res) => {
+router.get('/:projectId/tasks/:taskId', authMiddleware(), async (req, res) => {
   try {
     const { projectId, taskId } = req.params;
 
@@ -476,7 +477,7 @@ router.get('/:projectId/tasks/:taskId', async (req, res) => {
 });
 
 // PUT /projects/:projectId/tasks/:taskId - Update a task
-router.put('/:projectId/tasks/:taskId', requireTaskModification(null), async (req, res) => {
+router.put('/:projectId/tasks/:taskId', authMiddleware(), requireTaskModification(), async (req, res) => {
   try {
     const { projectId, taskId } = req.params;
     const updateData = req.body;
@@ -510,7 +511,7 @@ router.put('/:projectId/tasks/:taskId', requireTaskModification(null), async (re
 });
 
 // GET /tasks - Get all tasks
-router.get('/tasks', async (req, res) => {
+router.get('/tasks', authMiddleware(), async (req, res) => {
   try {
     const { status, project_id, assigned_to, priority, page, limit } = req.query;
     let { sortBy = 'created_at', sortOrder = 'desc' } = req.query;
@@ -653,7 +654,7 @@ router.get('/tasks', async (req, res) => {
 });
 
 // GET /projects - Get all projects
-router.get('/', async (req, res) => {
+router.get('/', authMiddleware(), async (req, res) => {
   try {
     const { status, page, limit } = req.query;
     let { sortBy = 'created_at', sortOrder = 'desc' } = req.query;
@@ -746,7 +747,7 @@ router.get('/', async (req, res) => {
 });
 
 // PATCH /projects/:projectId/archive - Archive a project
-router.patch('/:projectId/archive', requireProjectEdit(null), async (req, res) => {
+router.patch('/:projectId/archive', authMiddleware(), requireProjectEdit(), async (req, res) => {
   try {
     const { projectId } = req.params;
 

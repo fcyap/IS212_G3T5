@@ -1,14 +1,25 @@
 /*path: backend/src/auth.roles*/
 const { supabase } = require('../supabase-client');
 
-const getEffectiveRole = async (sql, userId) => {
+const getEffectiveRole = async (userId) => {
   try {
+    console.log('[getEffectiveRole] Called with userId:', userId, 'type:', typeof userId);
+
+    // Validate userId
+    if (!userId || userId === 'null' || userId === 'undefined' || userId === null || userId === undefined) {
+      console.error('[getEffectiveRole] Invalid userId:', userId, 'type:', typeof userId);
+      return { label: 'staff', level: 1, hierarchy: 1, division: null, department: null };
+    }
+
+    console.log('[getEffectiveRole] Querying Supabase for userId:', userId);
     // Use Supabase instead of direct SQL connection
     const { data: user, error } = await supabase
       .from('users')
       .select('role, hierarchy, division, department')
       .eq('id', userId)
       .single();
+
+    console.log('[getEffectiveRole] Query result - user:', user, 'error:', error);
 
     if (error || !user) {
       console.error('Error getting user role from Supabase:', error);
