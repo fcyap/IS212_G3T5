@@ -2042,6 +2042,20 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
+  // Timeline height constants
+  const TIMELINE_HEIGHTS = {
+    BASE: 56,           // Base task row height
+    EXPANDED_DETAILS: 90, // Expanded details section height
+    SUBTASK_ITEM: 28     // Height per subtask item
+  }
+
+  // Helper function to calculate task row height
+  const calculateTaskHeight = (task, isExpanded) => {
+    if (!isExpanded) return TIMELINE_HEIGHTS.BASE
+    const subtaskCount = task.subtasks?.length || 0
+    return TIMELINE_HEIGHTS.BASE + TIMELINE_HEIGHTS.EXPANDED_DETAILS + (subtaskCount * TIMELINE_HEIGHTS.SUBTASK_ITEM)
+  }
+
   // Filter tasks based on blocked filter
   const filteredTasks = showBlockedOnly
     ? (tasks || []).filter(task => task.blocked === true || task.status === 'blocked')
@@ -2582,15 +2596,7 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                     const user = (allUsers || []).find(u => u.id === userId)
                     return user ? (user.name || user.email) : 'Unknown'
                   }).join(', ') || 'Unassigned'
-
-                  // Calculate consistent height for both sides
-                  const baseHeight = 56 // Base task row height
-                  const expandedDetailsHeight = 90 // Height of expanded details section (increased for description)
-                  const subtaskItemHeight = 28 // Height per subtask item (increased for better spacing)
-                  const subtaskCount = task.subtasks?.length || 0
-                  const totalHeight = isExpanded
-                    ? baseHeight + expandedDetailsHeight + (subtaskCount * subtaskItemHeight)
-                    : baseHeight
+                  const totalHeight = calculateTaskHeight(task, isExpanded)
 
                   return (
                     <div
@@ -2642,7 +2648,7 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                               <div className="font-semibold text-gray-300 mb-1">Subtasks ({task.subtasks.length}):</div>
                               <div className="space-y-0">
                                 {task.subtasks.map((subtask) => (
-                                  <div key={subtask.id} className="flex items-center gap-2" style={{ height: '28px' }}>
+                                  <div key={subtask.id} className="flex items-center gap-2" style={{ height: `${TIMELINE_HEIGHTS.SUBTASK_ITEM}px` }}>
                                     <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
                                       subtask.status === 'completed' ? 'bg-green-500' :
                                       subtask.status === 'in_progress' ? 'bg-blue-500' :
@@ -2708,15 +2714,7 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                   const overdueExtensionWidth = showOverdueExtension
                     ? getDatePosition(today) - endPos
                     : 0
-
-                  // Calculate consistent height (must match left side)
-                  const baseHeight = 56
-                  const expandedDetailsHeight = 90
-                  const subtaskItemHeight = 28
-                  const subtaskCount = task.subtasks?.length || 0
-                  const totalHeight = isExpanded
-                    ? baseHeight + expandedDetailsHeight + (subtaskCount * subtaskItemHeight)
-                    : baseHeight
+                  const totalHeight = calculateTaskHeight(task, isExpanded)
 
                   return (
                     <div
@@ -2809,9 +2807,9 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                         </div>
                       </div>
 
-                      {/* Expanded details section - 90px */}
+                      {/* Expanded details section */}
                       {isExpanded && (
-                        <div style={{ height: '90px' }} className="px-2">
+                        <div style={{ height: `${TIMELINE_HEIGHTS.EXPANDED_DETAILS}px` }} className="px-2">
                           {/* Empty space for task details that are shown on the left */}
                         </div>
                       )}
@@ -2830,7 +2828,7 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                             const subtaskBarWidth = subtaskEndPos - subtaskStartPos
 
                             return (
-                              <div key={`subtask-bar-${subtask.id}`} className="relative flex items-center" style={{ height: '28px' }}>
+                              <div key={`subtask-bar-${subtask.id}`} className="relative flex items-center" style={{ height: `${TIMELINE_HEIGHTS.SUBTASK_ITEM}px` }}>
                                 <div
                                   className="absolute h-4 rounded cursor-pointer hover:shadow-lg transition-shadow"
                                   style={{
