@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import { projectService, projectTasksService } from '@/lib/api';
+import { useSession } from '@/components/session-provider';
 
 // Project context for state management
 const ProjectContext = createContext();
@@ -97,21 +98,35 @@ const initialState = {
 // Project provider component
 export function ProjectProvider({ children }) {
   const [state, dispatch] = useReducer(projectReducer, initialState);
+  const { user } = useSession();
 
-  // Load all projects on mount
-  useEffect(() => {
-    loadProjects();
-  }, []);
-
-  const loadProjects = async () => {
+  const loadProjects = useCallback(async () => {
     try {
       dispatch({ type: PROJECT_ACTIONS.SET_LOADING, payload: true });
       const projects = await projectService.getAllProjects();
       dispatch({ type: PROJECT_ACTIONS.SET_PROJECTS, payload: projects });
     } catch (error) {
-      dispatch({ type: PROJECT_ACTIONS.SET_ERROR, payload: error.message });
+      // Only show error if it's not an auth error (user just logged in)
+      if (!error.message.includes('Unauthorized') && !error.message.includes('401')) {
+        dispatch({ type: PROJECT_ACTIONS.SET_ERROR, payload: error.message });
+      } else {
+        // Silently fail for auth errors during initial load
+        dispatch({ type: PROJECT_ACTIONS.SET_LOADING, payload: false });
+      }
     }
-  };
+  }, []);
+
+  // Load all projects on mount
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
+
+  // Reload projects when user logs in
+  useEffect(() => {
+    if (user) {
+      loadProjects();
+    }
+  }, [user, loadProjects]);
 
   const createProject = async (projectData) => {
     try {

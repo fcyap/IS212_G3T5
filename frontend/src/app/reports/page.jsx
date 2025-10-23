@@ -273,31 +273,31 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="min-h-full bg-gradient-to-br from-[#0f0f12] via-[#1a1a1d] to-[#1a1a1d]">
-      <div className="max-w-[1600px] mx-auto p-6">
+    <div className="min-h-full bg-gradient-to-br from-[#0f0f12] via-[#1a1a1d] to-[#1a1a1d] overflow-y-auto">
+      <div className="max-w-[1600px] mx-auto p-3 sm:p-6">
         {/* Header with Gradient */}
-        <div className="mb-8">
-          <div className="flex items-center gap-4 mb-3">
-            <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg shadow-blue-500/20">
-              <BarChart3 className="w-7 h-7 text-white" />
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 mb-3">
+            <div className="p-2.5 sm:p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg shadow-blue-500/20">
+              <BarChart3 className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
             </div>
             <div>
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
                 Task & Progress Reports
               </h1>
-              <p className="text-gray-400 mt-1">Generate comprehensive analytics on task completion and team progress</p>
+              <p className="text-sm sm:text-base text-gray-400 mt-1">Generate comprehensive analytics on task completion and team progress</p>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 sm:gap-6">
           {/* Enhanced Filters Sidebar */}
           <div className="xl:col-span-1">
-            <div className="bg-[#2a2a2e] border border-gray-700/50 rounded-xl shadow-xl sticky top-6 overflow-hidden">
+            <div className="bg-[#2a2a2e] border border-gray-700/50 rounded-xl shadow-xl xl:sticky xl:top-6 overflow-hidden">
               {/* Filter Header */}
-              <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-4 border-b border-gray-700">
+              <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-3 sm:p-4 border-b border-gray-700">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
                     <Filter className="w-5 h-5 text-blue-400" />
                     Filters
                   </h2>

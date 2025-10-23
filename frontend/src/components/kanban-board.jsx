@@ -197,7 +197,7 @@ export function KanbanBoard({ projectId = null }) {
   const blocked = tasks.filter(t => t.workflow === "blocked")
 
   return (
-    <div className="flex-1 bg-[#1a1a1d] p-6">
+    <div className="flex-1 bg-[#1a1a1d] p-3 sm:p-6 overflow-hidden">
       {banner && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
           <div className="rounded-md bg-emerald-600 px-4 py-2 text-white shadow-lg ring-1 ring-black/10">
@@ -205,12 +205,12 @@ export function KanbanBoard({ projectId = null }) {
           </div>
         </div>
       )}
-      <div className="overflow-x-auto">
-        <div className="flex gap-6 w-max flex-nowrap">
+      <div className="overflow-x-auto overflow-y-hidden h-full">
+        <div className="flex gap-3 sm:gap-6 min-w-max h-full pb-4">
 
           {/* To do Column */}
-          <div className="w-[360px] flex-none space-y-4">
-            <div className="flex items-center justify-between">
+          <div className="w-[280px] sm:w-[360px] flex-none space-y-4 flex flex-col">
+            <div className="flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-2">
                 <h2 className="text-white font-medium">To do</h2>
                 <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
@@ -220,7 +220,7 @@ export function KanbanBoard({ projectId = null }) {
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 overflow-y-auto flex-1">
               {isAdding && editorLane === "pending" && editorPosition === "top" && (
                 <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
               )}
@@ -257,15 +257,15 @@ export function KanbanBoard({ projectId = null }) {
           </div>
 
           {/* Doing Column */}
-          <div className="w-[360px] flex-none space-y-4">
-            <div className="flex items-center gap-2">
+          <div className="w-[280px] sm:w-[360px] flex-none space-y-4 flex flex-col">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <h2 className="text-white font-medium">Doing</h2>
               <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
                 {doing.length + (isAdding && editorLane === "in_progress" ? 1 : 0)}
               </span>
 
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3 overflow-y-auto flex-1">
               {isAdding && editorLane === "in_progress" && editorPosition === "top" && (
                 <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
               )}
@@ -303,14 +303,14 @@ export function KanbanBoard({ projectId = null }) {
           </div>
 
           {/* Done Column */}
-          <div className="w-[360px] flex-none space-y-4">
-            <div className="flex items-center gap-2">
+          <div className="w-[280px] sm:w-[360px] flex-none space-y-4 flex flex-col">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <h2 className="text-white font-medium">Done</h2>
               <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
                 {done.length + (isAdding && editorLane === "completed" ? 1 : 0)}
               </span>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3 overflow-y-auto flex-1">
               {isAdding && editorLane === "completed" && editorPosition === "top" && (
                 <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
               )}
@@ -345,15 +345,15 @@ export function KanbanBoard({ projectId = null }) {
             </div>
           </div>
           {/* Blocked Column */}
-          <div className="w-[360px] flex-none space-y-4">
-            <div className="flex items-center gap-2">
+          <div className="w-[280px] sm:w-[360px] flex-none space-y-4 flex flex-col">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <h2 className="text-white font-medium">Blocked</h2>
               <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
                 {blocked.length + (isAdding && editorLane === "blocked" ? 1 : 0)}
               </span>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 overflow-y-auto flex-1">
               {isAdding && editorLane === "blocked" && editorPosition === "top" && (
                 <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
               )}
