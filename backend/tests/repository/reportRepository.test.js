@@ -270,4 +270,197 @@ describe('ReportRepository', () => {
       expect(supabase.from).toHaveBeenCalledWith('tasks');
     });
   });
+
+  describe('getAllDepartments', () => {
+    test('should retrieve all unique departments', async () => {
+      const mockUsers = [
+        { department: 'Engineering' },
+        { department: 'Engineering.Backend' },
+        { department: 'HR' },
+        { department: 'Engineering' }
+      ];
+
+      mockSupabase.then.mockResolvedValue({ data: mockUsers, error: null });
+
+      const result = await reportRepository.getAllDepartments();
+
+      expect(supabase.from).toHaveBeenCalledWith('users');
+      expect(mockSupabase.select).toHaveBeenCalledWith('department');
+      expect(result.data).toEqual(['Engineering', 'Engineering.Backend', 'HR']);
+    });
+
+    test('should handle errors when fetching departments', async () => {
+      const mockError = { message: 'Database error' };
+      mockSupabase.then.mockResolvedValue({ data: null, error: mockError });
+
+      const result = await reportRepository.getAllDepartments();
+
+      expect(result).toEqual({ data: null, error: mockError });
+    });
+  });
+
+  describe('getDepartmentComparison', () => {
+    test('should return department statistics with task counts by status and priority', async () => {
+      const mockUsers = [
+        { id: 1, name: 'User 1', department: 'Engineering' },
+        { id: 2, name: 'User 2', department: 'Engineering.Backend' },
+        { id: 3, name: 'User 3', department: 'HR' }
+      ];
+
+      const mockTasks = [
+        { id: 1, assigned_to: [1], status: 'completed', priority: 'high' },
+        { id: 2, assigned_to: [1, 2], status: 'in_progress', priority: 'medium' },
+        { id: 3, assigned_to: [2], status: 'completed', priority: 'low' },
+        { id: 4, assigned_to: [3], status: 'pending', priority: 'high' }
+      ];
+
+      // Mock users query
+      const mockUsersQuery = {
+        from: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        or: jest.fn().mockReturnThis(),
+        then: jest.fn().mockResolvedValue({ data: mockUsers, error: null })
+      };
+
+      supabase.from = jest.fn((table) => {
+        if (table === 'users') return mockUsersQuery;
+        return mockSupabase;
+      });
+
+      // Mock getTasksForReport call
+      jest.spyOn(reportRepository, 'getTasksForReport').mockResolvedValue({
+        data: mockTasks,
+        error: null
+      });
+
+      const filters = {
+        departmentIds: ['Engineering', 'HR'],
+        startDate: '2025-10-01',
+        endDate: '2025-10-31'
+      };
+
+      const result = await reportRepository.getDepartmentComparison(filters);
+
+      expect(result.error).toBeNull();
+      expect(result.data).toHaveLength(2); // Engineering and HR
+      
+      const engineeringDept = result.data.find(d => d.department === 'Engineering');
+      expect(engineeringDept).toBeDefined();
+      expect(engineeringDept.totalTasks).toBeGreaterThan(0);
+      expect(engineeringDept.statusCounts).toHaveProperty('pending');
+      expect(engineeringDept.statusCounts).toHaveProperty('in_progress');
+      expect(engineeringDept.statusCounts).toHaveProperty('completed');
+      expect(engineeringDept.priorityCounts).toHaveProperty('low');
+      expect(engineeringDept.priorityCounts).toHaveProperty('medium');
+      expect(engineeringDept.priorityCounts).toHaveProperty('high');
+      expect(engineeringDept.completionRate).toBeGreaterThanOrEqual(0);
+      expect(engineeringDept.averageTasksPerMember).toBeGreaterThanOrEqual(0);
+    });
+
+    test('should handle empty department list', async () => {
+      const mockUsersQuery = {
+        from: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        or: jest.fn().mockReturnThis(),
+        then: jest.fn().mockResolvedValue({ data: [], error: null })
+      };
+
+      supabase.from = jest.fn(() => mockUsersQuery);
+
+      const result = await reportRepository.getDepartmentComparison({ departmentIds: [] });
+
+      expect(result.data).toEqual([]);
+      expect(result.error).toBeNull();
+    });
+  });
+
+  describe('getWeeklyMonthlyStats', () => {
+    test('should group tasks by week', async () => {
+      const mockTasks = [
+        { id: 1, created_at: '2025-10-01T10:00:00Z', status: 'completed', priority: 'high' },
+        { id: 2, created_at: '2025-10-08T10:00:00Z', status: 'in_progress', priority: 'medium' },
+        { id: 3, created_at: '2025-10-15T10:00:00Z', status: 'completed', priority: 'low' }
+      ];
+
+      jest.spyOn(reportRepository, 'getTasksForReport').mockResolvedValue({
+        data: mockTasks,
+        error: null
+      });
+
+      const filters = {
+        startDate: '2025-10-01',
+        endDate: '2025-10-31',
+        interval: 'week'
+      };
+
+      const result = await reportRepository.getWeeklyMonthlyStats(filters);
+
+      expect(result.error).toBeNull();
+      expect(Array.isArray(result.data)).toBe(true);
+      expect(result.data.length).toBeGreaterThan(0);
+      
+      const firstPeriod = result.data[0];
+      expect(firstPeriod).toHaveProperty('period');
+      expect(firstPeriod).toHaveProperty('totalTasks');
+      expect(firstPeriod).toHaveProperty('statusCounts');
+      expect(firstPeriod).toHaveProperty('priorityCounts');
+      expect(firstPeriod).toHaveProperty('completionRate');
+      expect(firstPeriod.period).toMatch(/^\d{4}-W\d{2}$/); // Format: YYYY-WNN
+    });
+
+    test('should group tasks by month', async () => {
+      const mockTasks = [
+        { id: 1, created_at: '2025-09-15T10:00:00Z', status: 'completed', priority: 'high' },
+        { id: 2, created_at: '2025-10-05T10:00:00Z', status: 'in_progress', priority: 'medium' },
+        { id: 3, created_at: '2025-10-20T10:00:00Z', status: 'completed', priority: 'low' }
+      ];
+
+      jest.spyOn(reportRepository, 'getTasksForReport').mockResolvedValue({
+        data: mockTasks,
+        error: null
+      });
+
+      const filters = {
+        startDate: '2025-09-01',
+        endDate: '2025-10-31',
+        interval: 'month'
+      };
+
+      const result = await reportRepository.getWeeklyMonthlyStats(filters);
+
+      expect(result.error).toBeNull();
+      expect(Array.isArray(result.data)).toBe(true);
+      expect(result.data.length).toBeGreaterThanOrEqual(1);
+      
+      const firstPeriod = result.data[0];
+      expect(firstPeriod.period).toMatch(/^\d{4}-\d{2}$/); // Format: YYYY-MM
+    });
+
+    test('should calculate correct completion rates for each period', async () => {
+      const mockTasks = [
+        { id: 1, created_at: '2025-10-01T10:00:00Z', status: 'completed', priority: 'high' },
+        { id: 2, created_at: '2025-10-02T10:00:00Z', status: 'completed', priority: 'high' },
+        { id: 3, created_at: '2025-10-03T10:00:00Z', status: 'pending', priority: 'medium' }
+      ];
+
+      jest.spyOn(reportRepository, 'getTasksForReport').mockResolvedValue({
+        data: mockTasks,
+        error: null
+      });
+
+      const filters = {
+        startDate: '2025-10-01',
+        endDate: '2025-10-31',
+        interval: 'month'
+      };
+
+      const result = await reportRepository.getWeeklyMonthlyStats(filters);
+
+      expect(result.error).toBeNull();
+      const monthPeriod = result.data.find(p => p.period === '2025-10');
+      expect(monthPeriod).toBeDefined();
+      expect(monthPeriod.completionRate).toBe(67); // 2/3 = 66.67 rounded to 67
+    });
+  });
 });
+

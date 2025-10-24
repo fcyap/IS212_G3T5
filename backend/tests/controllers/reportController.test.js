@@ -511,4 +511,230 @@ describe('ReportController', () => {
       });
     });
   });
+
+  describe('POST /api/reports/departments', () => {
+    test('should generate departmental performance report with valid filters', async () => {
+      const mockReport = {
+        summary: {
+          totalDepartments: 2,
+          totalTasks: 25,
+          totalMembers: 10,
+          averageCompletionRate: 50,
+          overallStatusCounts: {
+            pending: 5,
+            in_progress: 8,
+            completed: 12,
+            cancelled: 0
+          },
+          overallPriorityCounts: {
+            low: 8,
+            medium: 10,
+            high: 7
+          }
+        },
+        departments: [
+          {
+            department: 'Engineering',
+            totalTasks: 15,
+            memberCount: 6,
+            statusCounts: { pending: 3, in_progress: 5, completed: 7, cancelled: 0 },
+            priorityCounts: { low: 5, medium: 6, high: 4 },
+            completionRate: 47,
+            averageTasksPerMember: 2.5
+          },
+          {
+            department: 'HR',
+            totalTasks: 10,
+            memberCount: 4,
+            statusCounts: { pending: 2, in_progress: 3, completed: 5, cancelled: 0 },
+            priorityCounts: { low: 3, medium: 4, high: 3 },
+            completionRate: 50,
+            averageTasksPerMember: 2.5
+          }
+        ],
+        timeSeries: null,
+        insights: {
+          mostProductiveDepartment: 'HR',
+          leastProductiveDepartment: 'Engineering',
+          highestWorkloadDepartment: 'Engineering'
+        },
+        filters: {
+          departmentIds: ['Engineering', 'HR'],
+          startDate: '2025-10-01',
+          endDate: '2025-10-31',
+          interval: undefined
+        },
+        generatedAt: '2025-10-24T10:00:00.000Z',
+        generatedBy: 1,
+        reportType: 'departmental_performance'
+      };
+
+      reportService.generateDepartmentalPerformanceReport.mockResolvedValue(mockReport);
+
+      req.body = {
+        departmentIds: ['Engineering', 'HR'],
+        startDate: '2025-10-01',
+        endDate: '2025-10-31'
+      };
+
+      await reportController.generateDepartmentalPerformanceReport(req, res, next);
+
+      expect(reportService.generateDepartmentalPerformanceReport).toHaveBeenCalledWith(req.user, {
+        departmentIds: ['Engineering', 'HR'],
+        startDate: '2025-10-01',
+        endDate: '2025-10-31',
+        interval: undefined,
+        projectIds: undefined
+      });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        data: mockReport
+      });
+    });
+
+    test('should generate departmental performance report with weekly interval', async () => {
+      const mockReport = {
+        summary: {
+          totalDepartments: 1,
+          totalTasks: 10,
+          totalMembers: 5,
+          averageCompletionRate: 50,
+          overallStatusCounts: { pending: 2, in_progress: 3, completed: 5, cancelled: 0 },
+          overallPriorityCounts: { low: 3, medium: 4, high: 3 }
+        },
+        departments: [
+          {
+            department: 'Engineering',
+            totalTasks: 10,
+            memberCount: 5,
+            statusCounts: { pending: 2, in_progress: 3, completed: 5, cancelled: 0 },
+            priorityCounts: { low: 3, medium: 4, high: 3 },
+            completionRate: 50,
+            averageTasksPerMember: 2.0
+          }
+        ],
+        timeSeries: [
+          {
+            period: '2025-W40',
+            totalTasks: 5,
+            statusCounts: { pending: 1, in_progress: 2, completed: 2, cancelled: 0 },
+            priorityCounts: { low: 2, medium: 2, high: 1 },
+            completionRate: 40
+          },
+          {
+            period: '2025-W41',
+            totalTasks: 5,
+            statusCounts: { pending: 1, in_progress: 1, completed: 3, cancelled: 0 },
+            priorityCounts: { low: 1, medium: 2, high: 2 },
+            completionRate: 60
+          }
+        ],
+        insights: {
+          mostProductiveDepartment: 'Engineering',
+          leastProductiveDepartment: 'Engineering',
+          highestWorkloadDepartment: 'Engineering'
+        },
+        filters: {
+          departmentIds: ['Engineering'],
+          startDate: '2025-10-01',
+          endDate: '2025-10-31',
+          interval: 'week'
+        },
+        generatedAt: '2025-10-24T10:00:00.000Z',
+        generatedBy: 1,
+        reportType: 'departmental_performance'
+      };
+
+      reportService.generateDepartmentalPerformanceReport.mockResolvedValue(mockReport);
+
+      req.body = {
+        departmentIds: ['Engineering'],
+        startDate: '2025-10-01',
+        endDate: '2025-10-31',
+        interval: 'week'
+      };
+
+      await reportController.generateDepartmentalPerformanceReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        data: mockReport
+      });
+    });
+
+    test('should return 400 for invalid date format', async () => {
+      req.body = {
+        startDate: '10-01-2025',
+        endDate: '2025-10-31'
+      };
+
+      await reportController.generateDepartmentalPerformanceReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Invalid startDate format. Use YYYY-MM-DD'
+      });
+    });
+
+    test('should return 400 when endDate is before startDate', async () => {
+      req.body = {
+        startDate: '2025-10-31',
+        endDate: '2025-10-01'
+      };
+
+      await reportController.generateDepartmentalPerformanceReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'endDate must be after or equal to startDate'
+      });
+    });
+
+    test('should return 400 for invalid interval', async () => {
+      req.body = {
+        startDate: '2025-10-01',
+        endDate: '2025-10-31',
+        interval: 'daily'
+      };
+
+      await reportController.generateDepartmentalPerformanceReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Invalid interval. Must be "week" or "month"'
+      });
+    });
+
+    test('should return 401 when user is not authenticated', async () => {
+      req.user = null;
+
+      await reportController.generateDepartmentalPerformanceReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Authentication required'
+      });
+    });
+
+    test('should handle service errors', async () => {
+      const mockError = new Error('Database connection failed');
+      reportService.generateDepartmentalPerformanceReport.mockRejectedValue(mockError);
+
+      req.body = {
+        startDate: '2025-10-01',
+        endDate: '2025-10-31'
+      };
+
+      await reportController.generateDepartmentalPerformanceReport(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(mockError);
+    });
+  });
 });
+

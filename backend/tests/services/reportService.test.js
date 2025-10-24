@@ -639,4 +639,228 @@ describe('ReportService', () => {
       expect(result.errors).toContain('Invalid status value: invalid_status');
     });
   });
+
+  describe('generateDepartmentalPerformanceReport', () => {
+    test('should generate departmental performance report for Admin with all departments', async () => {
+      const mockAdminUser = {
+        id: 1,
+        role: 'admin',
+        department: 'Corporate'
+      };
+
+      const mockDepartments = ['Engineering', 'HR', 'Sales'];
+      const mockDepartmentComparison = [
+        {
+          department: 'Engineering',
+          totalTasks: 15,
+          memberCount: 5,
+          statusCounts: { pending: 3, in_progress: 5, completed: 7, cancelled: 0 },
+          priorityCounts: { low: 4, medium: 6, high: 5 },
+          completionRate: 47,
+          averageTasksPerMember: 3.0
+        },
+        {
+          department: 'HR',
+          totalTasks: 10,
+          memberCount: 3,
+          statusCounts: { pending: 2, in_progress: 3, completed: 5, cancelled: 0 },
+          priorityCounts: { low: 3, medium: 4, high: 3 },
+          completionRate: 50,
+          averageTasksPerMember: 3.3
+        },
+        {
+          department: 'Sales',
+          totalTasks: 20,
+          memberCount: 8,
+          statusCounts: { pending: 5, in_progress: 5, completed: 10, cancelled: 0 },
+          priorityCounts: { low: 8, medium: 8, high: 4 },
+          completionRate: 50,
+          averageTasksPerMember: 2.5
+        }
+      ];
+
+      reportRepository.getAllDepartments.mockResolvedValue({
+        data: mockDepartments,
+        error: null
+      });
+
+      reportRepository.getDepartmentComparison.mockResolvedValue({
+        data: mockDepartmentComparison,
+        error: null
+      });
+
+      const filters = {
+        startDate: '2025-10-01',
+        endDate: '2025-10-31'
+      };
+
+      const result = await reportService.generateDepartmentalPerformanceReport(mockAdminUser, filters);
+
+      expect(result).toHaveProperty('summary');
+      expect(result).toHaveProperty('departments');
+      expect(result).toHaveProperty('insights');
+      expect(result).toHaveProperty('reportType', 'departmental_performance');
+      
+      expect(result.summary.totalDepartments).toBe(3);
+      expect(result.summary.totalTasks).toBe(45);
+      expect(result.summary.totalMembers).toBe(16);
+      expect(result.summary.averageCompletionRate).toBe(49); // (47+50+50)/3
+      
+      expect(result.insights.mostProductiveDepartment).toBeDefined();
+      expect(result.insights.leastProductiveDepartment).toBeDefined();
+      expect(result.insights.highestWorkloadDepartment).toBeDefined();
+    });
+
+    test('should generate departmental performance report for HR with department hierarchy filtering', async () => {
+      const mockHRUser = {
+        id: 2,
+        role: 'hr',
+        department: 'Engineering'
+      };
+
+      const mockDepartmentUsers = [
+        { id: 1, department: 'Engineering' },
+        { id: 2, department: 'Engineering.Backend' },
+        { id: 3, department: 'Engineering.Frontend' }
+      ];
+
+      const mockDepartmentComparison = [
+        {
+          department: 'Engineering',
+          totalTasks: 15,
+          memberCount: 5,
+          statusCounts: { pending: 3, in_progress: 5, completed: 7, cancelled: 0 },
+          priorityCounts: { low: 4, medium: 6, high: 5 },
+          completionRate: 47,
+          averageTasksPerMember: 3.0
+        }
+      ];
+
+      reportRepository.getUsersByDepartmentHierarchy.mockResolvedValue({
+        data: mockDepartmentUsers,
+        error: null
+      });
+
+      reportRepository.getDepartmentComparison.mockResolvedValue({
+        data: mockDepartmentComparison,
+        error: null
+      });
+
+      const filters = {
+        startDate: '2025-10-01',
+        endDate: '2025-10-31'
+      };
+
+      const result = await reportService.generateDepartmentalPerformanceReport(mockHRUser, filters);
+
+      expect(result.summary.totalDepartments).toBe(1);
+      expect(result.departments).toHaveLength(1);
+      expect(result.departments[0].department).toBe('Engineering');
+    });
+
+    test('should include weekly time-series data when interval is specified', async () => {
+      const mockAdminUser = {
+        id: 1,
+        role: 'admin',
+        department: 'Corporate'
+      };
+
+      const mockDepartments = ['Engineering'];
+      const mockDepartmentComparison = [
+        {
+          department: 'Engineering',
+          totalTasks: 10,
+          memberCount: 5,
+          statusCounts: { pending: 2, in_progress: 3, completed: 5, cancelled: 0 },
+          priorityCounts: { low: 3, medium: 4, high: 3 },
+          completionRate: 50,
+          averageTasksPerMember: 2.0
+        }
+      ];
+
+      const mockWeeklyStats = [
+        {
+          period: '2025-W40',
+          totalTasks: 5,
+          statusCounts: { pending: 1, in_progress: 2, completed: 2, cancelled: 0 },
+          priorityCounts: { low: 2, medium: 2, high: 1 },
+          completionRate: 40
+        },
+        {
+          period: '2025-W41',
+          totalTasks: 5,
+          statusCounts: { pending: 1, in_progress: 1, completed: 3, cancelled: 0 },
+          priorityCounts: { low: 1, medium: 2, high: 2 },
+          completionRate: 60
+        }
+      ];
+
+      reportRepository.getAllDepartments.mockResolvedValue({
+        data: mockDepartments,
+        error: null
+      });
+
+      reportRepository.getDepartmentComparison.mockResolvedValue({
+        data: mockDepartmentComparison,
+        error: null
+      });
+
+      reportRepository.getWeeklyMonthlyStats.mockResolvedValue({
+        data: mockWeeklyStats,
+        error: null
+      });
+
+      const filters = {
+        startDate: '2025-10-01',
+        endDate: '2025-10-31',
+        interval: 'week'
+      };
+
+      const result = await reportService.generateDepartmentalPerformanceReport(mockAdminUser, filters);
+
+      expect(result.timeSeries).toBeDefined();
+      expect(result.timeSeries).toHaveLength(2);
+      expect(result.timeSeries[0].period).toBe('2025-W40');
+      expect(result.filters.interval).toBe('week');
+    });
+
+    test('should reject unauthorized non-HR/Admin users', async () => {
+      const mockUser = {
+        id: 3,
+        role: 'staff',
+        department: 'Engineering'
+      };
+
+      const filters = {};
+
+      await expect(
+        reportService.generateDepartmentalPerformanceReport(mockUser, filters)
+      ).rejects.toThrow('Unauthorized: Only HR and Admin staff can generate departmental reports');
+    });
+
+    test('should handle errors from repository layer', async () => {
+      const mockAdminUser = {
+        id: 1,
+        role: 'admin',
+        department: 'Corporate'
+      };
+
+      reportRepository.getAllDepartments.mockResolvedValue({
+        data: ['Engineering'],
+        error: null
+      });
+
+      reportRepository.getDepartmentComparison.mockResolvedValue({
+        data: null,
+        error: { message: 'Database connection error' }
+      });
+
+      const filters = {};
+
+      await expect(
+        reportService.generateDepartmentalPerformanceReport(mockAdminUser, filters)
+      ).rejects.toThrow('Database connection error');
+    });
+  });
 });
+

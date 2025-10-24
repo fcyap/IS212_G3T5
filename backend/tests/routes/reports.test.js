@@ -27,6 +27,7 @@ describe('Report Endpoints - Green & Red Testing Suite', () => {
     app.post('/api/reports/tasks', mockAuthMiddleware, mockRequireRole(), mockCheckDepartmentAccess(), reportController.generateTaskReport);
     app.post('/api/reports/users/productivity', mockAuthMiddleware, mockRequireRole(), mockCheckDepartmentAccess(), reportController.generateUserProductivityReport);
     app.post('/api/reports/projects', mockAuthMiddleware, mockRequireRole(), mockCheckDepartmentAccess(), reportController.generateProjectReport);
+    app.post('/api/reports/departments', mockAuthMiddleware, mockRequireRole(), mockCheckDepartmentAccess(), reportController.generateDepartmentalPerformanceReport);
     app.post('/api/reports/export/pdf', mockAuthMiddleware, mockRequireRole(), reportController.exportReportToPDF);
     app.post('/api/reports/export/spreadsheet', mockAuthMiddleware, mockRequireRole(), reportController.exportReportToSpreadsheet);
     app.get('/api/reports/filters/projects', mockAuthMiddleware, mockRequireRole(), reportController.getAvailableProjects);
@@ -75,6 +76,18 @@ describe('Report Endpoints - Green & Red Testing Suite', () => {
     reportService.getAvailableDepartments = jest.fn().mockResolvedValue([
       'Engineering'
     ]);
+
+    reportService.generateDepartmentalPerformanceReport = jest.fn().mockResolvedValue({
+      summary: {
+        totalDepartments: 2,
+        totalTasks: 25,
+        totalMembers: 10,
+        averageCompletionRate: 50
+      },
+      departments: [],
+      timeSeries: null,
+      insights: {}
+    });
   }
 
   describe('GREEN: Task Report Generation - Happy Path', () => {
@@ -220,4 +233,113 @@ describe('Report Endpoints - Green & Red Testing Suite', () => {
       expect(exportResp.headers['content-type']).toContain('pdf');
     });
   });
+
+  describe('GREEN: Departmental Performance Report - Happy Path', () => {
+    test(' Generate departmental report with no filters', async () => {
+      const response = await request(app).post('/api/reports/departments').send({});
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toHaveProperty('summary');
+      expect(response.body.data).toHaveProperty('departments');
+    });
+
+    test(' Generate departmental report with department filter', async () => {
+      const response = await request(app).post('/api/reports/departments').send({
+        departmentIds: ['Engineering', 'HR']
+      });
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    test(' Generate departmental report with date range', async () => {
+      const response = await request(app).post('/api/reports/departments').send({
+        startDate: '2025-10-01',
+        endDate: '2025-10-31'
+      });
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    test(' Generate departmental report with weekly interval', async () => {
+      const response = await request(app).post('/api/reports/departments').send({
+        startDate: '2025-10-01',
+        endDate: '2025-10-31',
+        interval: 'week'
+      });
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    test(' Generate departmental report with monthly interval', async () => {
+      const response = await request(app).post('/api/reports/departments').send({
+        startDate: '2025-09-01',
+        endDate: '2025-10-31',
+        interval: 'month'
+      });
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    test(' Generate departmental report with combined filters', async () => {
+      const response = await request(app).post('/api/reports/departments').send({
+        departmentIds: ['Engineering'],
+        startDate: '2025-10-01',
+        endDate: '2025-10-31',
+        interval: 'week',
+        projectIds: [1, 2]
+      });
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+  });
+
+  describe('RED: Departmental Performance Report - Validation Errors', () => {
+    test(' Reject invalid startDate format', async () => {
+      const response = await request(app).post('/api/reports/departments').send({
+        startDate: '10-01-2025',
+        endDate: '2025-10-31'
+      });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('startDate format');
+    });
+
+    test(' Reject invalid endDate format', async () => {
+      const response = await request(app).post('/api/reports/departments').send({
+        startDate: '2025-10-01',
+        endDate: '31/10/2025'
+      });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('endDate format');
+    });
+
+    test(' Reject endDate before startDate', async () => {
+      const response = await request(app).post('/api/reports/departments').send({
+        startDate: '2025-10-31',
+        endDate: '2025-10-01'
+      });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('endDate must be after');
+    });
+
+    test(' Reject invalid interval value', async () => {
+      const response = await request(app).post('/api/reports/departments').send({
+        startDate: '2025-10-01',
+        endDate: '2025-10-31',
+        interval: 'daily'
+      });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('Invalid interval');
+    });
+
+    test(' Reject invalid interval value "yearly"', async () => {
+      const response = await request(app).post('/api/reports/departments').send({
+        startDate: '2025-10-01',
+        endDate: '2025-10-31',
+        interval: 'yearly'
+      });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toMatch(/Invalid interval/i);
+    });
+  });
 });
+
