@@ -17,7 +17,7 @@ const projectRepository = require('../../src/repository/projectRepository');
 const projectMemberRepository = require('../../src/repository/projectMemberRepository');
 const userRepository = require('../../src/repository/userRepository');
 const taskService = require('../../src/services/taskService');
-const tasksRouter = require('../../src/routes/Tasks');
+const tasksRouter = require('../../src/routes/tasks');
 
 describe('Task access RBAC (integration)', () => {
   let app;

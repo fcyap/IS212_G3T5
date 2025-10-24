@@ -8,7 +8,7 @@ jest.mock('../../src/middleware/rbac', () => ({
 }));
 
 const taskService = require('../../src/services/taskService');
-const tasksRouter = require('../../src/routes/Tasks');
+const tasksRouter = require('../../src/routes/tasks');
 
 describe('Tasks routes', () => {
   let app;

@@ -14,7 +14,7 @@ const taskRepository = require('../../src/repository/taskRepository');
 const projectRepository = require('../../src/repository/projectRepository');
 const notificationService = require('../../src/services/notificationService');
 
-const tasksRouter = require('../../src/routes/Tasks');
+const tasksRouter = require('../../src/routes/tasks');
 
 describe('Tasks routes - project assignment integration', () => {
   let app;

@@ -7,6 +7,14 @@ jest.mock('../../src/repository/taskAttachmentRepository');
 jest.mock('../../src/repository/taskRepository');
 jest.mock('../../src/utils/supabase');
 
+// Mock the repository functions
+taskAttachmentRepository.getTotalSize = jest.fn();
+taskAttachmentRepository.create = jest.fn();
+taskAttachmentRepository.getByTaskId = jest.fn();
+taskAttachmentRepository.getById = jest.fn();
+taskAttachmentRepository.delete = jest.fn();
+taskRepository.getById = jest.fn();
+
 describe('TaskAttachmentService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -582,11 +590,12 @@ describe('TaskAttachmentService', () => {
         id: attachmentId,
         task_id: taskId,
         file_name: 'document.pdf',
-        file_url: 'https://storage.example.com/attachments/123/document.pdf',
+        file_url: 'https://storage.example.com/task-attachments/123/document.pdf',
         uploaded_by: userId
       };
 
       taskAttachmentRepository.getById.mockResolvedValue(mockAttachment);
+      taskAttachmentRepository.deleteById.mockResolvedValue(true);
 
       supabase.storage = {
         from: jest.fn().mockReturnValue({
@@ -616,7 +625,7 @@ describe('TaskAttachmentService', () => {
           file_name: 'document.pdf',
           file_type: 'application/pdf',
           file_size: 5242880,
-          file_url: 'https://storage.example.com/attachments/123/document.pdf',
+          file_url: 'https://storage.example.com/task-attachments/attachments/123/document.pdf',
           uploaded_by: 1
         },
         {
@@ -625,7 +634,7 @@ describe('TaskAttachmentService', () => {
           file_name: 'image.png',
           file_type: 'image/png',
           file_size: 2097152,
-          file_url: 'https://storage.example.com/attachments/123/image.png',
+          file_url: 'https://storage.example.com/task-attachments/attachments/123/image.png',
           uploaded_by: 1
         }
       ];
@@ -633,15 +642,24 @@ describe('TaskAttachmentService', () => {
       taskAttachmentRepository.getByTaskId.mockResolvedValue(mockSourceAttachments);
       taskAttachmentRepository.getTotalSize.mockResolvedValue(0);
 
+      // Mock storage operations for _copyInStorage
       supabase.storage = {
         from: jest.fn().mockReturnValue({
-          copy: jest.fn().mockResolvedValue({
+          download: jest.fn().mockResolvedValue({
+            data: Buffer.from('mock file content'),
+            error: null
+          }),
+          upload: jest.fn().mockResolvedValue({
             data: { path: 'copied-path' },
             error: null
           }),
-          getPublicUrl: jest.fn().mockReturnValue({
-            data: { publicUrl: 'https://storage.example.com/attachments/456/document.pdf' }
-          })
+          getPublicUrl: jest.fn()
+            .mockReturnValueOnce({
+              data: { publicUrl: 'https://storage.example.com/task-attachments/attachments/456/document.pdf' }
+            })
+            .mockReturnValueOnce({
+              data: { publicUrl: 'https://storage.example.com/task-attachments/attachments/456/image.png' }
+            })
         })
       };
 
@@ -651,7 +669,7 @@ describe('TaskAttachmentService', () => {
         file_name: 'document.pdf',
         file_type: 'application/pdf',
         file_size: 5242880,
-        file_url: 'https://storage.example.com/attachments/456/document.pdf',
+        file_url: 'https://storage.example.com/task-attachments/attachments/456/document.pdf',
         uploaded_by: userId
       });
 
@@ -661,7 +679,7 @@ describe('TaskAttachmentService', () => {
         file_name: 'image.png',
         file_type: 'image/png',
         file_size: 2097152,
-        file_url: 'https://storage.example.com/attachments/456/image.png',
+        file_url: 'https://storage.example.com/task-attachments/attachments/456/image.png',
         uploaded_by: userId
       });
 
@@ -730,7 +748,7 @@ describe('TaskAttachmentService', () => {
         task_id: taskId,
         file_name: 'document.pdf',
         file_type: 'application/pdf',
-        file_url: 'https://storage.example.com/attachments/123/document.pdf'
+        file_url: 'https://storage.example.com/task-attachments/attachments/123/document.pdf'
       };
 
       const mockFileBuffer = Buffer.from('mock file content');
@@ -773,7 +791,7 @@ describe('TaskAttachmentService', () => {
         task_id: taskId,
         file_name: 'document.pdf',
         file_type: 'application/pdf',
-        file_url: 'https://storage.example.com/attachments/123/document.pdf'
+        file_url: 'https://storage.example.com/task-attachments/attachments/123/document.pdf'
       };
 
       taskAttachmentRepository.getById.mockResolvedValue(mockAttachment);

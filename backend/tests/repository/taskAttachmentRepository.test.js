@@ -425,15 +425,11 @@ describe('TaskAttachmentRepository', () => {
     test('should count attachments for a task', async () => {
       const taskId = 123;
 
-      const mockResponse = {
-        count: 3,
-        error: null
-      };
-
       supabase.from = jest.fn().mockReturnValue({
         select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            count: jest.fn().mockResolvedValue(mockResponse)
+          eq: jest.fn().mockResolvedValue({
+            count: 3,
+            error: null
           })
         })
       });
@@ -446,15 +442,11 @@ describe('TaskAttachmentRepository', () => {
     test('should return 0 when task has no attachments', async () => {
       const taskId = 123;
 
-      const mockResponse = {
-        count: 0,
-        error: null
-      };
-
       supabase.from = jest.fn().mockReturnValue({
         select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            count: jest.fn().mockResolvedValue(mockResponse)
+          eq: jest.fn().mockResolvedValue({
+            count: 0,
+            error: null
           })
         })
       });
