@@ -28,10 +28,9 @@ export function CreateProjectDialog({ children, variant = "default", isCollapsed
   
   const { createProject, error } = useProjects()
 
-  // Check if user can create projects (only managers)
+  // Check if user can create projects (only managers and admins)
   const canCreateProject = () => {
-    console.log('canCreateProject check:', { user, role, userRole: user?.role });
-    return user?.role === 'manager'
+    return user?.role === 'manager' || user?.role === 'admin'
   }
 
   // Show loading state while checking auth
@@ -57,7 +56,7 @@ export function CreateProjectDialog({ children, variant = "default", isCollapsed
           )}
         </Button>
         <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-gray-800 text-white text-sm px-2 py-1 rounded whitespace-nowrap z-10">
-          Only managers can create projects. Your role: {user?.role || 'Unknown'}
+          Only managers and admins can create projects. Your role: {user?.role || 'Unknown'}
         </div>
       </div>
     )
