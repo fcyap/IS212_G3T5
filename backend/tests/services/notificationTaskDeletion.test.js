@@ -126,7 +126,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: mockTask,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -167,7 +167,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       const result = await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: taskWithDeleterAssigned,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -184,11 +184,10 @@ describe('Task Deletion Notification - User Story Tests', () => {
     test('should return zero notifications when task has no assignees', async () => {
       // Arrange
       const taskWithNoAssignees = { ...mockTask, assigned_to: [] };
-      taskRepository.getTaskById.mockResolvedValue(taskWithNoAssignees);
 
       // Act
       const result = await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: taskWithNoAssignees,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -206,13 +205,12 @@ describe('Task Deletion Notification - User Story Tests', () => {
         assigned_to: [5] // Only the deleter
       };
       
-      taskRepository.getTaskById.mockResolvedValue(taskWithOnlyDeleter);
       projectRepository.getProjectById.mockResolvedValue(mockProject);
       userRepository.getUserById.mockResolvedValue(mockDeleter);
 
       // Act
       const result = await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: taskWithOnlyDeleter,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -238,7 +236,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: mockTask,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -264,7 +262,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: mockTask,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -290,7 +288,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: mockTask,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -314,7 +312,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
         project_id: 10
       };
       
-      taskRepository.getTaskById.mockResolvedValue(minimalTask);
+      // No longer needed - task passed directly
       projectRepository.getProjectById.mockResolvedValue(mockProject);
       userRepository.getUserById.mockImplementation(async (id) => {
         if (id === 5) return mockDeleter;
@@ -326,7 +324,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
       // Act & Assert - Should not throw error
       await expect(
         notificationService.createTaskDeletedNotification({
-          taskId: 102,
+          task: minimalTask,
           deleterId: 5,
           deleterName: 'John Manager'
         })
@@ -346,7 +344,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: mockTask,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -372,7 +370,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: mockTask,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -380,7 +378,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
       // Assert - In-app notification created
       expect(notificationRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          notif_types: 'task_deleted',
+          notif_types: 'task_deletion',
           message: expect.any(String),
           creator_id: 5,
           recipient_emails: expect.any(String)
@@ -401,7 +399,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: mockTask,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -411,7 +409,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
         expect.objectContaining({
           to: 'alice@company.com',
           from: 'noreply@company.com',
-          subject: expect.stringContaining('deleted'),
+          subject: expect.stringContaining('Deleted'),
           html: expect.any(String)
         })
       );
@@ -430,7 +428,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: mockTask,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -454,7 +452,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
       // Act & Assert - Should not throw error
       await expect(
         notificationService.createTaskDeletedNotification({
-          taskId: 101,
+          task: mockTask,
           deleterId: 5,
           deleterName: 'John Manager'
         })
@@ -478,7 +476,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: mockTask,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -507,7 +505,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: mockTask,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -535,7 +533,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: mockTask,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -543,7 +541,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
       // Assert
       expect(notificationRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          notif_types: 'task_deleted'
+          notif_types: 'task_deletion'
         })
       );
     });
@@ -561,7 +559,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: mockTask,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -588,7 +586,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       const result = await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: mockTask,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -607,7 +605,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
       // Act & Assert
       await expect(
         notificationService.createTaskDeletedNotification({
-          taskId: 999,
+          task: null,
           deleterId: 5,
           deleterName: 'John Manager'
         })
@@ -622,7 +620,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
       // Act & Assert
       await expect(
         notificationService.createTaskDeletedNotification({
-          taskId: 101,
+          task: mockTask,
           deleterId: 5,
           deleterName: 'John Manager'
         })
@@ -644,7 +642,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       const result = await notificationService.createTaskDeletedNotification({
-        taskId: 101,
+        task: mockTask,
         deleterId: 5,
         deleterName: 'John Manager'
       });
@@ -665,14 +663,16 @@ describe('Task Deletion Notification - User Story Tests', () => {
       notificationRepository.create.mockRejectedValue(new Error('Database connection failed'));
       sgMail.send.mockResolvedValue([{ headers: {} }]);
 
-      // Act & Assert
-      await expect(
-        notificationService.createTaskDeletedNotification({
-          taskId: 101,
-          deleterId: 5,
-          deleterName: 'John Manager'
-        })
-      ).rejects.toThrow('Database connection failed');
+      // Act
+      const result = await notificationService.createTaskDeletedNotification({
+        task: mockTask,
+        deleterId: 5,
+        deleterName: 'John Manager'
+      });
+
+      // Assert - Should handle error gracefully and continue
+      expect(result.notificationsSent).toBe(0);
+      expect(notificationRepository.create).toHaveBeenCalled();
     });
   });
 
@@ -691,10 +691,10 @@ describe('Task Deletion Notification - User Story Tests', () => {
         assigned_to: manyAssignees.map(u => u.id)
       };
       
-      taskRepository.getTaskById.mockResolvedValue(taskWithManyAssignees);
       projectRepository.getProjectById.mockResolvedValue(mockProject);
       userRepository.getUserById.mockImplementation(async (id) => {
-        if (id === 5) return mockDeleter;
+        // Use deleter ID 99 which is not in the assignees list
+        if (id === 99) return { id: 99, name: 'Deleter User', email: 'deleter@company.com' };
         return manyAssignees.find(u => u.id === id);
       });
       notificationRepository.create.mockResolvedValue({ notif_id: 1 });
@@ -702,9 +702,9 @@ describe('Task Deletion Notification - User Story Tests', () => {
 
       // Act
       const result = await notificationService.createTaskDeletedNotification({
-        taskId: 101,
-        deleterId: 5,
-        deleterName: 'John Manager'
+        task: taskWithManyAssignees,
+        deleterId: 99,
+        deleterName: 'Deleter User'
       });
 
       // Assert
@@ -721,7 +721,6 @@ describe('Task Deletion Notification - User Story Tests', () => {
         description: 'Handle & escape "special" characters'
       };
       
-      taskRepository.getTaskById.mockResolvedValue(taskWithSpecialChars);
       projectRepository.getProjectById.mockResolvedValue(mockProject);
       userRepository.getUserById.mockImplementation(async (id) => {
         if (id === 5) return mockDeleter;
@@ -733,7 +732,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
       // Act & Assert - Should not throw error
       await expect(
         notificationService.createTaskDeletedNotification({
-          taskId: 101,
+          task: taskWithSpecialChars,
           deleterId: 5,
           deleterName: 'John Manager'
         })
@@ -754,7 +753,7 @@ describe('Task Deletion Notification - User Story Tests', () => {
       // Act - Send multiple notifications concurrently
       const promises = Array.from({ length: 5 }, () =>
         notificationService.createTaskDeletedNotification({
-          taskId: 101,
+          task: mockTask,
           deleterId: 5,
           deleterName: 'John Manager'
         })

@@ -28,7 +28,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 async function initializeApp() {
-  const loggerMiddleware = createLoggerMiddleware();
+  const loggerMiddleware = await createLoggerMiddleware();
   app.use(loggerMiddleware);
 
   // Core middleware

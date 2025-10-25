@@ -17,7 +17,7 @@ router.use('/tasks', tasksRoutes);
 router.use('/api/tasks', taskCommentRoutes);
 router.use('/tasks/:taskId/attachments', taskAttachmentsRoutes);
 router.use('/tasks/:taskId/files', taskFilesRoutes); // New Supabase file routes
-router.use('/tasks/files', taskFilesDeleteRoutes); // Delete file route
+router.use('/tasks/:taskId/files', taskFilesDeleteRoutes); // Delete file route
 router.use('/notifications', notificationsRoutes);
 
 module.exports = router;

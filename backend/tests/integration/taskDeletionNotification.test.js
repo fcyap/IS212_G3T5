@@ -97,7 +97,7 @@ describe('Task Deletion Notification - Integration Tests', () => {
       // Verify notification was sent to each assignee
       expect(notificationRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          notif_types: 'task_deleted',
+          notif_types: 'task_deletion',
           creator_id: 5
         })
       );
@@ -164,7 +164,7 @@ describe('Task Deletion Notification - Integration Tests', () => {
       const mockNotifications = [
         {
           notif_id: 1,
-          notif_types: 'task_deleted',
+          notif_types: 'task_deletion',
           message: 'John Manager deleted task "Implement Authentication"',
           recipient_emails: 'alice@company.com',
           created_at: '2025-10-25T14:30:00Z',
@@ -172,7 +172,7 @@ describe('Task Deletion Notification - Integration Tests', () => {
         },
         {
           notif_id: 2,
-          notif_types: 'task_deleted',
+          notif_types: 'task_deletion',
           message: 'John Manager deleted task "Review PR"',
           recipient_emails: 'alice@company.com',
           created_at: '2025-10-24T10:00:00Z',
@@ -192,7 +192,7 @@ describe('Task Deletion Notification - Integration Tests', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.notifications).toHaveLength(2);
-      expect(response.body.notifications[0].notif_types).toBe('task_deleted');
+      expect(response.body.notifications[0].notif_types).toBe('task_deletion');
     });
 
     test('should show timestamp for each notification', async () => {
@@ -200,7 +200,7 @@ describe('Task Deletion Notification - Integration Tests', () => {
       const mockNotifications = [
         {
           notif_id: 1,
-          notif_types: 'task_deleted',
+          notif_types: 'task_deletion',
           message: 'Task deleted',
           recipient_emails: 'alice@company.com',
           created_at: '2025-10-25T14:30:00Z',
@@ -225,7 +225,7 @@ describe('Task Deletion Notification - Integration Tests', () => {
       const mockNotifications = [
         {
           notif_id: 1,
-          notif_types: 'task_deleted',
+          notif_types: 'task_deletion',
           message: 'Task deleted',
           recipient_emails: 'alice@company.com',
           created_at: '2025-10-25T14:30:00Z',
