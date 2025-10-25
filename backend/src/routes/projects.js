@@ -69,8 +69,9 @@ const deleteProject = async (req, res) => {
 
 router.post('/', authMiddleware(), requireProjectCreation, createProject);
 router.get('/', authMiddleware(), filterVisibleProjects(), getAllProjects);
-
-// More specific routes must come before less specific ones to prevent route shadowing
+router.get('/:projectId', authMiddleware(), getProjectById);
+router.put('/:projectId', authMiddleware(), requireProjectEdit(), updateProject);
+router.delete('/:projectId', authMiddleware(), requireProjectEdit(), deleteProject);
 router.get('/:projectId/members', authMiddleware(), getProjectMembers);
 router.post('/:projectId/members', authMiddleware(), requireAddProjectMembers(), addProjectMembers);
 router.delete('/:projectId/members/:userId', authMiddleware(), requireProjectEdit(), removeProjectMember);
