@@ -248,7 +248,12 @@ class ReportService {
   async exportReportToPDF(reportData) {
     return new Promise((resolve, reject) => {
       try {
-        const doc = new PDFDocument({ margin: 50 });
+        const doc = new PDFDocument({ 
+          margin: 50,
+          bufferPages: true,
+          autoFirstPage: true,
+          compress: true
+        });
         const chunks = [];
 
         doc.on('data', chunk => chunks.push(chunk));
@@ -257,171 +262,39 @@ class ReportService {
           resolve({
             format: 'pdf',
             data: pdfBuffer,
-            filename: `task-report-${new Date().toISOString().split('T')[0]}.pdf`
+            filename: `report-${new Date().toISOString().split('T')[0]}.pdf`
           });
         });
 
-        // Header
-        doc.fontSize(24)
-           .fillColor('#2563eb')
-           .text('Task & Progress Report', { align: 'center' });
-        
-        doc.fontSize(10)
-           .fillColor('#6b7280')
-           .text(`Generated on: ${new Date().toLocaleString()}`, { align: 'center' });
+        // Detect report type
+        const isDepartmentalReport = reportData.reportType === 'departmental_performance' || reportData.departments;
+        const isTaskReport = reportData.tasks;
+
+      // Header
+      const reportTitle = isDepartmentalReport ? 'Departmental Performance Report' : 'Task & Progress Report';
+      doc.fontSize(24);
+      doc.fillColor('#2563eb');
+      doc.text(reportTitle, { align: 'center' });
+      
+      const generatedDate = new Date().toLocaleString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      doc.fontSize(10);
+      doc.fillColor('#6b7280');
+      doc.text(`Generated on: ${generatedDate}`, { align: 'center' });
         
         doc.moveDown(2);
 
-        // Summary Section
-        if (reportData.summary) {
-          doc.fontSize(16)
-             .fillColor('#1f2937')
-             .text('Summary', { underline: true });
-          
-          doc.moveDown(0.5);
-          
-          // Summary cards layout
-          const summaryY = doc.y;
-          const cardWidth = 120;
-          const cardSpacing = 20;
-          
-          // Total Tasks Card
-          doc.rect(50, summaryY, cardWidth, 60)
-             .fillAndStroke('#eff6ff', '#2563eb');
-          
-          doc.fontSize(12)
-             .fillColor('#2563eb')
-             .text('Total Tasks', 60, summaryY + 15, { width: cardWidth - 20 });
-          
-          doc.fontSize(20)
-             .fillColor('#1f2937')
-             .text(reportData.summary.totalTasks || 0, 60, summaryY + 35, { width: cardWidth - 20 });
-          
-          // Completed Card
-          const col2X = 50 + cardWidth + cardSpacing;
-          doc.rect(col2X, summaryY, cardWidth, 60)
-             .fillAndStroke('#f0fdf4', '#10b981');
-          
-          doc.fontSize(12)
-             .fillColor('#10b981')
-             .text('Completed', col2X + 10, summaryY + 15, { width: cardWidth - 20 });
-          
-          doc.fontSize(20)
-             .fillColor('#1f2937')
-             .text(reportData.summary.byStatus?.completed || 0, col2X + 10, summaryY + 35, { width: cardWidth - 20 });
-          
-          // In Progress Card
-          const col3X = col2X + cardWidth + cardSpacing;
-          doc.rect(col3X, summaryY, cardWidth, 60)
-             .fillAndStroke('#eff6ff', '#3b82f6');
-          
-          doc.fontSize(12)
-             .fillColor('#3b82f6')
-             .text('In Progress', col3X + 10, summaryY + 15, { width: cardWidth - 20 });
-          
-          doc.fontSize(20)
-             .fillColor('#1f2937')
-             .text(reportData.summary.byStatus?.in_progress || 0, col3X + 10, summaryY + 35, { width: cardWidth - 20 });
-          
-          // Pending Card
-          const col4X = col3X + cardWidth + cardSpacing;
-          doc.rect(col4X, summaryY, cardWidth, 60)
-             .fillAndStroke('#fef3c7', '#f59e0b');
-          
-          doc.fontSize(12)
-             .fillColor('#f59e0b')
-             .text('Pending', col4X + 10, summaryY + 15, { width: cardWidth - 20 });
-          
-          doc.fontSize(20)
-             .fillColor('#1f2937')
-             .text(reportData.summary.byStatus?.pending || 0, col4X + 10, summaryY + 35, { width: cardWidth - 20 });
-          
-          doc.y = summaryY + 80;
-          doc.moveDown(2);
-        }
-
-        // Tasks Section
-        if (reportData.tasks && reportData.tasks.length > 0) {
-          doc.fontSize(16)
-             .fillColor('#1f2937')
-             .text('Task Details', { underline: true });
-          
-          doc.moveDown(1);
-
-          // Table Header
-          const tableTop = doc.y;
-          const col1 = 50;   // ID
-          const col2 = 80;   // Title
-          const col3 = 240;  // Project
-          const col4 = 340;  // Status
-          const col5 = 425;  // Priority
-          const col6 = 490;  // Deadline
-          const rowHeight = 25;
-
-          doc.rect(col1, tableTop, 545, rowHeight)
-             .fillAndStroke('#f3f4f6', '#d1d5db');
-
-          doc.fontSize(9)
-             .fillColor('#374151')
-             .text('ID', col1 + 5, tableTop + 8, { width: 25 })
-             .text('Title', col2 + 5, tableTop + 8, { width: 155 })
-             .text('Project', col3 + 5, tableTop + 8, { width: 95 })
-             .text('Status', col4 + 5, tableTop + 8, { width: 80 })
-             .text('Priority', col5 + 5, tableTop + 8, { width: 60 })
-             .text('Deadline', col6 + 5, tableTop + 8, { width: 100 });
-
-          let currentY = tableTop + rowHeight;
-
-          // Table Rows - Show ALL tasks
-          reportData.tasks.forEach((task, index) => {
-            // Check if we need a new page
-            if (currentY > 700) {
-              doc.addPage();
-              
-              // Redraw table header on new page
-              currentY = 50;
-              doc.rect(col1, currentY, 545, rowHeight)
-                 .fillAndStroke('#f3f4f6', '#d1d5db');
-
-              doc.fontSize(9)
-                 .fillColor('#374151')
-                 .text('ID', col1 + 5, currentY + 8, { width: 25 })
-                 .text('Title', col2 + 5, currentY + 8, { width: 155 })
-                 .text('Project', col3 + 5, currentY + 8, { width: 95 })
-                 .text('Status', col4 + 5, currentY + 8, { width: 80 })
-                 .text('Priority', col5 + 5, currentY + 8, { width: 60 })
-                 .text('Deadline', col6 + 5, currentY + 8, { width: 100 });
-
-              currentY += rowHeight;
-            }
-
-            const rowColor = index % 2 === 0 ? '#ffffff' : '#f9fafb';
-            doc.rect(col1, currentY, 545, rowHeight)
-               .fillAndStroke(rowColor, '#e5e7eb');
-
-            doc.fontSize(8)
-               .fillColor('#374151')
-               .text(`#${task.id}`, col1 + 5, currentY + 8, { width: 25 })
-               .text(task.title.substring(0, 25) + (task.title.length > 25 ? '...' : ''), col2 + 5, currentY + 8, { width: 155 })
-               .text((task.project_name || 'N/A').substring(0, 15), col3 + 5, currentY + 8, { width: 95 });
-
-            // Status with color
-            const statusColors = {
-              completed: '#10b981',
-              in_progress: '#3b82f6',
-              pending: '#f59e0b',
-              blocked: '#ef4444'
-            };
-            
-            doc.fillColor(statusColors[task.status] || '#6b7280')
-               .text(task.status?.replace('_', ' ') || 'N/A', col4 + 5, currentY + 8, { width: 80 });
-
-            doc.fillColor('#374151')
-               .text(task.priority || 'N/A', col5 + 5, currentY + 8, { width: 60 })
-               .text(task.deadline || 'N/A', col6 + 5, currentY + 8, { width: 100 });
-
-            currentY += rowHeight;
-          });
+        if (isDepartmentalReport) {
+          // Export Departmental Report
+          this._exportDepartmentalReportToPDF(doc, reportData);
+        } else if (isTaskReport) {
+          // Export Task Report (existing logic)
+          this._exportTaskReportToPDF(doc, reportData);
         }
 
         // Footer - Add page numbers
@@ -450,30 +323,497 @@ class ReportService {
   }
 
   /**
+   * Helper: Export task report to PDF
+   */
+  _exportTaskReportToPDF(doc, reportData) {
+    // Summary Section
+    if (reportData.summary) {
+      doc.fontSize(16)
+         .fillColor('#1f2937')
+         .text('Summary', { underline: true });
+      
+      doc.moveDown(0.5);
+      
+      // Summary cards layout
+      const summaryY = doc.y;
+      const cardWidth = 120;
+      const cardSpacing = 20;
+      
+      // Total Tasks Card
+      doc.rect(50, summaryY, cardWidth, 60)
+         .fillAndStroke('#eff6ff', '#2563eb');
+      
+      doc.fontSize(12);
+      doc.fillColor('#2563eb');
+      doc.text('Total Tasks', 60, summaryY + 15, { width: cardWidth - 20 });
+      
+      doc.fontSize(20);
+      doc.fillColor('#1f2937');
+      doc.text(String(reportData.summary.totalTasks || 0), 60, summaryY + 35, { width: cardWidth - 20 });
+      
+      // Completed Card
+      const col2X = 50 + cardWidth + cardSpacing;
+      doc.rect(col2X, summaryY, cardWidth, 60)
+         .fillAndStroke('#f0fdf4', '#10b981');
+      
+      doc.fontSize(12);
+      doc.fillColor('#10b981');
+      doc.text('Completed', col2X + 10, summaryY + 15, { width: cardWidth - 20 });
+      
+      doc.fontSize(20);
+      doc.fillColor('#1f2937');
+      doc.text(String(reportData.summary.byStatus?.completed || 0), col2X + 10, summaryY + 35, { width: cardWidth - 20 });
+      
+      // In Progress Card
+      const col3X = col2X + cardWidth + cardSpacing;
+      doc.rect(col3X, summaryY, cardWidth, 60)
+         .fillAndStroke('#eff6ff', '#3b82f6');
+      
+      doc.fontSize(12);
+      doc.fillColor('#3b82f6');
+      doc.text('In Progress', col3X + 10, summaryY + 15, { width: cardWidth - 20 });
+      
+      doc.fontSize(20);
+      doc.fillColor('#1f2937');
+      doc.text(String(reportData.summary.byStatus?.in_progress || 0), col3X + 10, summaryY + 35, { width: cardWidth - 20 });
+      
+      // Pending Card
+      const col4X = col3X + cardWidth + cardSpacing;
+      doc.rect(col4X, summaryY, cardWidth, 60)
+         .fillAndStroke('#fef3c7', '#f59e0b');
+      
+      doc.fontSize(12);
+      doc.fillColor('#f59e0b');
+      doc.text('Pending', col4X + 10, summaryY + 15, { width: cardWidth - 20 });
+      
+      doc.fontSize(20);
+      doc.fillColor('#1f2937');
+      doc.text(String(reportData.summary.byStatus?.pending || 0), col4X + 10, summaryY + 35, { width: cardWidth - 20 });
+      
+      doc.y = summaryY + 80;
+      doc.moveDown(2);
+    }
+
+    // Tasks Section
+    if (reportData.tasks && reportData.tasks.length > 0) {
+      doc.fontSize(16)
+         .fillColor('#1f2937')
+         .text('Task Details', { underline: true });
+      
+      doc.moveDown(1);
+
+      // Table Header
+      const tableTop = doc.y;
+      const col1 = 50;   // ID
+      const col2 = 80;   // Title
+      const col3 = 240;  // Project
+      const col4 = 340;  // Status
+      const col5 = 425;  // Priority
+      const col6 = 490;  // Deadline
+      const rowHeight = 25;
+
+      doc.rect(col1, tableTop, 545, rowHeight)
+         .fillAndStroke('#f3f4f6', '#d1d5db');
+
+      doc.fontSize(9)
+         .fillColor('#374151')
+         .text('ID', col1 + 5, tableTop + 8, { width: 25 })
+         .text('Title', col2 + 5, tableTop + 8, { width: 155 })
+         .text('Project', col3 + 5, tableTop + 8, { width: 95 })
+         .text('Status', col4 + 5, tableTop + 8, { width: 80 })
+         .text('Priority', col5 + 5, tableTop + 8, { width: 60 })
+         .text('Deadline', col6 + 5, tableTop + 8, { width: 100 });
+
+      let currentY = tableTop + rowHeight;
+
+      // Table Rows
+      reportData.tasks.forEach((task, index) => {
+        if (currentY > 700) {
+          doc.addPage();
+          currentY = 50;
+          doc.rect(col1, currentY, 545, rowHeight)
+             .fillAndStroke('#f3f4f6', '#d1d5db');
+
+          doc.fontSize(9)
+             .fillColor('#374151')
+             .text('ID', col1 + 5, currentY + 8, { width: 25 })
+             .text('Title', col2 + 5, currentY + 8, { width: 155 })
+             .text('Project', col3 + 5, currentY + 8, { width: 95 })
+             .text('Status', col4 + 5, currentY + 8, { width: 80 })
+             .text('Priority', col5 + 5, currentY + 8, { width: 60 })
+             .text('Deadline', col6 + 5, currentY + 8, { width: 100 });
+
+          currentY += rowHeight;
+        }
+
+        const rowColor = index % 2 === 0 ? '#ffffff' : '#f9fafb';
+        doc.rect(col1, currentY, 545, rowHeight)
+           .fillAndStroke(rowColor, '#e5e7eb');
+
+        doc.fontSize(8);
+        doc.fillColor('#374151');
+        doc.text(`#${task.id}`, col1 + 5, currentY + 8, { width: 25, ellipsis: true });
+        doc.text(task.title.substring(0, 30) + (task.title.length > 30 ? '...' : ''), col2 + 5, currentY + 8, { width: 155, ellipsis: true });
+        doc.text((task.project_name || 'N/A').substring(0, 18), col3 + 5, currentY + 8, { width: 95, ellipsis: true });
+
+        const statusColors = {
+          completed: '#10b981',
+          in_progress: '#3b82f6',
+          pending: '#f59e0b',
+          blocked: '#ef4444'
+        };
+        
+        const statusText = (task.status || 'N/A').replace('_', ' ').toUpperCase();
+        doc.fillColor(statusColors[task.status] || '#6b7280');
+        doc.text(statusText, col4 + 5, currentY + 8, { width: 80, ellipsis: true });
+
+        doc.fillColor('#374151');
+        doc.text((task.priority || 'N/A').toUpperCase(), col5 + 5, currentY + 8, { width: 60, ellipsis: true });
+        doc.text(task.deadline || 'N/A', col6 + 5, currentY + 8, { width: 100, ellipsis: true });
+
+        currentY += rowHeight;
+      });
+    }
+  }
+
+  /**
+   * Helper: Export departmental report to PDF
+   */
+  _exportDepartmentalReportToPDF(doc, reportData) {
+    // Summary Section
+    if (reportData.summary) {
+      doc.fontSize(16)
+         .fillColor('#1f2937')
+         .text('Summary', { underline: true });
+      
+      doc.moveDown(0.5);
+      
+      const summaryY = Number(doc.y);
+      const cardWidth = 120;
+      const cardSpacing = 20;
+      
+      // Total Departments
+      doc.rect(50, summaryY, cardWidth, 60)
+         .fillAndStroke('#eff6ff', '#2563eb');
+      
+      doc.fontSize(11)
+         .fillColor('#2563eb');
+      doc.text('Departments', 60, summaryY + 15, { width: cardWidth - 20 });
+      
+      doc.fontSize(20)
+         .fillColor('#1f2937');
+      doc.text(String(reportData.summary.totalDepartments || 0), 60, summaryY + 35, { width: cardWidth - 20 });
+      
+      // Total Members
+      const col2X = 50 + cardWidth + cardSpacing;
+      doc.rect(col2X, summaryY, cardWidth, 60)
+         .fillAndStroke('#f5f3ff', '#8b5cf6');
+      
+      doc.fontSize(11)
+         .fillColor('#8b5cf6');
+      doc.text('Total Members', col2X + 10, summaryY + 15, { width: cardWidth - 20 });
+      
+      doc.fontSize(20)
+         .fillColor('#1f2937');
+      doc.text(String(reportData.summary.totalMembers || 0), col2X + 10, summaryY + 35, { width: cardWidth - 20 });
+      
+      // Total Tasks
+      const col3X = col2X + cardWidth + cardSpacing;
+      doc.rect(col3X, summaryY, cardWidth, 60)
+         .fillAndStroke('#eff6ff', '#3b82f6');
+      
+      doc.fontSize(11)
+         .fillColor('#3b82f6');
+      doc.text('Total Tasks', col3X + 10, summaryY + 15, { width: cardWidth - 20 });
+      
+      doc.fontSize(20)
+         .fillColor('#1f2937');
+      doc.text(String(reportData.summary.totalTasks || 0), col3X + 10, summaryY + 35, { width: cardWidth - 20 });
+      
+      // Avg Completion
+      const col4X = col3X + cardWidth + cardSpacing;
+      doc.rect(col4X, summaryY, cardWidth, 60)
+         .fillAndStroke('#f0fdf4', '#10b981');
+      
+      doc.fontSize(11)
+         .fillColor('#10b981');
+      doc.text('Avg Completion', col4X + 10, summaryY + 15, { width: cardWidth - 20 });
+      
+      const avgRate = Number(reportData.summary.averageCompletionRate || 0);
+      doc.fontSize(20)
+         .fillColor('#1f2937');
+      doc.text(`${avgRate.toFixed(1)}%`, col4X + 10, summaryY + 35, { width: cardWidth - 20 });
+      
+      doc.y = summaryY + 80;
+      doc.moveDown(2);
+
+      // Insights
+      if (reportData.insights) {
+        doc.fontSize(14)
+           .fillColor('#1f2937')
+           .text('Key Insights', { underline: true });
+        
+        doc.moveDown(0.5);
+        doc.fontSize(10)
+           .fillColor('#374151')
+           .text(`Most Productive: ${reportData.insights.mostProductiveDepartment || 'N/A'}`)
+           .text(`Highest Workload: ${reportData.insights.highestWorkloadDepartment || 'N/A'}`)
+           .text(`Needs Attention: ${reportData.insights.leastProductiveDepartment || 'N/A'}`);
+        
+        doc.moveDown(1.5);
+      }
+    }
+
+    // Department Comparison Table
+    if (reportData.departments && reportData.departments.length > 0) {
+      doc.fontSize(16)
+         .fillColor('#1f2937')
+         .text('Department Comparison', { underline: true });
+      
+      doc.moveDown(1);
+
+      const tableTop = doc.y;
+      const col1 = 50;   // Department
+      const col2 = 150;  // Members
+      const col3 = 210;  // Total Tasks
+      const col4 = 280;  // Completed
+      const col5 = 350;  // In Progress
+      const col6 = 430;  // Completion %
+      const col7 = 510;  // Avg/Member
+      const rowHeight = 25;
+
+      doc.rect(col1, tableTop, 545, rowHeight)
+         .fillAndStroke('#f3f4f6', '#d1d5db');
+
+      doc.fontSize(8)
+         .fillColor('#374151')
+         .text('Department', col1 + 5, tableTop + 8, { width: 95 })
+         .text('Members', col2 + 5, tableTop + 8, { width: 55 })
+         .text('Tasks', col3 + 5, tableTop + 8, { width: 65 })
+         .text('Done', col4 + 5, tableTop + 8, { width: 65 })
+         .text('Progress', col5 + 5, tableTop + 8, { width: 75 })
+         .text('Rate', col6 + 5, tableTop + 8, { width: 75 })
+         .text('Avg/M', col7 + 5, tableTop + 8, { width: 80 });
+
+      let currentY = tableTop + rowHeight;
+
+      reportData.departments.forEach((dept, index) => {
+        if (currentY > 700) {
+          doc.addPage();
+          currentY = 50;
+          doc.rect(col1, currentY, 545, rowHeight)
+             .fillAndStroke('#f3f4f6', '#d1d5db');
+
+          doc.fontSize(8)
+             .fillColor('#374151')
+             .text('Department', col1 + 5, currentY + 8, { width: 95 })
+             .text('Members', col2 + 5, currentY + 8, { width: 55 })
+             .text('Tasks', col3 + 5, currentY + 8, { width: 65 })
+             .text('Done', col4 + 5, currentY + 8, { width: 65 })
+             .text('Progress', col5 + 5, currentY + 8, { width: 75 })
+             .text('Rate', col6 + 5, currentY + 8, { width: 75 })
+             .text('Avg/M', col7 + 5, currentY + 8, { width: 80 });
+
+          currentY += rowHeight;
+        }
+
+        const rowColor = index % 2 === 0 ? '#ffffff' : '#f9fafb';
+        doc.rect(col1, currentY, 545, rowHeight)
+           .fillAndStroke(rowColor, '#e5e7eb');
+
+        const deptName = (dept.department || 'N/A').substring(0, 20);
+        doc.fontSize(8);
+        doc.fillColor('#374151');
+        doc.text(deptName, col1 + 5, currentY + 8, { width: 95, ellipsis: true });
+        doc.text(String(dept.memberCount || 0), col2 + 5, currentY + 8, { width: 55 });
+        doc.text(String(dept.totalTasks || 0), col3 + 5, currentY + 8, { width: 65 });
+        doc.text(String(dept.statusCounts?.completed || 0), col4 + 5, currentY + 8, { width: 65 });
+        doc.text(String(dept.statusCounts?.in_progress || 0), col5 + 5, currentY + 8, { width: 75 });
+
+        const rateColor = dept.completionRate >= 70 ? '#10b981' : dept.completionRate >= 40 ? '#f59e0b' : '#ef4444';
+        doc.fillColor(rateColor);
+        doc.text(`${dept.completionRate || 0}%`, col6 + 5, currentY + 8, { width: 75 });
+
+        doc.fillColor('#374151');
+        doc.text(String(dept.averageTasksPerMember || 0), col7 + 5, currentY + 8, { width: 80 });
+
+        currentY += rowHeight;
+      });
+
+      doc.moveDown(2);
+    }
+
+    // Time Series Section
+    if (reportData.timeSeries && reportData.timeSeries.length > 0) {
+      doc.fontSize(16)
+         .fillColor('#1f2937')
+         .text('Productivity Trends', { underline: true });
+      
+      doc.moveDown(1);
+
+      const tableTop = doc.y;
+      const col1 = 50;   // Period
+      const col2 = 150;  // Total
+      const col3 = 220;  // Completed
+      const col4 = 290;  // In Progress
+      const col5 = 370;  // Pending
+      const col6 = 450;  // Rate
+      const rowHeight = 25;
+
+      doc.rect(col1, tableTop, 495, rowHeight)
+         .fillAndStroke('#f3f4f6', '#d1d5db');
+
+      doc.fontSize(8)
+         .fillColor('#374151')
+         .text('Period', col1 + 5, tableTop + 8, { width: 95 })
+         .text('Total', col2 + 5, tableTop + 8, { width: 65 })
+         .text('Completed', col3 + 5, tableTop + 8, { width: 65 })
+         .text('In Progress', col4 + 5, tableTop + 8, { width: 75 })
+         .text('Pending', col5 + 5, tableTop + 8, { width: 75 })
+         .text('Rate', col6 + 5, tableTop + 8, { width: 90 });
+
+      let currentY = tableTop + rowHeight;
+
+      reportData.timeSeries.forEach((period, index) => {
+        if (currentY > 700) {
+          doc.addPage();
+          currentY = 50;
+        }
+
+        const rowColor = index % 2 === 0 ? '#ffffff' : '#f9fafb';
+        doc.rect(col1, currentY, 495, rowHeight)
+           .fillAndStroke(rowColor, '#e5e7eb');
+
+        doc.fontSize(8);
+        doc.fillColor('#374151');
+        doc.text(String(period.period || 'N/A'), col1 + 5, currentY + 8, { width: 95, ellipsis: true });
+        doc.text(String(period.totalTasks || 0), col2 + 5, currentY + 8, { width: 65 });
+        doc.text(String(period.statusCounts?.completed || 0), col3 + 5, currentY + 8, { width: 65 });
+        doc.text(String(period.statusCounts?.in_progress || 0), col4 + 5, currentY + 8, { width: 75 });
+        doc.text(String(period.statusCounts?.pending || 0), col5 + 5, currentY + 8, { width: 75 });
+
+        const rateColor = period.completionRate >= 70 ? '#10b981' : period.completionRate >= 40 ? '#f59e0b' : '#ef4444';
+        doc.fillColor(rateColor);
+        doc.text(`${period.completionRate || 0}%`, col6 + 5, currentY + 8, { width: 90 });
+
+        currentY += rowHeight;
+      });
+    }
+  }
+
+  /**
    * Export report to spreadsheet (XLSX or CSV)
    */
   async exportReportToSpreadsheet(reportData, format = 'xlsx') {
     try {
-      const tasks = reportData.tasks || [];
-      
-      // Prepare data for spreadsheet
-      const worksheetData = tasks.map(task => ({
-        'ID': task.id,
-        'Title': task.title,
-        'Status': task.status,
-        'Priority': task.priority || '',
-        'Deadline': task.deadline || '',
-        'Created At': task.created_at || '',
-        'Project ID': task.project_id || ''
-      }));
-
-      // Create workbook and worksheet
+      // Detect report type
+      const isDepartmentalReport = reportData.reportType === 'departmental_performance' || reportData.departments;
       const workbook = XLSX.utils.book_new();
-      const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks');
 
-      // Generate buffer
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: format === 'csv' ? 'csv' : 'xlsx' });
+      if (isDepartmentalReport) {
+        // Export Departmental Report
+        // Sheet 1: Summary
+        if (reportData.summary) {
+          const summaryData = [
+            ['Metric', 'Value'],
+            ['Total Departments', Number(reportData.summary.totalDepartments || 0)],
+            ['Total Members', Number(reportData.summary.totalMembers || 0)],
+            ['Total Tasks', Number(reportData.summary.totalTasks || 0)],
+            ['Average Completion Rate', `${Number(reportData.summary.averageCompletionRate || 0).toFixed(1)}%`]
+          ];
+
+          if (reportData.insights) {
+            summaryData.push([]);
+            summaryData.push(['Insights', '']);
+            summaryData.push(['Most Productive Department', String(reportData.insights.mostProductiveDepartment || 'N/A')]);
+            summaryData.push(['Highest Workload Department', String(reportData.insights.highestWorkloadDepartment || 'N/A')]);
+            summaryData.push(['Needs Attention', String(reportData.insights.leastProductiveDepartment || 'N/A')]);
+          }
+
+          const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+          XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+        }
+
+        // Sheet 2: Department Comparison
+        if (reportData.departments && reportData.departments.length > 0) {
+          const deptData = reportData.departments.map(dept => ({
+            'Department': String(dept.department || 'N/A'),
+            'Members': Number(dept.memberCount || 0),
+            'Total Tasks': Number(dept.totalTasks || 0),
+            'Completed': Number(dept.statusCounts?.completed || 0),
+            'In Progress': Number(dept.statusCounts?.in_progress || 0),
+            'Pending': Number(dept.statusCounts?.pending || 0),
+            'Cancelled': Number(dept.statusCounts?.cancelled || 0),
+            'Completion Rate': `${Number(dept.completionRate || 0).toFixed(1)}%`,
+            'Avg Tasks Per Member': Number(dept.averageTasksPerMember || 0).toFixed(2),
+            'Low Priority': Number(dept.priorityCounts?.low || 0),
+            'Medium Priority': Number(dept.priorityCounts?.medium || 0),
+            'High Priority': Number(dept.priorityCounts?.high || 0)
+          }));
+
+          const deptSheet = XLSX.utils.json_to_sheet(deptData);
+          XLSX.utils.book_append_sheet(workbook, deptSheet, 'Departments');
+        }
+
+        // Sheet 3: Time Series (if available)
+        if (reportData.timeSeries && reportData.timeSeries.length > 0) {
+          const timeSeriesData = reportData.timeSeries.map(period => ({
+            'Period': String(period.period || 'N/A'),
+            'Total Tasks': Number(period.totalTasks || 0),
+            'Completed': Number(period.statusCounts?.completed || 0),
+            'In Progress': Number(period.statusCounts?.in_progress || 0),
+            'Pending': Number(period.statusCounts?.pending || 0),
+            'Cancelled': Number(period.statusCounts?.cancelled || 0),
+            'Completion Rate': `${Number(period.completionRate || 0).toFixed(1)}%`,
+            'Low Priority': Number(period.priorityCounts?.low || 0),
+            'Medium Priority': Number(period.priorityCounts?.medium || 0),
+            'High Priority': Number(period.priorityCounts?.high || 0)
+          }));
+
+          const timeSeriesSheet = XLSX.utils.json_to_sheet(timeSeriesData);
+          XLSX.utils.book_append_sheet(workbook, timeSeriesSheet, 'Trends');
+        }
+      } else {
+        // Export Task Report (original logic)
+        const tasks = reportData.tasks || [];
+        
+        const worksheetData = tasks.map(task => ({
+          'ID': Number(task.id || 0),
+          'Title': String(task.title || ''),
+          'Status': String((task.status || 'N/A').replace('_', ' ').toUpperCase()),
+          'Priority': String((task.priority || 'N/A').toUpperCase()),
+          'Deadline': String(task.deadline || ''),
+          'Created At': String(task.created_at || ''),
+          'Project ID': Number(task.project_id || 0),
+          'Project Name': String(task.project_name || '')
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks');
+
+        // Add summary sheet
+        if (reportData.summary) {
+          const summaryData = [
+            ['Metric', 'Count'],
+            ['Total Tasks', Number(reportData.summary.totalTasks || 0)],
+            ['Completed', Number(reportData.summary.byStatus?.completed || 0)],
+            ['In Progress', Number(reportData.summary.byStatus?.in_progress || 0)],
+            ['Pending', Number(reportData.summary.byStatus?.pending || 0)],
+            ['Blocked', Number(reportData.summary.byStatus?.blocked || 0)]
+          ];
+
+          const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+          XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+        }
+      }
+
+      // Generate buffer with proper encoding
+      const buffer = XLSX.write(workbook, { 
+        type: 'buffer', 
+        bookType: format === 'csv' ? 'csv' : 'xlsx',
+        bookSST: true,
+        compression: true
+      });
 
       return {
         format: format === 'csv' ? 'csv' : 'xlsx',
@@ -546,6 +886,135 @@ class ReportService {
     const { data: users } = await reportRepository.getUsersByDepartmentHierarchy(user.department);
     const departments = [...new Set(users.map(u => u.department))];
     return departments.filter(Boolean).sort();
+  }
+
+  /**
+   * Generate departmental performance report
+   * Provides weekly/monthly summaries with inter-departmental comparisons
+   * POST /api/reports/departments
+   */
+  async generateDepartmentalPerformanceReport(user, filters = {}) {
+    // Verify user has permission (HR or Admin only)
+    if (!user || (user.role !== 'hr' && user.role !== 'admin')) {
+      throw new Error('Unauthorized: Only HR and Admin staff can generate departmental reports');
+    }
+
+    // Determine which departments to include
+    let departmentIds = filters.departmentIds || [];
+    
+    if (user.role === 'admin') {
+      // Admin can see all departments or filter specific ones
+      if (!departmentIds || departmentIds.length === 0) {
+        const { data: allDepartments } = await reportRepository.getAllDepartments();
+        departmentIds = allDepartments || [];
+      }
+    } else {
+      // HR can only see their own department hierarchy
+      const { data: deptUsers } = await reportRepository.getUsersByDepartmentHierarchy(user.department);
+      const hrDepartments = [...new Set(deptUsers.map(u => u.department))];
+      
+      // If they specified departments, filter to only accessible ones
+      if (departmentIds.length > 0) {
+        departmentIds = departmentIds.filter(dept => 
+          hrDepartments.some(hrDept => dept === hrDept || dept.startsWith(hrDept + '.'))
+        );
+      } else {
+        departmentIds = hrDepartments;
+      }
+    }
+
+    // Get department comparison data
+    const { data: departmentComparison, error: compError } = await reportRepository.getDepartmentComparison({
+      departmentIds,
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+      projectIds: filters.projectIds
+    });
+
+    if (compError) {
+      throw new Error(compError.message || 'Failed to fetch department comparison data');
+    }
+
+    // Get time-series data if requested
+    let timeSeriesData = null;
+    if (filters.interval && (filters.interval === 'week' || filters.interval === 'month')) {
+      // Get all users from selected departments
+      const { data: deptUsers } = await reportRepository.getDepartmentComparison({
+        departmentIds,
+        startDate: filters.startDate,
+        endDate: filters.endDate
+      });
+
+      // Extract user IDs (would need to be fetched properly in production)
+      const { data: timeStats, error: timeError } = await reportRepository.getWeeklyMonthlyStats({
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+        interval: filters.interval,
+        projectIds: filters.projectIds
+      });
+
+      if (timeError) {
+        throw new Error(timeError.message || 'Failed to fetch time-series data');
+      }
+
+      timeSeriesData = timeStats;
+    }
+
+    // Calculate overall summary statistics
+    const summary = {
+      totalDepartments: departmentComparison.length,
+      totalTasks: departmentComparison.reduce((sum, dept) => sum + dept.totalTasks, 0),
+      totalMembers: departmentComparison.reduce((sum, dept) => sum + dept.memberCount, 0),
+      averageCompletionRate: departmentComparison.length > 0
+        ? Math.round(departmentComparison.reduce((sum, dept) => sum + dept.completionRate, 0) / departmentComparison.length)
+        : 0,
+      overallStatusCounts: departmentComparison.reduce((acc, dept) => ({
+        pending: (acc.pending || 0) + dept.statusCounts.pending,
+        in_progress: (acc.in_progress || 0) + dept.statusCounts.in_progress,
+        completed: (acc.completed || 0) + dept.statusCounts.completed,
+        cancelled: (acc.cancelled || 0) + dept.statusCounts.cancelled
+      }), {}),
+      overallPriorityCounts: departmentComparison.reduce((acc, dept) => ({
+        low: (acc.low || 0) + dept.priorityCounts.low,
+        medium: (acc.medium || 0) + dept.priorityCounts.medium,
+        high: (acc.high || 0) + dept.priorityCounts.high
+      }), {})
+    };
+
+    // Identify productivity insights
+    const insights = {
+      mostProductiveDepartment: departmentComparison.length > 0
+        ? departmentComparison.reduce((max, dept) => 
+            dept.completionRate > (max?.completionRate || 0) ? dept : max
+          , null)?.department
+        : null,
+      leastProductiveDepartment: departmentComparison.length > 0
+        ? departmentComparison.reduce((min, dept) => 
+            dept.completionRate < (min?.completionRate || 100) ? dept : min
+          , null)?.department
+        : null,
+      highestWorkloadDepartment: departmentComparison.length > 0
+        ? departmentComparison.reduce((max, dept) => 
+            dept.averageTasksPerMember > (max?.averageTasksPerMember || 0) ? dept : max
+          , null)?.department
+        : null
+    };
+
+    return {
+      summary,
+      departments: departmentComparison,
+      timeSeries: timeSeriesData,
+      insights,
+      filters: {
+        departmentIds,
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+        interval: filters.interval
+      },
+      generatedAt: new Date().toISOString(),
+      generatedBy: user.id,
+      reportType: 'departmental_performance'
+    };
   }
 
   /**

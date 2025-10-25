@@ -24,13 +24,15 @@ export default function ReportsPage() {
   const [error, setError] = useState(null);
   const [csrfToken, setCsrfToken] = useState(null);
   const [openFilter, setOpenFilter] = useState(null);
+  const [reportType, setReportType] = useState('tasks'); // 'tasks' or 'departments'
   
   const [filters, setFilters] = useState({
     startDate: '',
     endDate: '',
     projectIds: [],
     userIds: [],
-    departments: []
+    departments: [],
+    interval: '' // 'week' or 'month' for departmental reports
   });
 
   const [searchTerms, setSearchTerms] = useState({
@@ -86,32 +88,38 @@ export default function ReportsPage() {
     }
   }, [user]);
 
-  // Load available filter options
+  // Load available filter options (only load users for task reports)
   useEffect(() => {
     if (hasPermission) {
       loadFilterOptions();
     }
-  }, [hasPermission]);
+  }, [hasPermission, reportType]);
 
   const loadFilterOptions = async () => {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const [projectsRes, usersRes, deptsRes] = await Promise.all([
+      
+      // Always load projects and departments
+      const promises = [
         fetch(`${API_URL}/api/reports/filters/projects`, { credentials: 'include' }),
-        fetch(`${API_URL}/api/reports/filters/users`, { credentials: 'include' }),
         fetch(`${API_URL}/api/reports/filters/departments`, { credentials: 'include' })
-      ]);
+      ];
 
-      const [projects, users, departments] = await Promise.all([
-        projectsRes.json(),
-        usersRes.json(),
-        deptsRes.json()
-      ]);
+      // Only load users for task reports
+      if (reportType === 'tasks') {
+        promises.push(fetch(`${API_URL}/api/reports/filters/users`, { credentials: 'include' }));
+      }
+
+      const responses = await Promise.all(promises);
+      
+      const projectsData = await responses[0].json();
+      const deptsData = await responses[1].json();
+      const usersData = reportType === 'tasks' && responses[2] ? await responses[2].json() : { data: [] };
 
       setAvailableFilters({
-        projects: projects.data || [],
-        users: users.data || [],
-        departments: departments.data || []
+        projects: projectsData.data || [],
+        users: usersData.data || [],
+        departments: deptsData.data || []
       });
     } catch (err) {
       console.error('Error loading filter options:', err);
@@ -142,13 +150,15 @@ export default function ReportsPage() {
       endDate: '',
       projectIds: [],
       userIds: [],
-      departments: []
+      departments: [],
+      interval: ''
     });
     setSearchTerms({
       project: '',
       user: '',
       department: ''
     });
+    setReportData(null);
   };
 
   const filteredProjects = availableFilters.projects.filter(p => 
@@ -159,6 +169,19 @@ export default function ReportsPage() {
     u.name?.toLowerCase().includes(searchTerms.user.toLowerCase()) ||
     u.email?.toLowerCase().includes(searchTerms.user.toLowerCase())
   );
+
+  const filteredDepartments = availableFilters.departments.filter(d =>
+    d.toLowerCase().includes(searchTerms.department.toLowerCase())
+  );
+
+  const toggleDepartmentFilter = (dept) => {
+    setFilters(prev => ({
+      ...prev,
+      departments: prev.departments.includes(dept)
+        ? prev.departments.filter(d => d !== dept)
+        : [...prev.departments, dept]
+    }));
+  };
 
   const generateReport = async () => {
     setLoading(true);
@@ -175,16 +198,31 @@ export default function ReportsPage() {
       const freshToken = csrfData.csrfToken;
       
       console.log('[Reports] Generating report with fresh CSRF token:', freshToken);
+      console.log('[Reports] Report type:', reportType);
       console.log('[Reports] Filters:', filters);
       
-      const response = await fetch(`${API_URL}/api/reports/tasks`, {
+      const endpoint = reportType === 'departments'
+        ? `${API_URL}/api/reports/departments`
+        : `${API_URL}/api/reports/tasks`;
+      
+      const requestBody = reportType === 'departments'
+        ? {
+            departmentIds: filters.departments,
+            startDate: filters.startDate,
+            endDate: filters.endDate,
+            interval: filters.interval,
+            projectIds: filters.projectIds
+          }
+        : filters;
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-csrf-token': freshToken
         },
         credentials: 'include',
-        body: JSON.stringify(filters)
+        body: JSON.stringify(requestBody)
       });
 
       const data = await response.json();
@@ -313,6 +351,25 @@ export default function ReportsPage() {
               </div>
 
               <div className="p-5 space-y-6">
+                {/* Report Type Selector */}
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-200">
+                    <BarChart3 className="w-4 h-4 text-blue-400" />
+                    Report Type
+                  </label>
+                  <select
+                    value={reportType}
+                    onChange={(e) => {
+                      setReportType(e.target.value);
+                      setReportData(null); // Clear existing report data
+                    }}
+                    className="w-full px-4 py-2.5 bg-[#1a1a1d] border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  >
+                    <option value="tasks">Task Report</option>
+                    <option value="departments">Departmental Performance</option>
+                  </select>
+                </div>
+
                 {/* Date Range with Enhanced Styling */}
                 <div className="space-y-3">
                   <label className="flex items-center gap-2 text-sm font-semibold text-gray-200">
@@ -395,7 +452,8 @@ export default function ReportsPage() {
                   )}
                 </div>
 
-                {/* Users Filter with Enhanced Styling */}
+                {/* Users Filter with Enhanced Styling (Only for Task Reports) */}
+                {reportType === 'tasks' && (
                 <div className="space-y-3">
                   <button onClick={() => setOpenFilter(openFilter === 'user' ? null : 'user')} className="w-full flex items-center justify-between text-sm font-semibold text-gray-200">
                     <span className="flex items-center gap-2">
@@ -455,6 +513,87 @@ export default function ReportsPage() {
                     </div>
                   )}
                 </div>
+                )}
+
+                {/* Departments Filter (for Departmental Reports) */}
+                {reportType === 'departments' && (
+                  <div className="space-y-3">
+                    <button onClick={() => setOpenFilter(openFilter === 'department' ? null : 'department')} className="w-full flex items-center justify-between text-sm font-semibold text-gray-200">
+                      <span className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                        Departments
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {filters.departments.length > 0 && (
+                          <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 text-xs font-bold rounded-full border border-orange-500/30">
+                            {filters.departments.length}
+                          </span>
+                        )}
+                        <ChevronDown className={`w-4 h-4 transition-transform ${openFilter === 'department' ? 'rotate-180' : ''}`} />
+                      </div>
+                    </button>
+                    {openFilter === 'department' && (
+                      <div className="pt-2">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={searchTerms.department}
+                            onChange={(e) => setSearchTerms({ ...searchTerms, department: e.target.value })}
+                            placeholder="Search departments..."
+                            className="w-full pl-10 pr-4 py-2.5 bg-[#1a1a1d] border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          />
+                        </div>
+                        <div className="mt-2 max-h-52 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar">
+                          {filteredDepartments.length === 0 ? (
+                            <div className="text-center py-6">
+                              <div className="w-12 h-12 bg-gray-700/30 rounded-full flex items-center justify-center mx-auto mb-2">
+                                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                </svg>
+                              </div>
+                              <p className="text-xs text-gray-500">No departments found</p>
+                            </div>
+                          ) : (
+                            filteredDepartments.map(dept => (
+                              <label key={dept} className="flex items-center gap-3 p-2.5 hover:bg-[#1a1a1d] rounded-lg cursor-pointer transition-colors group">
+                                <input
+                                  type="checkbox"
+                                  checked={filters.departments.includes(dept)}
+                                  onChange={() => toggleDepartmentFilter(dept)}
+                                  className="w-4 h-4 rounded border-2 border-gray-600 bg-[#1a1a1d] text-orange-600 focus:ring-2 focus:ring-orange-500 focus:ring-offset-0 cursor-pointer"
+                                />
+                                <span className="text-sm text-gray-300 truncate group-hover:text-white transition-colors flex-1">{dept}</span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Time Interval (for Departmental Reports) */}
+                {reportType === 'departments' && (
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-200">
+                      <TrendingUp className="w-4 h-4 text-cyan-400" />
+                      Time Interval (Optional)
+                    </label>
+                    <select
+                      value={filters.interval}
+                      onChange={(e) => setFilters({ ...filters, interval: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-[#1a1a1d] border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    >
+                      <option value="">No trend analysis</option>
+                      <option value="week">Weekly trends</option>
+                      <option value="month">Monthly trends</option>
+                    </select>
+                    <p className="text-xs text-gray-500">Enable to see productivity trends over time</p>
+                  </div>
+                )}
 
                 {/* Generate Button with Enhanced Styling */}
                 <div className="pt-4 border-t border-gray-700/50">
@@ -560,7 +699,7 @@ export default function ReportsPage() {
             {reportData && (
               <>
                 {/* Summary Section - Enhanced */}
-                {reportData.summary && (
+                {reportData.summary && reportType === 'tasks' && (
                   <div className="bg-[#2a2a2e] border border-gray-700/50 rounded-xl p-6 shadow-lg">
                     <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
                       <div className="p-2 bg-green-500/10 rounded-lg">
@@ -590,7 +729,155 @@ export default function ReportsPage() {
                   </div>
                 )}
 
-                {/* Detailed Data Table - Enhanced */}
+                {/* Departmental Summary Section */}
+                {reportData.summary && reportType === 'departments' && (
+                  <div className="bg-[#2a2a2e] border border-gray-700/50 rounded-xl p-6 shadow-lg">
+                    <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                      <div className="p-2 bg-green-500/10 rounded-lg">
+                        <TrendingUp className="w-5 h-5 text-green-400" />
+                      </div>
+                      Departmental Performance Overview
+                    </h2>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-[#1a1a1d] p-4 rounded-lg border border-gray-700">
+                        <p className="text-gray-400 text-sm mb-1">Total Departments</p>
+                        <p className="text-3xl font-bold text-white">{reportData.summary.totalDepartments}</p>
+                      </div>
+                      <div className="bg-[#1a1a1d] p-4 rounded-lg border border-purple-900/30">
+                        <p className="text-gray-400 text-sm mb-1">Total Members</p>
+                        <p className="text-3xl font-bold text-purple-400">{reportData.summary.totalMembers}</p>
+                      </div>
+                      <div className="bg-[#1a1a1d] p-4 rounded-lg border border-blue-900/30">
+                        <p className="text-gray-400 text-sm mb-1">Total Tasks</p>
+                        <p className="text-3xl font-bold text-blue-400">{reportData.summary.totalTasks}</p>
+                      </div>
+                      <div className="bg-[#1a1a1d] p-4 rounded-lg border border-green-900/30">
+                        <p className="text-gray-400 text-sm mb-1">Avg Completion</p>
+                        <p className="text-3xl font-bold text-green-400">{reportData.summary.averageCompletionRate}%</p>
+                      </div>
+                    </div>
+
+                    {/* Insights */}
+                    {reportData.insights && (
+                      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-[#1a1a1d] p-4 rounded-lg border border-green-900/30">
+                          <p className="text-gray-400 text-xs mb-1">🏆 Most Productive</p>
+                          <p className="text-green-400 font-semibold">{reportData.insights.mostProductiveDepartment || 'N/A'}</p>
+                        </div>
+                        <div className="bg-[#1a1a1d] p-4 rounded-lg border border-orange-900/30">
+                          <p className="text-gray-400 text-xs mb-1">📊 Highest Workload</p>
+                          <p className="text-orange-400 font-semibold">{reportData.insights.highestWorkloadDepartment || 'N/A'}</p>
+                        </div>
+                        <div className="bg-[#1a1a1d] p-4 rounded-lg border border-yellow-900/30">
+                          <p className="text-gray-400 text-xs mb-1">⚠️ Needs Attention</p>
+                          <p className="text-yellow-400 font-semibold">{reportData.insights.leastProductiveDepartment || 'N/A'}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Department Comparison Table */}
+                {reportType === 'departments' && reportData.departments && (
+                  <div className="bg-[#2a2a2e] border border-gray-700/50 rounded-xl p-6 shadow-lg">
+                    <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                      <div className="p-2 bg-orange-500/10 rounded-lg">
+                        <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                      </div>
+                      Department Comparison
+                    </h2>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm min-w-[800px]">
+                        <thead className="border-b border-gray-700">
+                          <tr>
+                            <th className="pb-3 pr-4 text-gray-300 font-medium">Department</th>
+                            <th className="pb-3 pr-4 text-gray-300 font-medium text-center">Members</th>
+                            <th className="pb-3 pr-4 text-gray-300 font-medium text-center">Total Tasks</th>
+                            <th className="pb-3 pr-4 text-gray-300 font-medium text-center">Completed</th>
+                            <th className="pb-3 pr-4 text-gray-300 font-medium text-center">In Progress</th>
+                            <th className="pb-3 pr-4 text-gray-300 font-medium text-center">Completion %</th>
+                            <th className="pb-3 text-gray-300 font-medium text-center">Avg Tasks/Member</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reportData.departments.map((dept) => (
+                            <tr key={dept.department} className="border-b border-gray-800 hover:bg-[#1a1a1d]">
+                              <td className="py-3 pr-4 text-white font-medium">{dept.department}</td>
+                              <td className="py-3 pr-4 text-center text-purple-400">{dept.memberCount}</td>
+                              <td className="py-3 pr-4 text-center text-blue-400">{dept.totalTasks}</td>
+                              <td className="py-3 pr-4 text-center text-green-400">{dept.statusCounts.completed}</td>
+                              <td className="py-3 pr-4 text-center text-yellow-400">{dept.statusCounts.in_progress}</td>
+                              <td className="py-3 pr-4 text-center">
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                  dept.completionRate >= 70 ? 'bg-green-900/50 text-green-300' :
+                                  dept.completionRate >= 40 ? 'bg-yellow-900/50 text-yellow-300' :
+                                  'bg-red-900/50 text-red-300'
+                                }`}>
+                                  {dept.completionRate}%
+                                </span>
+                              </td>
+                              <td className="py-3 text-center text-gray-400">{dept.averageTasksPerMember}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Time Series Trends */}
+                {reportType === 'departments' && reportData.timeSeries && reportData.timeSeries.length > 0 && (
+                  <div className="bg-[#2a2a2e] border border-gray-700/50 rounded-xl p-6 shadow-lg">
+                    <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                      <div className="p-2 bg-cyan-500/10 rounded-lg">
+                        <TrendingUp className="w-5 h-5 text-cyan-400" />
+                      </div>
+                      Productivity Trends Over Time
+                    </h2>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm min-w-[700px]">
+                        <thead className="border-b border-gray-700">
+                          <tr>
+                            <th className="pb-3 pr-4 text-gray-300 font-medium">Period</th>
+                            <th className="pb-3 pr-4 text-gray-300 font-medium text-center">Total Tasks</th>
+                            <th className="pb-3 pr-4 text-gray-300 font-medium text-center">Completed</th>
+                            <th className="pb-3 pr-4 text-gray-300 font-medium text-center">In Progress</th>
+                            <th className="pb-3 pr-4 text-gray-300 font-medium text-center">Pending</th>
+                            <th className="pb-3 text-gray-300 font-medium text-center">Completion %</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reportData.timeSeries.map((period) => (
+                            <tr key={period.period} className="border-b border-gray-800 hover:bg-[#1a1a1d]">
+                              <td className="py-3 pr-4 text-white font-medium">{period.period}</td>
+                              <td className="py-3 pr-4 text-center text-blue-400">{period.totalTasks}</td>
+                              <td className="py-3 pr-4 text-center text-green-400">{period.statusCounts.completed}</td>
+                              <td className="py-3 pr-4 text-center text-yellow-400">{period.statusCounts.in_progress}</td>
+                              <td className="py-3 pr-4 text-center text-orange-400">{period.statusCounts.pending}</td>
+                              <td className="py-3 text-center">
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                  period.completionRate >= 70 ? 'bg-green-900/50 text-green-300' :
+                                  period.completionRate >= 40 ? 'bg-yellow-900/50 text-yellow-300' :
+                                  'bg-red-900/50 text-red-300'
+                                }`}>
+                                  {period.completionRate}%
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Detailed Data Table - Enhanced (for task reports only) */}
+                {reportType === 'tasks' && (
                 <div className="bg-[#2a2a2e] border border-gray-700/50 rounded-xl p-6 shadow-lg">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-bold text-white flex items-center gap-3">
@@ -650,6 +937,7 @@ export default function ReportsPage() {
                     )}
                   </div>
                 </div>
+                )}
               </>
             )}
           </div>

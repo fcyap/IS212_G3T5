@@ -326,6 +326,82 @@ const getAvailableDepartments = async (req, res, next) => {
   }
 };
 
+/**
+ * Generate departmental performance report
+ * POST /api/reports/departments
+ */
+const generateDepartmentalPerformanceReport = async (req, res, next) => {
+  try {
+    const user = req.user;
+
+    console.log('[generateDepartmentalPerformanceReport] User:', user);
+    console.log('[generateDepartmentalPerformanceReport] Body:', req.body);
+
+    if (!user) {
+      console.log('[generateDepartmentalPerformanceReport] No user found - returning 401');
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
+
+    // Validate date format
+    if (req.body.startDate && !/^\d{4}-\d{2}-\d{2}$/.test(req.body.startDate)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid startDate format. Use YYYY-MM-DD'
+      });
+    }
+
+    if (req.body.endDate && !/^\d{4}-\d{2}-\d{2}$/.test(req.body.endDate)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid endDate format. Use YYYY-MM-DD'
+      });
+    }
+
+    // Validate date logic
+    if (req.body.startDate && req.body.endDate) {
+      const start = new Date(req.body.startDate);
+      const end = new Date(req.body.endDate);
+      if (end < start) {
+        return res.status(400).json({
+          success: false,
+          error: 'endDate must be after or equal to startDate'
+        });
+      }
+    }
+
+    // Validate interval if provided
+    if (req.body.interval && !['week', 'month'].includes(req.body.interval)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid interval. Must be "week" or "month"'
+      });
+    }
+
+    const filters = {
+      departmentIds: req.body.departmentIds,
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
+      interval: req.body.interval,
+      projectIds: req.body.projectIds
+    };
+
+    console.log('[generateDepartmentalPerformanceReport] Filters:', filters);
+
+    const report = await reportService.generateDepartmentalPerformanceReport(user, filters);
+
+    res.status(200).json({
+      success: true,
+      data: report
+    });
+  } catch (error) {
+    console.error('Error in generateDepartmentalPerformanceReport:', error);
+    next(error);
+  }
+};
+
 module.exports = {
   generateTaskReport,
   generateUserProductivityReport,
@@ -334,5 +410,6 @@ module.exports = {
   exportReportToSpreadsheet,
   getAvailableProjects,
   getAvailableUsers,
-  getAvailableDepartments
+  getAvailableDepartments,
+  generateDepartmentalPerformanceReport
 };

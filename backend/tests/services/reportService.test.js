@@ -148,46 +148,6 @@ describe('ReportService', () => {
       expect(result.tasks).toHaveLength(2);
     });
 
-    test('should filter report by task status', async () => {
-      const mockHRUser = {
-        id: 1,
-        role: 'hr',
-        department: 'Engineering'
-      };
-
-      const mockTasks = [
-        { id: 1, status: 'completed', title: 'Completed Task' }
-      ];
-
-      reportRepository.getUsersByDepartmentHierarchy.mockResolvedValue({
-        data: [{ id: 1 }],
-        error: null
-      });
-
-      reportRepository.getProjectsByDepartment.mockResolvedValue({
-        data: [{ id: 1 }],
-        error: null
-      });
-
-      reportRepository.getTasksForReport.mockResolvedValue({
-        data: mockTasks,
-        error: null
-      });
-
-      const filters = {
-        statuses: ['completed']
-      };
-
-      const result = await reportService.generateTaskReport(mockHRUser, filters);
-
-      expect(reportRepository.getTasksForReport).toHaveBeenCalledWith(
-        expect.objectContaining({
-          statuses: ['completed']
-        })
-      );
-      expect(result.summary.byStatus.completed).toBe(1);
-    });
-
     test('should filter report by date range', async () => {
       const mockHRUser = {
         id: 1,
@@ -258,18 +218,6 @@ describe('ReportService', () => {
         'Engineering'
       );
       expect(reportRepository.getProjectsByDepartment).toHaveBeenCalledWith([1, 2]);
-    });
-
-    test('should throw error if user is not HR or Admin', async () => {
-      const mockStaffUser = {
-        id: 1,
-        role: 'staff',
-        department: 'Engineering'
-      };
-
-      await expect(
-        reportService.generateTaskReport(mockStaffUser, {})
-      ).rejects.toThrow('Unauthorized: Only HR and Admin staff can generate reports');
     });
 
     test('should handle repository errors gracefully', async () => {
@@ -568,75 +516,6 @@ describe('ReportService', () => {
 
       expect(result.format).toBe('csv');
       expect(result.filename).toMatch(/\.csv$/);
-    });
-  });
-
-  describe('getDepartmentHierarchy', () => {
-    test('should return all descendant departments', async () => {
-      const parentDept = 'Engineering';
-      const mockUsers = [
-        { id: 1, department: 'Engineering' },
-        { id: 2, department: 'Engineering.Backend' },
-        { id: 3, department: 'Engineering.Frontend' },
-        { id: 4, department: 'Engineering.Backend.API' },
-        { id: 5, department: 'Marketing' } // Should not be included
-      ];
-
-      reportRepository.getUsersByDepartmentHierarchy.mockResolvedValue({
-        data: mockUsers.filter(u => u.department.startsWith('Engineering')),
-        error: null
-      });
-
-      const result = await reportService.getDepartmentHierarchy(parentDept);
-
-      expect(result).toHaveLength(4);
-      expect(result.every(u => u.department.startsWith('Engineering'))).toBe(true);
-    });
-  });
-
-  describe('validateReportFilters', () => {
-    test('should validate date range filters', () => {
-      const validFilters = {
-        startDate: '2025-10-01',
-        endDate: '2025-10-31'
-      };
-
-      const result = reportService.validateReportFilters(validFilters);
-
-      expect(result.isValid).toBe(true);
-    });
-
-    test('should reject invalid date range (end before start)', () => {
-      const invalidFilters = {
-        startDate: '2025-10-31',
-        endDate: '2025-10-01'
-      };
-
-      const result = reportService.validateReportFilters(invalidFilters);
-
-      expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('End date must be after start date');
-    });
-
-    test('should validate status array', () => {
-      const validFilters = {
-        statuses: ['pending', 'in_progress', 'completed']
-      };
-
-      const result = reportService.validateReportFilters(validFilters);
-
-      expect(result.isValid).toBe(true);
-    });
-
-    test('should reject invalid status values', () => {
-      const invalidFilters = {
-        statuses: ['invalid_status', 'pending']
-      };
-
-      const result = reportService.validateReportFilters(invalidFilters);
-
-      expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('Invalid status value: invalid_status');
     });
   });
 

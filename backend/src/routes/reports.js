@@ -17,6 +17,7 @@ const requireHROrAdmin = requireRole(['hr', 'admin']);
 router.post('/tasks', requireHROrAdmin, checkDepartmentAccess(), reportController.generateTaskReport);
 router.post('/users/productivity', requireHROrAdmin, checkDepartmentAccess(), reportController.generateUserProductivityReport);
 router.post('/projects', requireHROrAdmin, checkDepartmentAccess(), reportController.generateProjectReport);
+router.post('/departments', requireHROrAdmin, checkDepartmentAccess(), reportController.generateDepartmentalPerformanceReport);
 
 // Export endpoints
 router.post('/export/pdf', requireHROrAdmin, reportController.exportReportToPDF);
