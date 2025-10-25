@@ -574,6 +574,34 @@ class TaskService {
   }
 
   /**
+   * Get subtasks for a parent task
+   */
+  async getSubtasks(parentId) {
+    return await taskRepository.getSubtasks(parentId);
+  }
+
+  /**
+   * Get tasks with their subtasks
+   */
+  async getTasksWithSubtasks(filters = {}) {
+    const tasks = await taskRepository.getTasksWithFilters(filters);
+
+    // Fetch subtasks for each task
+    const tasksWithSubtasks = await Promise.all(
+      tasks.map(async (task) => {
+        const subtasks = await taskRepository.getSubtasks(task.id);
+        return {
+          ...task,
+          subtasks,
+          subtaskCount: subtasks.length
+        };
+      })
+    );
+
+    return tasksWithSubtasks;
+  }
+
+  /**
    * Get task statistics for a project
    */
   async getProjectTaskStats(projectId) {
