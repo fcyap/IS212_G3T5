@@ -13,19 +13,21 @@ import {
   MessageCircle,
   UserPlus,
   UserMinus,
-  RefreshCcw
+  RefreshCcw,
+  Trash2
 } from "lucide-react"
 
 export function DeadlineNotificationToaster() {
   const { user } = useAuth()
   const router = useRouter()
   const [lastChecked, setLastChecked] = useState(null)
+  const [shownNotifications, setShownNotifications] = useState(new Set())
 
   useEffect(() => {
     if (!user?.email) return
 
-    // Check for new deadline notifications every 30 seconds
-    const interval = setInterval(checkForNotifications, 30000)
+    // Check for new deadline notifications every 5 seconds (temporarily for testing)
+    const interval = setInterval(checkForNotifications, 5000)
 
     // Initial check
     checkForNotifications()
@@ -34,12 +36,17 @@ export function DeadlineNotificationToaster() {
   }, [user?.email])
 
   const checkForNotifications = async () => {
-    if (!user?.email) return
+    if (!user?.email) {
+      console.log('No user email, skipping notification check');
+      return;
+    }
+
+    console.log('Checking for notifications for user:', user.email);
 
     try {
       // Fetch only non-dismissed notifications for toaster display
       const data = await notificationService.getUserNotifications(10, 0, false)
-      console.log('Raw notifications data:', data.notifications.slice(0, 3)) // Log first 3 notifications
+      console.log('Raw notifications data:', data.notifications.slice(0, 5)) // Log first 5 notifications
       const eligibleTypes = new Set([
         'deadline',
         'task_assignment',
@@ -47,11 +54,15 @@ export function DeadlineNotificationToaster() {
         'remove_from_task',
         'comment',
         'invitation',
+        'task_deletion',
         'general'
       ])
 
       const relevantNotifications = data.notifications.filter(notification => {
-        if (!notification.recipient_emails) return false
+        if (!notification.recipient_emails) {
+          console.log('Notification missing recipient_emails:', notification.notif_id);
+          return false;
+        }
         const recipients = notification.recipient_emails.split(',').map(email => email.trim())
         const isForUser = recipients.includes(user.email)
         const notifType = notification.notif_types || 'general'
@@ -59,11 +70,14 @@ export function DeadlineNotificationToaster() {
 
         console.log('Filtering notification:', {
           id: notification.notif_id,
+          type: notifType,
+          recipient_emails: notification.recipient_emails,
+          userEmail: user.email,
           isForUser,
-          notifType,
           isEligible,
           dismissed: notification.dismissed,
-          willShow: isForUser && isEligible
+          willShow: isForUser && isEligible,
+          message: notification.message?.substring(0, 50) + '...'
         })
 
         // Only show notifications that are for this user and match eligible types
@@ -71,15 +85,28 @@ export function DeadlineNotificationToaster() {
         return isForUser && isEligible
       })
 
+      console.log('Total notifications from API:', data.notifications.length)
       console.log('Filtered notifications:', relevantNotifications.length)
+      console.log('Eligible types:', Array.from(eligibleTypes))
 
-      // Show toast for each new notification
+      // Show toast for each new notification that hasn't been shown yet
       relevantNotifications.forEach(notification => {
-        console.log('Showing toast for notification:', {
-          id: notification.notif_id,
-          type: notification.notif_types
-        })
-        showNotificationToast(notification)
+        const notificationId = notification.notif_id || notification.id
+        
+        // Only show if we haven't shown this notification before
+        if (!shownNotifications.has(notificationId)) {
+          console.log('Showing toast for notification:', {
+            id: notificationId,
+            type: notification.notif_types,
+            message: notification.message
+          })
+          showNotificationToast(notification)
+          
+          // Mark this notification as shown
+          setShownNotifications(prev => new Set([...prev, notificationId]))
+        } else {
+          console.log('Skipping already shown notification:', notificationId)
+        }
       })
 
       // Update last checked time
@@ -100,6 +127,13 @@ export function DeadlineNotificationToaster() {
       // Call API to mark notification as dismissed
       await notificationService.dismissNotification(notificationId)
       console.log('Successfully dismissed notification:', notificationId)
+      
+      // Remove from shown notifications set so it doesn't stay in memory forever
+      setShownNotifications(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(notificationId)
+        return newSet
+      })
       
       // Dismiss the toast
       toast.dismiss(toastId)
@@ -140,6 +174,13 @@ export function DeadlineNotificationToaster() {
       gradient: () => 'from-rose-500/20 to-red-500/20',
       border: () => 'border-rose-400/40'
     },
+    task_deletion: {
+      title: '🗑️ Task Deleted',
+      icon: () => <Trash2 className="w-6 h-6" />,
+      color: () => 'text-amber-400',
+      gradient: () => 'from-amber-500/20 to-orange-500/20',
+      border: () => 'border-amber-400/40'
+    },
     comment: {
       title: '💬 New Comment',
       icon: () => <MessageCircle className="w-6 h-6" />,
@@ -167,6 +208,7 @@ export function DeadlineNotificationToaster() {
     const notifType = notification.notif_types || 'general'
     const theme = TOAST_THEME[notifType] || TOAST_THEME.general
     const messageLines = notification.message ? notification.message.split('\n').filter(Boolean) : []
+    const notificationId = notification.notif_id || notification.id
 
     // Determine urgency for deadlines
     const isDeadline = notifType === 'deadline'
@@ -231,6 +273,7 @@ export function DeadlineNotificationToaster() {
         </div>
       </div>
     ), {
+      id: `notification-${notificationId}`, // Use unique ID to prevent duplicates
       duration: 5000, // Auto-dismiss after 5 seconds
       position: 'top-right',
     })

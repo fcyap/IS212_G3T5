@@ -462,6 +462,35 @@ class TaskService {
       actorId: normalizedRequesterId ?? null
     });
 
+    // ---- Send task deletion notification if task is being archived ----
+    if (patch.archived === true && !previousTask.archived) {
+      // Task is being archived (deleted), send notification to assignees
+      try {
+        // Get deleter information
+        let deleterName = 'A team member';
+        if (normalizedRequesterId) {
+          try {
+            const deleter = await userRepository.getUserById(normalizedRequesterId);
+            if (deleter) {
+              deleterName = deleter.name;
+            }
+          } catch (err) {
+            console.error('Failed to fetch deleter info:', err);
+          }
+        }
+
+        await notificationService.createTaskDeletedNotification({
+          task: previousTask,
+          deleterId: normalizedRequesterId,
+          deleterName: deleterName
+        });
+        console.log(`Task deletion notifications sent for archived task ${taskId}`);
+      } catch (notificationError) {
+        console.error('Failed to send task deletion notifications:', notificationError);
+        // Continue with task update even if notification fails
+      }
+    }
+
     // ---- Recurrence: spawn a next instance only on transition -> completed ----
     const beforeCompleted = isCompleted(currentTask.status);
     const afterCompleted  = isCompleted(updated.status);
@@ -557,7 +586,7 @@ class TaskService {
    * Delete task
    */
   async deleteTask(taskId, requestingUserId) {
-    // Get current task
+    // Get current task before deletion
     const currentTask = await taskRepository.getTaskById(taskId);
 
     // Check if user can delete the task (project member or manager)
@@ -570,35 +599,48 @@ class TaskService {
       }
     }
 
+    // Get deleter information for notification
+    let deleterName = 'A team member';
+    if (requestingUserId) {
+      try {
+        const deleter = await userRepository.getUserById(requestingUserId);
+        if (deleter) {
+          deleterName = deleter.name;
+        }
+      } catch (err) {
+        console.error('Failed to fetch deleter info:', err);
+      }
+    }
+
+    // Delete all attachments associated with the task
+    try {
+      await taskAttachmentService.deleteByTaskId(taskId);
+    } catch (attachmentError) {
+      console.error('Failed to delete task attachments:', attachmentError);
+      // Continue with task deletion even if attachment deletion fails
+    }
+
+    // Delete all files from Supabase Storage
+    try {
+      await taskFilesService.deleteTaskFiles(taskId);
+    } catch (fileError) {
+      console.error('Failed to delete task files from Supabase:', fileError);
+      // Continue with task deletion even if file deletion fails
+    }
+
+    // Send deletion notifications before deleting the task
+    try {
+      await notificationService.createTaskDeletedNotification({
+        task: currentTask,
+        deleterId: requestingUserId,
+        deleterName: deleterName
+      });
+    } catch (notificationError) {
+      console.error('Failed to send task deletion notifications:', notificationError);
+      // Continue with task deletion even if notification fails
+    }
+
     return await taskRepository.deleteTask(taskId);
-  }
-
-  /**
-   * Get subtasks for a parent task
-   */
-  async getSubtasks(parentId) {
-    return await taskRepository.getSubtasks(parentId);
-  }
-
-  /**
-   * Get tasks with their subtasks
-   */
-  async getTasksWithSubtasks(filters = {}) {
-    const tasks = await taskRepository.getTasksWithFilters(filters);
-
-    // Fetch subtasks for each task
-    const tasksWithSubtasks = await Promise.all(
-      tasks.map(async (task) => {
-        const subtasks = await taskRepository.getSubtasks(task.id);
-        return {
-          ...task,
-          subtasks,
-          subtaskCount: subtasks.length
-        };
-      })
-    );
-
-    return tasksWithSubtasks;
   }
 
   /**
