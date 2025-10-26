@@ -1,5 +1,5 @@
 "use client"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { TaskCard } from "./task-card"
 import { Input } from "@/components/ui/input"
@@ -16,7 +16,9 @@ import { TaskAttachmentsDisplay } from "./task-attachments-display"
 import { FileUploadInput } from "./file-upload-input"
 import { useUserSearch } from "@/hooks/useUserSearch"
 import { useAuth } from "@/hooks/useAuth"
+import { TaskTimeTracking } from "./task-time-tracking"
 import { projectService, userService } from "@/lib/api"
+import { extractUserHours, normalizeTimeSummary } from "@/lib/time-tracking"
 import toast from "react-hot-toast"
 
 const priorityChipClasses = {
@@ -51,6 +53,7 @@ function rowToCard(r) {
     r.recurrence_freq
       ? { freq: r.recurrence_freq, interval: r.recurrence_interval || 1 }
       : null;
+  const timeTracking = r.time_tracking ?? r.timeTracking ?? null;
 
   return {
     id: r.id,
@@ -63,6 +66,7 @@ function rowToCard(r) {
     tags: Array.isArray(r.tags) ? r.tags : [],
     recurrence,
     projectId: r.project_id ?? null,
+    timeTracking,
   };
 }
 
@@ -796,6 +800,9 @@ export function KanbanBoard({ projectId = null }) {
                 assigned_to,
                 recurrence: patch.recurrence ?? null,
               };
+              if (patch.hours !== undefined) {
+                payload.hours = patch.hours;
+              }
               console.log('[KanbanBoard] Sending payload to backend:', payload);
               const res = await fetchWithCsrf(`${API}/tasks/${panelTask.id}`, {
                 method: "PUT",
@@ -813,6 +820,7 @@ export function KanbanBoard({ projectId = null }) {
               const updated = rowToCard(row)
               setRawTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
               closePanel()
+              return row
             } catch (e) {
               console.error("[update task]", e)
               alert(e.message)
@@ -834,6 +842,7 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
   const { user: currentUser } = useAuth()
   const currentUserId = currentUser?.id
   console.log('[TaskSidePanel] opened for task:', task);
+  console.log('[TaskSidePanel] initial task.timeTracking', task.timeTracking);
   const normalizedRole =
     typeof currentUser?.role === 'string'
       ? currentUser.role.toLowerCase()
@@ -860,6 +869,12 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
   const [assignees, setAssignees] = useState(Array.isArray(task.assignees) ? task.assignees : []);
   const [recurrence, setRecurrence] = useState(task.recurrence ?? null);
   const [attachments, setAttachments] = useState([]);
+  const [timeTracking, setTimeTracking] = useState(() => normalizeTimeSummary(task.timeTracking));
+  const [hoursSpent, setHoursSpent] = useState(() =>
+    extractUserHours(normalizeTimeSummary(task.timeTracking), currentUserId)
+  );
+  const [saving, setSaving] = useState(false);
+  const isMountedRef = useRef(true);
   const normalizedProjectId = Number.isFinite(Number(task.projectId)) ? Number(task.projectId) : null;
   const projectEntry = normalizedProjectId != null ? projectLookup[normalizedProjectId] : null;
   const [projectName, setProjectName] = useState(projectEntry?.name ?? null);
@@ -873,6 +888,63 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
       setProjectName(projectEntry.name);
     }
   }, [projectEntry?.name]);
+
+  useEffect(() => {
+    if (!task.timeTracking) return;
+    const summary = normalizeTimeSummary(task.timeTracking);
+    console.log('[TaskSidePanel] normalised summary from task prop', summary);
+    setTimeTracking(summary);
+    const extracted = extractUserHours(summary, currentUserId);
+    console.log('[TaskSidePanel] extracted hours from prop summary', { extracted, currentUserId });
+    if (extracted !== "") {
+      setHoursSpent(extracted);
+    }
+  }, [task.timeTracking, currentUserId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function loadTimeSummary() {
+      try {
+        const detailUrl = normalizedProjectId
+          ? `${API}/api/projects/${normalizedProjectId}/tasks/${task.id}`
+          : `${API}/api/tasks/${task.id}`;
+        const res = await fetchWithCsrf(detailUrl, {
+          method: "GET",
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache"
+          }
+        });
+        if (!res.ok) return;
+        const payload = await res.json().catch(() => null);
+        const detail = payload?.task ?? payload;
+        if (!detail || !active) return;
+        const summary = normalizeTimeSummary(detail.time_tracking);
+        console.log('[TaskSidePanel] fetched time summary', {
+          taskId: task.id,
+          raw: detail.time_tracking,
+          summary,
+          currentUserId
+        });
+        setTimeTracking(summary);
+        const extracted = extractUserHours(summary, currentUserId);
+        console.log('[TaskSidePanel] extracted hours from fetched summary', { extracted, currentUserId });
+        if (extracted !== "") {
+          setHoursSpent(extracted);
+        }
+      } catch (err) {
+        console.error('[TaskSidePanel] Failed to load task hours:', err);
+      }
+    }
+    loadTimeSummary();
+    return () => { active = false; };
+  }, [task.id, normalizedProjectId, currentUserId]);
 
   useEffect(() => {
     if (projectEntry?.name) {
@@ -953,7 +1025,17 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
     searchUsers(value);
   }
 
-  const canSave = (canEdit || isManager) && title.trim().length > 0 && priority && assignees.length <= MAX_ASSIGNEES;
+  const canUpdateHours = isSelfAssignee;
+  const numericHours = Number(hoursSpent);
+  const isHoursValid =
+    hoursSpent === "" ||
+    (Number.isFinite(numericHours) && numericHours >= 0);
+  const canSave =
+    (canEdit || isManager) &&
+    title.trim().length > 0 &&
+    priority &&
+    assignees.length <= MAX_ASSIGNEES &&
+    isHoursValid;
   function addTagFromInput() {
     if (!canEdit) return;
     const t = tagInput.trim();
@@ -984,6 +1066,18 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
     });
   }
 
+  function handleHoursInputChange(nextValue) {
+    if (!canUpdateHours) return;
+    if (nextValue === "" || nextValue === null) {
+      setHoursSpent("");
+      return;
+    }
+    const parsed = Number(nextValue);
+    if (!Number.isNaN(parsed) && parsed >= 0) {
+      setHoursSpent(nextValue);
+    }
+  }
+
   async function handleDelete() {
     try {
       const res = await fetchWithCsrf(`${API}/tasks/${task.id}`, {
@@ -1001,6 +1095,41 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
     } catch (e) {
       console.error("[archive task]", e);
       alert(e.message);
+    }
+  }
+
+  async function handleSave() {
+    if (!canSave || saving) return;
+    const assigned_to = assignees.map((a) => Number(a.id)).filter(Number.isFinite);
+    const payload = {
+      title: title.trim(),
+      description: description.trim() || null,
+      priority,
+      status,
+      deadline: deadline || null,
+      tags,
+      assigned_to,
+      recurrence: recurrence ?? null,
+    };
+    if (canUpdateHours && hoursSpent !== "" && Number.isFinite(numericHours) && numericHours >= 0) {
+      payload.hours = numericHours;
+    }
+    try {
+      if (isMountedRef.current) setSaving(true);
+      const updatedRow = await onSave?.(payload);
+      if (updatedRow?.time_tracking && isMountedRef.current) {
+        const summary = normalizeTimeSummary(updatedRow.time_tracking);
+        setTimeTracking(summary);
+        const extracted = extractUserHours(summary, currentUserId);
+        if (extracted !== "") {
+          setHoursSpent(extracted);
+        }
+      }
+    } catch (error) {
+      console.error('[TaskSidePanel] Failed to save task:', error);
+      toast.error(error.message || 'Failed to update task');
+    } finally {
+      if (isMountedRef.current) setSaving(false);
     }
   }
 
@@ -1028,6 +1157,9 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
               assigned_to,
               recurrence: patch.recurrence ?? null,
             };
+            if (patch.hours !== undefined) {
+              payload.hours = patch.hours;
+            }
             try {
               const res = await fetchWithCsrf(`${API}/tasks/${childPanelTask.id}`, {
                 method: "PUT",
@@ -1041,6 +1173,7 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
               const row = await res.json();
               setSubtasks(prev => prev.map(s => (s.id === row.id ? rowToCard(row) : s)));
               setChildPanelTask(null);
+              return row;
             } catch (e) {
               console.error("[update subtask]", e);
               alert(e.message);
@@ -1192,6 +1325,20 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
                 </SelectContent>
               </Select>
             </div>
+
+            <TaskTimeTracking
+              value={hoursSpent}
+              onChange={handleHoursInputChange}
+              canEdit={canUpdateHours && canEdit}
+              totalHours={timeTracking.total_hours}
+              perAssignee={timeTracking.per_assignee}
+              assignees={assignees}
+            />
+            {!isHoursValid && (
+              <p className="text-xs text-red-400">
+                Please enter a non-negative number of hours.
+              </p>
+            )}
             {/* Assignees */}
             <div>
               <label className="block text-xs text-gray-400 mb-1">Assignees</label>
@@ -1388,11 +1535,11 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
             {/* Actions */}
             <div className="mt-6 flex gap-2">
               <Button
-                onClick={() => onSave({ title: title.trim(), description: description.trim(), priority, status, deadline, tags, assignees, recurrence })}
-                disabled={!canSave}
+                onClick={handleSave}
+                disabled={!canSave || saving}
                 className="bg-white/90 text-black"
               >
-                Save
+                {saving ? "Saving…" : "Save"}
               </Button>
               <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
                 Cancel

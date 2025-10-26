@@ -23,12 +23,19 @@ const createInResponse = (data, error = null) => ({
     in: jest.fn(() => Promise.resolve({ data, error }))
   }))
 });
+jest.mock('../../src/services/taskAssigneeHoursService', () => ({
+  recordHours: jest.fn(),
+  getTaskHoursSummary: jest.fn(),
+  normalizeHours: jest.fn()
+}));
+
 const taskService = require('../../src/services/taskService');
 const taskRepository = require('../../src/repository/taskRepository');
 const projectRepository = require('../../src/repository/projectRepository');
 const projectMemberRepository = require('../../src/repository/projectMemberRepository');
 const userRepository = require('../../src/repository/userRepository');
 const notificationService = require('../../src/services/notificationService');
+const taskAssigneeHoursService = require('../../src/services/taskAssigneeHoursService');
 
 jest.mock('../../src/repository/taskRepository');
 jest.mock('../../src/repository/projectRepository');
@@ -48,6 +55,14 @@ describe('TaskService', () => {
     projectRepository.getProjectById.mockReset();
     projectRepository.getProjectById.mockImplementation(async (id) => ({ id, status: 'active' }));
     taskRepository.getTaskById.mockReset();
+    taskAssigneeHoursService.recordHours.mockReset();
+    taskAssigneeHoursService.getTaskHoursSummary.mockReset();
+    taskAssigneeHoursService.normalizeHours.mockReset();
+    taskAssigneeHoursService.getTaskHoursSummary.mockResolvedValue({
+      total_hours: 0,
+      per_assignee: []
+    });
+    taskAssigneeHoursService.normalizeHours.mockImplementation((value) => Number(value));
     if (taskRepository.updateById?.mockReset) {
       taskRepository.updateById.mockReset();
     }
@@ -527,9 +542,22 @@ describe('TaskService', () => {
         status: 'completed',
         updated_at: expect.any(String)
       }));
-      expect(result).toEqual(mockUpdatedTask);
+      expect(taskAssigneeHoursService.getTaskHoursSummary).toHaveBeenCalledWith(taskId, [1, 2]);
+      expect(result).toMatchObject({
+        ...mockUpdatedTask,
+        time_tracking: {
+          total_hours: 0,
+          per_assignee: []
+        }
+      });
       expect(notificationService.createTaskUpdateNotifications).toHaveBeenCalledWith(expect.objectContaining({
-        task: mockUpdatedTask,
+        task: expect.objectContaining({
+          id: taskId,
+          time_tracking: {
+            total_hours: 0,
+            per_assignee: []
+          }
+        }),
         updatedById: null,
         changes: expect.arrayContaining([
           expect.objectContaining({ field: 'title' }),
@@ -604,9 +632,22 @@ describe('TaskService', () => {
         assigned_to: [1, 2, 3],
         updated_at: expect.any(String)
       }));
-      expect(result).toEqual(mockUpdatedTask);
+      expect(taskAssigneeHoursService.getTaskHoursSummary).toHaveBeenCalledWith(taskId, [1, 2, 3]);
+      expect(result).toMatchObject({
+        ...mockUpdatedTask,
+        time_tracking: {
+          total_hours: 0,
+          per_assignee: []
+        }
+      });
       expect(notificationService.createTaskAssignmentNotifications).toHaveBeenCalledWith(expect.objectContaining({
-        task: mockUpdatedTask,
+        task: expect.objectContaining({
+          id: taskId,
+          time_tracking: {
+            total_hours: 0,
+            per_assignee: []
+          }
+        }),
         assigneeIds: [3],
         assignedById: null,
         previousAssigneeIds: [1, 2],
@@ -641,9 +682,22 @@ describe('TaskService', () => {
         assigned_to: [1, 2],
         updated_at: expect.any(String)
       }));
-      expect(result).toEqual(mockUpdatedTask);
+      expect(taskAssigneeHoursService.getTaskHoursSummary).toHaveBeenCalledWith(taskId, [1, 2]);
+      expect(result).toMatchObject({
+        ...mockUpdatedTask,
+        time_tracking: {
+          total_hours: 0,
+          per_assignee: []
+        }
+      });
       expect(notificationService.createTaskRemovalNotifications).toHaveBeenCalledWith(expect.objectContaining({
-        task: mockUpdatedTask,
+        task: expect.objectContaining({
+          id: taskId,
+          time_tracking: {
+            total_hours: 0,
+            per_assignee: []
+          }
+        }),
         assigneeIds: [3],
         assignedById: null,
         previousAssigneeIds: [1, 2, 3],
@@ -663,6 +717,74 @@ describe('TaskService', () => {
       });
 
       await expect(taskService.updateTask(taskId, updateData)).rejects.toThrow('at most 5 assignees');
+    });
+
+    test('should record hours for assigned user and return summary', async () => {
+      const taskId = 77;
+      const requesterId = 10;
+      const updateData = { hours: 2.5 };
+      const currentTask = {
+        id: taskId,
+        project_id: 2,
+        status: 'pending',
+        recurrence_freq: null,
+        recurrence_interval: 1,
+        assigned_to: [requesterId],
+        tags: []
+      };
+      const updatedTask = {
+        ...currentTask,
+        updated_at: new Date().toISOString()
+      };
+      const summary = {
+        total_hours: 2.5,
+        per_assignee: [{ user_id: requesterId, hours: 2.5 }]
+      };
+
+      taskRepository.getTaskById.mockResolvedValue(currentTask);
+      taskRepository.updateById = jest.fn().mockResolvedValue(updatedTask);
+      taskAssigneeHoursService.normalizeHours.mockReturnValue(2.5);
+      taskAssigneeHoursService.getTaskHoursSummary.mockResolvedValue(summary);
+
+      const result = await taskService.updateTask(taskId, updateData, requesterId);
+
+      expect(taskRepository.updateById).toHaveBeenCalledWith(taskId, expect.objectContaining({
+        updated_at: expect.any(String)
+      }));
+      expect(taskAssigneeHoursService.normalizeHours).toHaveBeenCalledWith(2.5);
+      expect(taskAssigneeHoursService.recordHours).toHaveBeenCalledWith({
+        taskId,
+        userId: requesterId,
+        hours: 2.5
+      });
+      expect(result.time_tracking).toEqual(summary);
+    });
+
+    test('should reject negative hours input', async () => {
+      const taskId = 81;
+      const requesterId = 5;
+      const currentTask = {
+        id: taskId,
+        project_id: 9,
+        status: 'pending',
+        recurrence_freq: null,
+        recurrence_interval: 1,
+        assigned_to: [requesterId],
+        tags: []
+      };
+
+      taskRepository.getTaskById.mockResolvedValue(currentTask);
+      taskAssigneeHoursService.normalizeHours.mockImplementation(() => {
+        throw new Error('Hours spent must be a non-negative number');
+      });
+      taskRepository.updateById = jest.fn();
+
+      await expect(taskService.updateTask(taskId, { hours: -3 }, requesterId))
+        .rejects.toThrow('Hours spent must be a non-negative number');
+
+      expect(taskRepository.updateById).not.toHaveBeenCalled();
+      expect(taskAssigneeHoursService.recordHours).not.toHaveBeenCalled();
+      expect(taskAssigneeHoursService.getTaskHoursSummary).not.toHaveBeenCalled();
     });
 
     test('should reject update when requester not assigned', async () => {
@@ -1131,13 +1253,19 @@ describe('TaskService', () => {
         status: 'pending',
         project_id: 1
       };
+      const summary = {
+        total_hours: 4,
+        per_assignee: [{ user_id: 2, hours: 4 }]
+      };
 
       taskRepository.getTaskById.mockResolvedValue(mockTask);
+      taskAssigneeHoursService.getTaskHoursSummary.mockResolvedValue(summary);
 
       const result = await taskService.getTaskById(taskId);
 
       expect(taskRepository.getTaskById).toHaveBeenCalledWith(taskId);
-      expect(result).toEqual(mockTask);
+      expect(taskAssigneeHoursService.getTaskHoursSummary).toHaveBeenCalledWith(taskId, []);
+      expect(result).toEqual({ ...mockTask, time_tracking: summary });
     });
 
     test('should handle task not found', async () => {

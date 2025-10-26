@@ -1,6 +1,7 @@
 const projectTasksRepository = require('../repository/projectTasksRepository');
 const projectRepository = require('../repository/projectRepository');
 const notificationService = require('./notificationService');
+const taskAssigneeHoursService = require('./taskAssigneeHoursService');
 
 const MAX_ASSIGNEES = 5;
 
@@ -260,9 +261,14 @@ class ProjectTasksService {
         throw new Error('Task not found');
       }
 
+      const summary = await taskAssigneeHoursService.getTaskHoursSummary(
+        validatedTaskId,
+        this._normalizeAssigneeIds(task.assigned_to)
+      );
+
       return {
         success: true,
-        task,
+        task: { ...task, time_tracking: summary },
         message: 'Task retrieved successfully'
       };
 
@@ -460,6 +466,20 @@ class ProjectTasksService {
         Object.entries(updateData).filter(([_, value]) => value !== undefined)
       );
 
+      const rawHoursInput = filteredUpdateData.hours ?? filteredUpdateData.time_spent_hours;
+      const hasHoursUpdate = rawHoursInput !== undefined;
+      let normalizedHoursInput;
+      if (hasHoursUpdate) {
+        if (normalizedRequesterId === null) {
+          const hoursError = new Error('Hours spent can only be recorded by an assigned user.');
+          hoursError.statusCode = 403;
+          throw hoursError;
+        }
+        normalizedHoursInput = taskAssigneeHoursService.normalizeHours(rawHoursInput);
+      }
+      delete filteredUpdateData.hours;
+      delete filteredUpdateData.time_spent_hours;
+
       // Validate fields if they're being updated
       if (filteredUpdateData.status && !ProjectTasksService.VALID_TASK_STATUSES.includes(filteredUpdateData.status)) {
         throw new Error(`Invalid status. Must be one of: ${ProjectTasksService.VALID_TASK_STATUSES.join(', ')}`);
@@ -499,6 +519,19 @@ class ProjectTasksService {
         notFoundError.statusCode = 404;
         throw notFoundError;
       }
+
+      if (hasHoursUpdate) {
+        await taskAssigneeHoursService.recordHours({
+          taskId: validatedTaskId,
+          userId: normalizedRequesterId,
+          hours: normalizedHoursInput
+        });
+      }
+
+      updatedTask.time_tracking = await taskAssigneeHoursService.getTaskHoursSummary(
+        validatedTaskId,
+        updatedTask.assigned_to || existingTask?.assigned_to || []
+      );
 
       // Send immediate deadline notifications if task deadline was updated to today/tomorrow
       if (filteredUpdateData.deadline && updatedTask.deadline) {

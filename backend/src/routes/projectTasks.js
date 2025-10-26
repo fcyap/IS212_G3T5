@@ -8,6 +8,7 @@ const {
 } = require('../middleware/rbac');
 // Import authentication middleware
 const { authMiddleware } = require('../middleware/auth');
+const taskAssigneeHoursService = require('../services/taskAssigneeHoursService');
 const router = express.Router();
 
 // Constants for validation
@@ -429,6 +430,16 @@ router.get('/:projectId/tasks/:taskId', authMiddleware(), async (req, res) => {
       }
 
       task = taskData;
+      try {
+        const summary = await taskAssigneeHoursService.getTaskHoursSummary(
+          validatedTaskId,
+          Array.isArray(task?.assigned_to) ? task.assigned_to : []
+        );
+        task = { ...task, time_tracking: summary };
+      } catch (summaryError) {
+        console.error('[projectTasks] Failed to load time tracking summary:', summaryError);
+        task = { ...task, time_tracking: { total_hours: 0, per_assignee: [] } };
+      }
     } else {
       // Use mock data
       const mockTasks = getMockTasks(validatedProjectId);
@@ -457,6 +468,7 @@ router.get('/:projectId/tasks/:taskId', authMiddleware(), async (req, res) => {
           }
         }
       ];
+      task.time_tracking = { total_hours: 0, per_assignee: [] };
     }
 
     res.json({

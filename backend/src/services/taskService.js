@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const notificationService = require('./notificationService');
 const taskAttachmentService = require('./taskAttachmentService');
 const taskFilesService = require('./taskFilesService');
+const taskAssigneeHoursService = require('./taskAssigneeHoursService');
 const supabase = require('../utils/supabase');
 
 /**
@@ -171,7 +172,12 @@ class TaskService {
    * Get task by ID
    */
   async getTaskById(taskId) {
-    return await taskRepository.getTaskById(taskId);
+    const task = await taskRepository.getTaskById(taskId);
+    const summary = await taskAssigneeHoursService.getTaskHoursSummary(
+      task.id,
+      this._normalizeAssigneeIds(task.assigned_to)
+    );
+    return { ...task, time_tracking: summary };
   }
 
   /**
@@ -447,6 +453,17 @@ class TaskService {
 
     const twoArgOverload = (arguments.length === 2);
     const input = updates;
+    const rawHoursInput = input && (input.hours ?? input.time_spent_hours);
+    const hasHoursUpdate = rawHoursInput !== undefined;
+    let normalizedHoursInput;
+    if (hasHoursUpdate) {
+      if (normalizedRequesterId == null) {
+        const err = new Error('Hours spent can only be recorded by an assigned user.');
+        err.status = 403;
+        throw err;
+      }
+      normalizedHoursInput = taskAssigneeHoursService.normalizeHours(rawHoursInput);
+    }
 
     // Normalize patch (your existing logic, trimmed to keep the important bits)
     const patch = {};
@@ -533,6 +550,21 @@ class TaskService {
     const updated = taskRepository.updateById
       ? await taskRepository.updateById(Number(taskId), patch)
       : await taskRepository.updateTask(Number(taskId), patch);
+    const numericTaskId = Number(taskId);
+
+    if (hasHoursUpdate) {
+      await taskAssigneeHoursService.recordHours({
+        taskId: numericTaskId,
+        userId: normalizedRequesterId,
+        hours: normalizedHoursInput
+      });
+    }
+
+    const summaryAssigneeIds = this._normalizeAssigneeIds(updated.assigned_to);
+    updated.time_tracking = await taskAssigneeHoursService.getTaskHoursSummary(
+      numericTaskId,
+      summaryAssigneeIds
+    );
 
     // ---- Send notifications for assignee changes ----
     if (patch.assigned_to !== undefined) {

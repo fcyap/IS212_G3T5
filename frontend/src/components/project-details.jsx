@@ -22,6 +22,8 @@ import { useProjects } from "@/contexts/project-context"
 import { useAuth } from "@/hooks/useAuth"
 import { TaskAttachmentsDisplay } from "./task-attachments-display"
 import { FileUploadInput } from "./file-upload-input"
+import { TaskTimeTracking } from "./task-time-tracking"
+import { extractUserHours, normalizeTimeSummary } from "@/lib/time-tracking"
 import toast from "react-hot-toast"
 
 const API = process.env.NEXT_PUBLIC_API_URL ;
@@ -395,6 +397,9 @@ export function ProjectDetails({ projectId, onBack }) {
           deadline: taskData.deadline || null,
           tags: taskData.tags || [],
           ...(hasValidAssignees ? { assigned_to: normalizedAssignees } : {}),
+          ...(typeof taskData.hours === 'number' && taskData.hours >= 0
+            ? { hours: taskData.hours }
+            : {}),
         })
       })
 
@@ -406,9 +411,11 @@ export function ProjectDetails({ projectId, onBack }) {
       const updatedTask = await response.json()
       setTasks(prev => prev.map(task => task.id === updatedTask.id ? updatedTask : task))
       setEditingTask(null)
+      return updatedTask
     } catch (error) {
       console.error('Error updating task:', error)
       alert(`Error updating task: ${error.message}`)
+      throw error
     }
   }
 
@@ -1747,6 +1754,13 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
     isManagerRole
   const isCreator = currentUserId != null && currentUserId === taskCreatorId
 
+  const [timeTracking, setTimeTracking] = useState(() => normalizeTimeSummary(task.time_tracking))
+  const [hoursSpent, setHoursSpent] = useState(() =>
+    extractUserHours(normalizeTimeSummary(task.time_tracking), currentUserId)
+  )
+  const [saving, setSaving] = useState(false)
+  const isMountedRef = useRef(true)
+
   const userIsAssignee = useMemo(() => {
     if (currentUserId == null) return false
     if (assignees.some((a) => a.id === currentUserId)) return true
@@ -1775,7 +1789,15 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   const canAddAssignees = canEditTask
   const canRemoveAssignees = isProjectManager || (canEditTask && isCreator)
 
-  const canSave = (canEditTask || isProjectManager || isManagerRole) && assignees.length <= MAX_ASSIGNEES
+  const canUpdateHours = userIsAssignee
+  const numericHours = Number(hoursSpent)
+  const isHoursValid =
+    hoursSpent === "" ||
+    (Number.isFinite(numericHours) && numericHours >= 0)
+  const canSave =
+    (canEditTask || isProjectManager || isManagerRole) &&
+    assignees.length <= MAX_ASSIGNEES &&
+    isHoursValid
 
   const memberOptions = useMemo(() => {
     if (!Array.isArray(projectMembers)) return []
@@ -1838,6 +1860,63 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
     setAssignees(initialAssignees)
   }, [initialAssignees])
 
+  useEffect(() => {
+    if (!task.time_tracking) return
+    const summary = normalizeTimeSummary(task.time_tracking)
+    console.log('[TaskEditingSidePanel] normalised summary from task prop', summary)
+    setTimeTracking(summary)
+    const extracted = extractUserHours(summary, currentUserId)
+    console.log('[TaskEditingSidePanel] extracted hours from prop summary', { extracted, currentUserId })
+    if (extracted !== "") {
+      setHoursSpent(extracted)
+    }
+  }, [task.time_tracking, currentUserId])
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const projectId = Number(task.project_id)
+    if (!Number.isFinite(projectId)) return
+    let active = true
+    ;(async () => {
+      try {
+        const res = await fetchWithCsrf(`${API}/api/projects/${projectId}/tasks/${task.id}`, {
+          method: "GET",
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache"
+          }
+        })
+        if (!res.ok) return
+        const payload = await res.json().catch(() => null)
+        const detail = payload?.task ?? payload
+        if (!detail || !active) return
+        const summary = normalizeTimeSummary(detail.time_tracking)
+        console.log('[TaskEditingSidePanel] fetched time summary', {
+          taskId: task.id,
+          raw: detail.time_tracking,
+          summary,
+          currentUserId
+        })
+        setTimeTracking(summary)
+        const extracted = extractUserHours(summary, currentUserId)
+        console.log('[TaskEditingSidePanel] extracted hours from fetched summary', { extracted, currentUserId })
+        if (extracted !== "") {
+          setHoursSpent(extracted)
+        }
+      } catch (error) {
+        console.error('[TaskEditingSidePanel] Failed to fetch time tracking:', error)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [task.id, task.project_id, currentUserId])
+
   const availableAssigneeResults = useMemo(() => {
     if (!canAddAssignees) return []
     const search = assigneeQuery.trim().toLowerCase()
@@ -1883,6 +1962,18 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
     setAssignees((prev) => prev.filter((assignee) => assignee.id !== userId))
   }
 
+  const handleHoursInputChange = (value) => {
+    if (!canUpdateHours) return
+    if (value === "" || value === null) {
+      setHoursSpent("")
+      return
+    }
+    const parsed = Number(value)
+    if (!Number.isNaN(parsed) && parsed >= 0) {
+      setHoursSpent(value)
+    }
+  }
+
   const handleAssigneeInputKeyDown = (event) => {
     if (!canAddAssignees) return
     if (event.key === "Enter" && availableAssigneeResults.length > 0 && assignees.length < MAX_ASSIGNEES) {
@@ -1900,6 +1991,39 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   const handleDelete = () => {
     if (window.confirm('Are you sure you want to delete this task?')) {
       onDelete()
+    }
+  }
+
+  const handleSave = async () => {
+    if (!canSave || saving) return
+    const payload = {
+      title: title.trim(),
+      description: description.trim(),
+      priority,
+      status,
+      deadline,
+      tags,
+      assignees: assignees.map((assignee) => assignee.id)
+    }
+    if (canUpdateHours && hoursSpent !== "" && Number.isFinite(numericHours) && numericHours >= 0) {
+      payload.hours = numericHours
+    }
+    try {
+      if (isMountedRef.current) setSaving(true)
+      const updatedTask = await onSave?.(payload)
+      if (updatedTask?.time_tracking && isMountedRef.current) {
+        const summary = normalizeTimeSummary(updatedTask.time_tracking)
+        setTimeTracking(summary)
+        const extracted = extractUserHours(summary, currentUserId)
+        if (extracted !== "") {
+          setHoursSpent(extracted)
+        }
+      }
+    } catch (error) {
+      console.error('[TaskEditingSidePanel] Failed to update task:', error)
+      toast.error(error.message || 'Failed to update task')
+    } finally {
+      if (isMountedRef.current) setSaving(false)
     }
   }
 
@@ -1986,6 +2110,18 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
               </SelectContent>
             </Select>
           </div>
+
+          <TaskTimeTracking
+            value={hoursSpent}
+            onChange={handleHoursInputChange}
+            canEdit={canUpdateHours && canEditTask}
+            totalHours={timeTracking.total_hours}
+            perAssignee={timeTracking.per_assignee}
+            assignees={assignees}
+          />
+          {!isHoursValid && (
+            <p className="text-xs text-red-400">Please enter a non-negative number of hours.</p>
+          )}
 
           {/* Tags */}
           <div>
@@ -2181,19 +2317,11 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
         {/* Actions */}
         <div className="mt-6 flex gap-2">
           <Button
-            onClick={() => onSave({
-              title: title.trim(),
-              description: description.trim(),
-              priority,
-              status,
-              deadline,
-              tags,
-              assignees: assignees.map((assignee) => assignee.id)
-            })}
-            disabled={!canSave}
+            onClick={handleSave}
+            disabled={!canSave || saving}
             className="bg-white/90 text-black"
           >
-            Save
+            {saving ? "Saving…" : "Save"}
           </Button>
           <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
             Cancel
