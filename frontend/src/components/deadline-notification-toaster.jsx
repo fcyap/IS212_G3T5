@@ -21,6 +21,7 @@ export function DeadlineNotificationToaster() {
   const { user } = useAuth()
   const router = useRouter()
   const [lastChecked, setLastChecked] = useState(null)
+  const [shownNotifications, setShownNotifications] = useState(new Set())
 
   useEffect(() => {
     if (!user?.email) return
@@ -88,14 +89,24 @@ export function DeadlineNotificationToaster() {
       console.log('Filtered notifications:', relevantNotifications.length)
       console.log('Eligible types:', Array.from(eligibleTypes))
 
-      // Show toast for each new notification
+      // Show toast for each new notification that hasn't been shown yet
       relevantNotifications.forEach(notification => {
-        console.log('Showing toast for notification:', {
-          id: notification.notif_id,
-          type: notification.notif_types,
-          message: notification.message
-        })
-        showNotificationToast(notification)
+        const notificationId = notification.notif_id || notification.id
+        
+        // Only show if we haven't shown this notification before
+        if (!shownNotifications.has(notificationId)) {
+          console.log('Showing toast for notification:', {
+            id: notificationId,
+            type: notification.notif_types,
+            message: notification.message
+          })
+          showNotificationToast(notification)
+          
+          // Mark this notification as shown
+          setShownNotifications(prev => new Set([...prev, notificationId]))
+        } else {
+          console.log('Skipping already shown notification:', notificationId)
+        }
       })
 
       // Update last checked time
@@ -116,6 +127,13 @@ export function DeadlineNotificationToaster() {
       // Call API to mark notification as dismissed
       await notificationService.dismissNotification(notificationId)
       console.log('Successfully dismissed notification:', notificationId)
+      
+      // Remove from shown notifications set so it doesn't stay in memory forever
+      setShownNotifications(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(notificationId)
+        return newSet
+      })
       
       // Dismiss the toast
       toast.dismiss(toastId)
@@ -190,6 +208,7 @@ export function DeadlineNotificationToaster() {
     const notifType = notification.notif_types || 'general'
     const theme = TOAST_THEME[notifType] || TOAST_THEME.general
     const messageLines = notification.message ? notification.message.split('\n').filter(Boolean) : []
+    const notificationId = notification.notif_id || notification.id
 
     // Determine urgency for deadlines
     const isDeadline = notifType === 'deadline'
@@ -254,6 +273,7 @@ export function DeadlineNotificationToaster() {
         </div>
       </div>
     ), {
+      id: `notification-${notificationId}`, // Use unique ID to prevent duplicates
       duration: 5000, // Auto-dismiss after 5 seconds
       position: 'top-right',
     })
