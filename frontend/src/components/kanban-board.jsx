@@ -384,6 +384,9 @@ export function KanbanBoard({ projectId = null }) {
     : typeof rawRoleValue?.label === 'string'
       ? rawRoleValue.label.toLowerCase()
       : '';
+  const normalizedDepartment = typeof currentUser?.department === 'string'
+    ? currentUser.department.trim().toLowerCase()
+    : '';
   const managerDivision = currentUser?.division ? String(currentUser.division).toLowerCase() : null;
   const managerHierarchySource =
     currentUser?.hierarchy ??
@@ -409,7 +412,7 @@ export function KanbanBoard({ projectId = null }) {
     if (!currentUserId || !normalizedRole) {
       return rawTasks;
     }
-    if (normalizedRole === 'admin') {
+    if (normalizedDepartment === 'hr team') {
       return rawTasks;
     }
 
@@ -773,23 +776,28 @@ export function KanbanBoard({ projectId = null }) {
           onClose={closePanel}
           onSave={async (patch) => {
             try {
-              // Convert assignees (array of user objects) to assigned_to (array of user IDs)
-              const assigned_to = Array.isArray(patch.assignees)
-                ? Array.from(
-                    new Set(
-                      patch.assignees
-                        .map((assignee) => {
-                          const raw =
-                            assignee && typeof assignee === 'object'
-                              ? assignee.id ?? assignee.user_id ?? assignee.userId ?? null
-                              : assignee;
-                          const numeric = Number(raw);
-                          return Number.isFinite(numeric) ? Math.trunc(numeric) : null;
-                        })
-                        .filter((value) => value !== null)
-                    )
-                  )
-                : [];
+              // Prefer the richer assignee payload when available, but fall back to assigned_to arrays
+              const rawAssigneeInputs =
+                Array.isArray(patch.assignees) && patch.assignees.length
+                  ? patch.assignees
+                  : Array.isArray(patch.assigned_to)
+                    ? patch.assigned_to
+                    : [];
+              const assigned_to = Array.from(
+                new Set(
+                  rawAssigneeInputs
+                    .map((entry) => {
+                      if (entry == null) return null;
+                      const raw =
+                        typeof entry === 'object'
+                          ? entry.id ?? entry.user_id ?? entry.userId ?? null
+                          : entry;
+                      const numeric = Number(raw);
+                      return Number.isFinite(numeric) ? Math.trunc(numeric) : null;
+                    })
+                    .filter((value) => value !== null)
+                )
+              );
               const payload = {
                 title: patch.title,
                 description: patch.description || null,
@@ -1101,6 +1109,17 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
   async function handleSave() {
     if (!canSave || saving) return;
     const assigned_to = assignees.map((a) => Number(a.id)).filter(Number.isFinite);
+    const sanitizedAssignees = assignees
+      .map((assignee) => {
+        if (!assignee) return null;
+        const rawId = assignee.id ?? assignee.user_id ?? assignee.userId ?? null;
+        if (rawId == null) return null;
+        return {
+          id: rawId,
+          name: assignee.name ?? assignee.email ?? null,
+        };
+      })
+      .filter(Boolean);
     const payload = {
       title: title.trim(),
       description: description.trim() || null,
@@ -1109,6 +1128,7 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
       deadline: deadline || null,
       tags,
       assigned_to,
+      assignees: sanitizedAssignees,
       recurrence: recurrence ?? null,
     };
     if (canUpdateHours && hoursSpent !== "" && Number.isFinite(numericHours) && numericHours >= 0) {
@@ -1144,9 +1164,27 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
           ensureProject={ensureProjectLookup}
           onClose={() => setChildPanelTask(null)}
           onSave={async (patch) => {
-            const assigned_to = Array.isArray(patch.assignees)
-              ? patch.assignees.map(a => a.id)
-              : [];
+            const rawAssigneeInputs =
+              Array.isArray(patch.assignees) && patch.assignees.length
+                ? patch.assignees
+                : Array.isArray(patch.assigned_to)
+                  ? patch.assigned_to
+                  : [];
+            const assigned_to = Array.from(
+              new Set(
+                rawAssigneeInputs
+                  .map((entry) => {
+                    if (entry == null) return null;
+                    const raw =
+                      typeof entry === 'object'
+                        ? entry.id ?? entry.user_id ?? entry.userId ?? null
+                        : entry;
+                    const numeric = Number(raw);
+                    return Number.isFinite(numeric) ? Math.trunc(numeric) : null;
+                  })
+                  .filter((value) => value !== null)
+              )
+            );
             const payload = {
               title: patch.title,
               description: patch.description || null,
