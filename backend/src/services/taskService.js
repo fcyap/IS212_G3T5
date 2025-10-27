@@ -47,7 +47,7 @@ function isCompleted(status) {
 
 class TaskService {
 
-  async listWithAssignees({ archived = false, parentId, userId, userRole, userHierarchy, userDivision } = {}) {
+  async listWithAssignees({ archived = false, parentId, userId, userRole, userHierarchy, userDivision, userDepartment } = {}) {
     try {
       const { data: tasks, error } = await taskRepository.list({ archived, parentId });
       if (error) throw error;
@@ -55,7 +55,7 @@ class TaskService {
       // Apply RBAC filtering if user context provided
       let filteredTasks = tasks;
       if (userId && userRole) {
-        filteredTasks = await this._filterTasksByRBAC(tasks, userId, userRole, userHierarchy, userDivision);
+        filteredTasks = await this._filterTasksByRBAC(tasks, userId, userRole, userHierarchy, userDivision, userDepartment);
       }
 
       const idSet = new Set();
@@ -85,7 +85,7 @@ class TaskService {
         return { ...t, assignees };
       });
     } catch (error) {
-      const fallback = await this.getAllTasks({ archived, userId, userRole, userHierarchy, userDivision });
+      const fallback = await this.getAllTasks({ archived, userId, userRole, userHierarchy, userDivision, userDepartment });
       if (Array.isArray(fallback)) {
         return fallback;
       }
@@ -116,6 +116,17 @@ class TaskService {
     }
 
     const tasks = await taskRepository.getTasksWithFilters(rbacFilters);
+
+    const normalizedDept = String(filters.userDepartment || '').trim().toLowerCase();
+    const normalizedRole = String(filters.userRole || '').trim().toLowerCase();
+    if (normalizedRole === 'admin' || normalizedDept === 'hr team') {
+      const totalCount = tasks.length;
+      return {
+        tasks,
+        totalCount,
+        pagination: this._calculatePagination(filters, totalCount)
+      };
+    }
 
     // Additional RBAC filtering for tasks - only show tasks from accessible projects or assigned to user
     let filteredTasks = tasks;
@@ -1228,7 +1239,26 @@ class TaskService {
    * Filter tasks based on RBAC rules
    * @private
    */
-  async _filterTasksByRBAC(tasks, userId, userRole, userHierarchy, userDivision) {
+  async _filterTasksByRBAC(tasks, userId, userRole, userHierarchy, userDivision, userDepartment) {
+    const normalizedRole = String(userRole || '').toLowerCase();
+    const normalizedDepartment = String(userDepartment || '').trim().toLowerCase();
+
+    if (normalizedRole === 'admin' || normalizedDepartment === 'hr team') {
+      return tasks;
+    }
+
+    let subordinateUserIds = [];
+    if (
+      normalizedRole === 'manager' &&
+      Number.isFinite(Number(userHierarchy)) &&
+      userDivision
+    ) {
+      subordinateUserIds = await this._getSubordinateUserIds(
+        Number(userHierarchy),
+        userDivision
+      );
+    }
+
     const accessibleProjectIdsRaw = await this._getAccessibleProjectIds(
       userId,
       userRole,
@@ -1243,7 +1273,6 @@ class TaskService {
       : [];
 
     let membershipProjectIds = [];
-    const normalizedRole = String(userRole || '').toLowerCase();
     if (normalizedRole === 'staff') {
       const membershipRaw = await this._getProjectMemberships(userId);
       membershipProjectIds = Array.isArray(membershipRaw)
@@ -1287,6 +1316,14 @@ class TaskService {
         return true;
       }
 
+      if (
+        normalizedRole === 'manager' &&
+        subordinateUserIds.length &&
+        assigneeIds.some((assigneeId) => subordinateUserIds.includes(assigneeId))
+      ) {
+        return true;
+      }
+
       return false;
     });
   }
@@ -1299,6 +1336,34 @@ class TaskService {
       return await projectMemberRepository.getProjectIdsForUser(Number(userId));
     } catch (error) {
       console.error('Error fetching project memberships:', error);
+      return [];
+    }
+  }
+
+  async _getSubordinateUserIds(userHierarchy, userDivision) {
+    try {
+      if (!Number.isFinite(Number(userHierarchy)) || !userDivision) {
+        return [];
+      }
+
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('division', userDivision)
+        .lt('hierarchy', Number(userHierarchy));
+
+      if (error) {
+        throw error;
+      }
+
+      return Array.isArray(data)
+        ? data
+            .map((row) => Number(row?.id))
+            .filter(Number.isFinite)
+            .map((value) => Math.trunc(value))
+        : [];
+    } catch (error) {
+      console.error('Error fetching subordinate user ids:', error);
       return [];
     }
   }

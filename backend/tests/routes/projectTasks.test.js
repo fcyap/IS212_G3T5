@@ -14,6 +14,7 @@ jest.mock('@supabase/supabase-js', () => ({
       }))
     }))
   }))
+  createClient: jest.fn(() => null),
 }));
 
 const mockTimeSummary = {
@@ -27,6 +28,7 @@ jest.mock('../../src/services/taskAssigneeHoursService', () => ({
 
 const taskAssigneeHoursService = require('../../src/services/taskAssigneeHoursService');
 const projectTasksRoutes = require('../../src/routes/projectTasks');
+
 
 describe('ProjectTasks Routes', () => {
   let app;

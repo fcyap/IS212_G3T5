@@ -229,7 +229,7 @@ describe('TaskService', () => {
       taskRepository.getTasksWithFilters.mockRejectedValue(new Error('Database error'));
       taskRepository.getTaskCount.mockResolvedValue(0);
 
-      await expect(taskService.getAllTasks(filters))
+    await expect(taskService.getAllTasks(filters))
         .rejects.toThrow('Database error');
     });
   });
@@ -1404,12 +1404,16 @@ describe('TaskService', () => {
         { id: 3, project_id: 77, assigned_to: [302] }
       ];
 
-      const spy = jest.spyOn(taskService, '_getAccessibleProjectIds').mockResolvedValue([55]);
+      const accessibleSpy = jest.spyOn(taskService, '_getAccessibleProjectIds').mockResolvedValue([55]);
+      const subordinateSpy = jest.spyOn(taskService, '_getSubordinateUserIds').mockResolvedValue([]);
 
-      const filtered = await taskService._filterTasksByRBAC(tasks, managerId, 'manager', 3, 'sales');
+      const filtered = await taskService._filterTasksByRBAC(tasks, managerId, 'manager', 3, 'sales', 'Operations');
 
-      expect(spy).toHaveBeenCalledWith(managerId, 'manager', 3, 'sales');
+      expect(accessibleSpy).toHaveBeenCalledWith(managerId, 'manager', 3, 'sales');
+      expect(subordinateSpy).toHaveBeenCalledWith(3, 'sales');
       expect(filtered.map((t) => t.id)).toEqual([1, 2]);
+      accessibleSpy.mockRestore();
+      subordinateSpy.mockRestore();
     });
 
     test('restricts staff users to tasks assigned to them or projects they belong to', async () => {
@@ -1423,13 +1427,43 @@ describe('TaskService', () => {
       const accessibleSpy = jest.spyOn(taskService, '_getAccessibleProjectIds').mockResolvedValue([]);
       const membershipSpy = jest.spyOn(taskService, '_getProjectMemberships').mockResolvedValue([12]);
 
-      const filtered = await taskService._filterTasksByRBAC(tasks, staffId, 'staff', 1, 'marketing');
+      const filtered = await taskService._filterTasksByRBAC(tasks, staffId, 'staff', 1, 'marketing', 'Marketing');
 
       expect(filtered.map((t) => t.id)).toEqual([2, 3]);
       expect(accessibleSpy).toHaveBeenCalledWith(staffId, 'staff', 1, 'marketing');
       expect(membershipSpy).toHaveBeenCalledWith(staffId);
       accessibleSpy.mockRestore();
       membershipSpy.mockRestore();
+    });
+
+    test('allows managers to view tasks assigned to subordinates even without project access', async () => {
+      const managerId = 50;
+      const tasks = [
+        { id: 1, project_id: 90, assigned_to: [301] },
+        { id: 2, project_id: 55, assigned_to: [999] },
+      ];
+
+      const accessibleSpy = jest
+        .spyOn(taskService, '_getAccessibleProjectIds')
+        .mockResolvedValue([]);
+      const subordinateSpy = jest
+        .spyOn(taskService, '_getSubordinateUserIds')
+        .mockResolvedValue([301]);
+
+      const filtered = await taskService._filterTasksByRBAC(
+        tasks,
+        managerId,
+        'manager',
+        5,
+        'sales',
+        null
+      );
+
+      expect(filtered.map((t) => t.id)).toEqual([1]);
+      expect(accessibleSpy).toHaveBeenCalled();
+      expect(subordinateSpy).toHaveBeenCalledWith(5, 'sales');
+      accessibleSpy.mockRestore();
+      subordinateSpy.mockRestore();
     });
   });
 
@@ -1504,3 +1538,19 @@ describe('TaskService', () => {
     });
   });
 });
+    test('allows HR Team department users to view all tasks', async () => {
+      const userId = 99;
+      const tasks = [
+        { id: 1, project_id: 10, assigned_to: [42] },
+        { id: 2, project_id: null, assigned_to: [] },
+        { id: 3, project_id: 11, assigned_to: [77] }
+      ];
+
+      const spy = jest.spyOn(taskService, '_getAccessibleProjectIds').mockResolvedValue([]);
+
+      const filtered = await taskService._filterTasksByRBAC(tasks, userId, 'staff', 2, 'corporate', 'HR Team');
+
+      expect(filtered).toEqual(tasks);
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
