@@ -13,7 +13,15 @@ import {
 import { Button } from '@/components/ui/button';
 import toast from 'react-hot-toast';
 
-export const CommentItem = ({ comment, currentUser, onUpdate, onReply, onDelete = () => {}, depth = 0 }) => {
+export const CommentItem = ({
+  comment,
+  currentUser,
+  onUpdate,
+  onReply,
+  onDelete = () => {},
+  depth = 0,
+  canComment = true,
+}) => {
   const { user: authUser, role: authRole } = useAuth();
   const effectiveUser = authUser ?? currentUser;
   const [isEditing, setIsEditing] = useState(false);
@@ -180,7 +188,7 @@ export const CommentItem = ({ comment, currentUser, onUpdate, onReply, onDelete 
               </p>
               
               <div className="flex items-center gap-2 mt-3 pt-2 border-t border-gray-500">
-                { (
+                {canComment && (
                   <button
                     onClick={() => setShowReplyBox(!showReplyBox)}
                     className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -227,7 +235,7 @@ export const CommentItem = ({ comment, currentUser, onUpdate, onReply, onDelete 
         </div>
       </div>
       
-      {showReplyBox && (
+      {canComment && showReplyBox && (
         <div className="mt-4 ml-11">
           <CommentBox 
             onSubmit={handleReply}
@@ -248,6 +256,7 @@ export const CommentItem = ({ comment, currentUser, onUpdate, onReply, onDelete 
               onReply={onReply}
               onDelete={onDelete}
               depth={depth + 1}
+              canComment={canComment}
             />
           ))}
         </div>

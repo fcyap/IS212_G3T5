@@ -23,6 +23,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { TaskAttachmentsDisplay } from "./task-attachments-display"
 import { FileUploadInput } from "./file-upload-input"
 import { TaskTimeTracking } from "./task-time-tracking"
+import { CommentSection } from "./task-comment/task-comment-section"
 import { extractUserHours, normalizeTimeSummary } from "@/lib/time-tracking"
 import toast from "react-hot-toast"
 
@@ -2311,6 +2312,11 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
                 Upload {attachments.length} File{attachments.length > 1 ? 's' : ''}
               </Button>
             )}
+          </div>
+
+          {/* Comments */}
+          <div className="pt-4 border-t border-gray-700">
+            <CommentSection taskId={task.id} />
           </div>
         </div>
 

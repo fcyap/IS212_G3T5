@@ -225,16 +225,19 @@ export function KanbanBoard({ projectId = null }) {
     let active = true;
     (async () => {
       try {
-        const users = await userService.getAllUsers();
+        const response = await userService.getAllUsers();
         if (!active) return;
-        const map = Array.isArray(users)
-          ? users.reduce((acc, user) => {
-              if (user?.id != null) {
-                acc[user.id] = user;
-              }
-              return acc;
-            }, {})
-          : {};
+        const list = Array.isArray(response)
+          ? response
+          : Array.isArray(response?.users)
+            ? response.users
+            : [];
+        const map = list.reduce((acc, user) => {
+          if (user?.id != null) {
+            acc[user.id] = user;
+          }
+          return acc;
+        }, {});
         setUsersById(map);
       } catch (err) {
         if (!active) return;

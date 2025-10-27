@@ -10,6 +10,7 @@ jest.mock('../../src/middleware/auth', () => ({
 
 const mockCommentService = {
   listThread: jest.fn(),
+  canUserComment: jest.fn(),
   addComment: jest.fn(),
   editComment: jest.fn(),
   deleteComment: jest.fn(),
@@ -83,5 +84,73 @@ describe('Task comment routes', () => {
       .expect(404);
 
     expect(res.body.error).toBe('Comment not found');
+  });
+
+  test('GET /api/tasks/:taskId/comments returns thread and ability flag', async () => {
+    mockCommentService.listThread.mockResolvedValue([{ id: 1 }]);
+    mockCommentService.canUserComment.mockResolvedValue(true);
+
+    const res = await request(app)
+      .get('/api/tasks/5/comments')
+      .expect(200);
+
+    expect(mockCommentService.listThread).toHaveBeenCalledWith('5');
+    expect(mockCommentService.canUserComment).toHaveBeenCalledWith('5', { id: 1, department: 'HR Team' });
+    expect(res.body).toEqual({ comments: [{ id: 1 }], canComment: true });
+  });
+
+  test('GET /api/tasks/:taskId/comments sets canComment false when service denies', async () => {
+    mockCommentService.listThread.mockResolvedValue([]);
+    mockCommentService.canUserComment.mockResolvedValue(false);
+
+    const res = await request(app)
+      .get('/api/tasks/7/comments')
+      .expect(200);
+
+    expect(res.body.canComment).toBe(false);
+  });
+
+  test('POST /api/tasks/:taskId/comments succeeds when service creates comment', async () => {
+    mockCommentService.addComment.mockResolvedValue({ id: 55, content: 'hello' });
+
+    const res = await request(app)
+      .post('/api/tasks/9/comments')
+      .send({ content: 'hello', userId: 1 })
+      .expect(201);
+
+    expect(mockCommentService.addComment).toHaveBeenCalledWith({
+      taskId: '9',
+      content: 'hello',
+      userId: 1,
+      parentId: null,
+    });
+    expect(res.body).toMatchObject({ id: 55, content: 'hello' });
+  });
+
+  test('POST /api/tasks/:taskId/comments returns 403 when service rejects', async () => {
+    mockCommentService.addComment.mockRejectedValue({ httpCode: 403, message: 'You do not have permission to comment on this task' });
+
+    const res = await request(app)
+      .post('/api/tasks/10/comments')
+      .send({ content: 'nope', userId: 1 })
+      .expect(403);
+
+    expect(mockCommentService.addComment).toHaveBeenCalledWith({
+      taskId: '10',
+      content: 'nope',
+      userId: 1,
+      parentId: null,
+    });
+    expect(res.body.error).toBe('You do not have permission to comment on this task');
+  });
+
+  test('POST /api/tasks/:taskId/comments returns 400 for missing required fields', async () => {
+    const res = await request(app)
+      .post('/api/tasks/11/comments')
+      .send({})
+      .expect(400);
+
+    expect(res.body.error).toMatch('Missing required fields');
+    expect(mockCommentService.addComment).not.toHaveBeenCalled();
   });
 });

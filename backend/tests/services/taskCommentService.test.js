@@ -1,3 +1,10 @@
+jest.mock('../../src/supabase-client', () => ({
+  supabase: {
+    from: jest.fn(),
+  },
+}));
+
+const { supabase } = require('../../src/supabase-client');
 const { TaskCommentService } = require('../../src/services/tasks/taskCommentService');
 
 describe('TaskCommentService.deleteComment', () => {
@@ -10,6 +17,7 @@ describe('TaskCommentService.deleteComment', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    supabase.from.mockReset();
   });
 
   test('allows users from HR Team to delete comments and cascade deletes replies', async () => {
@@ -78,5 +86,219 @@ describe('TaskCommentService.deleteComment', () => {
     ).rejects.toMatchObject({ httpCode: 400 });
 
     expect(repo.getById).not.toHaveBeenCalled();
+  });
+
+  describe('addComment permissions', () => {
+    const commentRepo = {
+      create: jest.fn(),
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      supabase.from.mockReset();
+      commentRepo.create.mockReset();
+    });
+
+    test('allows managers when subordinate assigned to task', async () => {
+      const service = new TaskCommentService({
+        ...commentRepo,
+      });
+
+      const manager = { id: 10, role: 'manager', hierarchy: 3, division: 'sales', department: 'sales' };
+      const task = { project_id: 44, assigned_to: [101, 102] };
+      const subordinates = [{ id: 101 }, { id: 103 }];
+
+      supabase.from.mockImplementation((table) => {
+        if (table === 'users') {
+          return {
+            select: (fields) => {
+              if (fields.includes('role')) {
+                return {
+                  eq: () => ({
+                    single: () => Promise.resolve({ data: manager, error: null }),
+                  }),
+                };
+              }
+              return {
+                eq: () => ({
+                  lt: () => Promise.resolve({ data: subordinates, error: null }),
+                }),
+              };
+            },
+          };
+        }
+        if (table === 'tasks') {
+          return {
+            select: () => ({
+              eq: () => ({
+                single: () => Promise.resolve({ data: task, error: null }),
+              }),
+            }),
+          };
+        }
+        return { select: () => ({}) };
+      });
+
+      commentRepo.create.mockResolvedValue({
+        id: 1,
+        task_id: task.project_id,
+        user_id: manager.id,
+        content: 'Hello',
+        created_at: new Date().toISOString(),
+        parent_id: null,
+        users: { name: 'Manager' },
+      });
+
+      const result = await service.addComment({
+        taskId: 99,
+        content: 'Hello',
+        userId: manager.id,
+      });
+
+      expect(result).toMatchObject({ content: 'Hello' });
+      expect(commentRepo.create).toHaveBeenCalled();
+    });
+
+    test('rejects staff not assigned to task', async () => {
+      const service = new TaskCommentService({
+        ...commentRepo,
+      });
+
+      const staff = { id: 20, role: 'staff', hierarchy: 1, division: 'sales', department: 'sales' };
+      const task = { project_id: 44, assigned_to: [101, 102] };
+
+      supabase.from.mockImplementation((table) => {
+        if (table === 'users') {
+          return {
+            select: (fields) => ({
+              eq: () => ({
+                single: () => Promise.resolve({ data: staff, error: null }),
+              }),
+            }),
+          };
+        }
+        if (table === 'tasks') {
+          return {
+            select: () => ({
+              eq: () => ({
+                single: () => Promise.resolve({ data: task, error: null }),
+              }),
+            }),
+          };
+        }
+        return { select: () => ({}) };
+      });
+
+      await expect(
+        service.addComment({
+          taskId: 99,
+          content: 'Not allowed',
+          userId: staff.id,
+        })
+      ).rejects.toMatchObject({ httpCode: 403 });
+
+      expect(commentRepo.create).not.toHaveBeenCalled();
+    });
+
+    test('allows assigned user when task stores numeric identifiers', async () => {
+      const service = new TaskCommentService({
+        ...commentRepo,
+      });
+
+      const staff = { id: '20', role: 'staff', hierarchy: 1, division: 'sales', department: 'sales' };
+      const task = { project_id: 44, assigned_to: [20, 102] };
+
+      supabase.from.mockImplementation((table) => {
+        if (table === 'users') {
+          return {
+            select: () => ({
+              eq: () => ({
+                single: () => Promise.resolve({ data: staff, error: null }),
+              }),
+            }),
+          };
+        }
+        if (table === 'tasks') {
+          return {
+            select: () => ({
+              eq: () => ({
+                single: () => Promise.resolve({ data: task, error: null }),
+              }),
+            }),
+          };
+        }
+        return { select: () => ({}) };
+      });
+
+      commentRepo.create.mockResolvedValue({
+        id: 2,
+        task_id: task.project_id,
+        user_id: staff.id,
+        content: 'Ready to go',
+        created_at: new Date().toISOString(),
+        parent_id: null,
+        users: { name: 'Staff Member' },
+      });
+
+      await expect(
+        service.addComment({
+          taskId: 99,
+          content: 'Ready to go',
+          userId: staff.id,
+        })
+      ).resolves.toMatchObject({ content: 'Ready to go' });
+
+      expect(commentRepo.create).toHaveBeenCalled();
+    });
+
+    test('blocks managers when task is outside their division hierarchy', async () => {
+      const service = new TaskCommentService({
+        ...commentRepo,
+      });
+
+      const manager = { id: 30, role: 'manager', hierarchy: 3, division: 'sales', department: 'sales' };
+      const task = { project_id: 88, assigned_to: [501] };
+
+      supabase.from.mockImplementation((table) => {
+        if (table === 'users') {
+          return {
+            select: (fields) => {
+              if (fields.includes('role')) {
+                return {
+                  eq: () => ({
+                    single: () => Promise.resolve({ data: manager, error: null }),
+                  }),
+                };
+              }
+              return {
+                eq: () => ({
+                  lt: () => Promise.resolve({ data: [], error: null }),
+                }),
+              };
+            },
+          };
+        }
+        if (table === 'tasks') {
+          return {
+            select: () => ({
+              eq: () => ({
+                single: () => Promise.resolve({ data: task, error: null }),
+              }),
+            }),
+          };
+        }
+        return { select: () => ({}) };
+      });
+
+      await expect(
+        service.addComment({
+          taskId: 501,
+          content: 'Checking in',
+          userId: manager.id,
+        })
+      ).rejects.toMatchObject({ httpCode: 403 });
+
+      expect(commentRepo.create).not.toHaveBeenCalled();
+    });
   });
 });

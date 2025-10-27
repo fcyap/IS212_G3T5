@@ -10,6 +10,121 @@ class TaskCommentService {
     this.repo = repo;
   }
 
+  async _getUserContext(userId) {
+    if (!userId) return null;
+    const { supabase } = require('../../supabase-client');
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, role, hierarchy, division, department')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      console.error('[TaskCommentService] Failed to fetch user context:', error);
+      return null;
+    }
+
+    return data;
+  }
+
+  async _getSubordinateUserIds(userHierarchy, userDivision) {
+    try {
+      if (!Number.isFinite(Number(userHierarchy)) || !userDivision) {
+        return [];
+      }
+
+      const { supabase } = require('../../supabase-client');
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('division', userDivision)
+        .lt('hierarchy', Number(userHierarchy));
+
+      if (error) {
+        throw error;
+      }
+
+      return Array.isArray(data)
+        ? data
+            .map((row) => row?.id)
+            .filter((value) => value != null)
+            .map((value) => String(value).trim())
+            .filter(Boolean)
+        : [];
+    } catch (error) {
+      console.error('[TaskCommentService] Error fetching subordinate user ids:', error);
+      return [];
+    }
+  }
+
+  async _canUserCommentOnTask(taskId, requester) {
+    if (!requester) return false;
+    const { supabase } = require('../../supabase-client');
+
+    const { data: task, error: taskError } = await supabase
+      .from('tasks')
+      .select('project_id, assigned_to')
+      .eq('id', taskId)
+      .single();
+
+    if (taskError || !task) {
+      console.error('[TaskCommentService] Failed to fetch task for comment permissions:', taskError);
+      return false;
+    }
+
+    const assignedIds = Array.isArray(task.assigned_to)
+      ? task.assigned_to
+          .map((value) => (value == null ? null : String(value).trim()))
+          .filter(Boolean)
+      : [];
+    const requesterId = requester?.id == null ? null : String(requester.id).trim();
+    const normalizedRole = String(requester.role || '').toLowerCase();
+    const normalizedDepartment = String(requester.department || '').trim().toLowerCase();
+
+    if (normalizedRole === 'admin' || normalizedDepartment === 'hr team') {
+      return true;
+    }
+
+    if (requesterId && assignedIds.includes(requesterId)) {
+      return true;
+    }
+
+    if (normalizedRole === 'manager') {
+      const subordinateIds = await this._getSubordinateUserIds(
+        requester.hierarchy,
+        requester.division
+      );
+      if (
+        subordinateIds.length > 0 &&
+        assignedIds.some((assigneeId) => subordinateIds.includes(assigneeId))
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  async canUserComment(taskId, requester) {
+    if (!taskId) return false;
+    let context = requester;
+    if (!context || context.id == null) {
+      return false;
+    }
+
+    if (
+      context.role === undefined ||
+      context.department === undefined ||
+      context.hierarchy === undefined ||
+      context.division === undefined
+    ) {
+      context = await this._getUserContext(context.id);
+    }
+
+    if (!context) return false;
+    return this._canUserCommentOnTask(taskId, context);
+  }
+
   buildTree(rows) {
     const map = new Map();
     rows.forEach(r => map.set(r.id, { ...this.rowToVM(r), replies: [] }));
@@ -56,6 +171,12 @@ class TaskCommentService {
     if (!taskId) throw httpError(400, 'taskId is required');
     if (!content?.trim()) throw httpError(400, 'content is required');
     if (!userId) throw httpError(400, 'userId is required');
+
+    const requester = await this._getUserContext(userId);
+    const access = await this._canUserCommentOnTask(taskId, requester);
+    if (!access) {
+      throw httpError(403, 'You do not have permission to comment on this task');
+    }
 
     // Create comment in database
     const created = await this.repo.create({

@@ -34,6 +34,11 @@ async function createForTask(taskId, body) {
   return service.addComment({ taskId, content, userId, parentId });
 }
 
+async function canUserComment(taskId, requester) {
+  const service = await getService();
+  return service.canUserComment(taskId, requester);
+}
+
 async function updateComment(commentId, body) {
   const service = await getService();
   const { content, userId } = body;
@@ -45,4 +50,4 @@ async function deleteComment(commentId, requester) {
   return service.deleteComment({ id: commentId, requester });
 }
 
-module.exports = { listForTask, createForTask, updateComment, deleteComment, __setImporter };
+module.exports = { listForTask, createForTask, canUserComment, updateComment, deleteComment, __setImporter };

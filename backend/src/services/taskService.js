@@ -1247,6 +1247,18 @@ class TaskService {
       return tasks;
     }
 
+    let subordinateUserIds = [];
+    if (
+      normalizedRole === 'manager' &&
+      Number.isFinite(Number(userHierarchy)) &&
+      userDivision
+    ) {
+      subordinateUserIds = await this._getSubordinateUserIds(
+        Number(userHierarchy),
+        userDivision
+      );
+    }
+
     const accessibleProjectIdsRaw = await this._getAccessibleProjectIds(
       userId,
       userRole,
@@ -1304,6 +1316,14 @@ class TaskService {
         return true;
       }
 
+      if (
+        normalizedRole === 'manager' &&
+        subordinateUserIds.length &&
+        assigneeIds.some((assigneeId) => subordinateUserIds.includes(assigneeId))
+      ) {
+        return true;
+      }
+
       return false;
     });
   }
@@ -1316,6 +1336,34 @@ class TaskService {
       return await projectMemberRepository.getProjectIdsForUser(Number(userId));
     } catch (error) {
       console.error('Error fetching project memberships:', error);
+      return [];
+    }
+  }
+
+  async _getSubordinateUserIds(userHierarchy, userDivision) {
+    try {
+      if (!Number.isFinite(Number(userHierarchy)) || !userDivision) {
+        return [];
+      }
+
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('division', userDivision)
+        .lt('hierarchy', Number(userHierarchy));
+
+      if (error) {
+        throw error;
+      }
+
+      return Array.isArray(data)
+        ? data
+            .map((row) => Number(row?.id))
+            .filter(Number.isFinite)
+            .map((value) => Math.trunc(value))
+        : [];
+    } catch (error) {
+      console.error('Error fetching subordinate user ids:', error);
       return [];
     }
   }

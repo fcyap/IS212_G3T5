@@ -5,6 +5,7 @@ const router = express.Router();
 const {
   listForTask,
   createForTask,
+  canUserComment,
   updateComment,
   deleteComment,
 } = require('../../controllers/tasks/taskCommentController');
@@ -23,8 +24,13 @@ const validate = (keys = []) => (req, res, next) => {
 // GET /api/tasks/:taskId/comments
 router.get('/:taskId/comments', async (req, res) => {
   try {
-    const data = await listForTask(req.params.taskId);
-    res.json(data);
+    const taskId = req.params.taskId;
+    const requester = req.user || res.locals?.session || {};
+    const [thread, ability] = await Promise.all([
+      listForTask(taskId),
+      canUserComment(taskId, requester)
+    ]);
+    res.json({ comments: thread, canComment: !!ability });
   } catch (e) {
     res.status(e.httpCode || 400).json({ error: e.message || 'Bad request' });
   }
