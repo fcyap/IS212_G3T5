@@ -1,15 +1,13 @@
 const request = require('supertest');
 const express = require('express');
-const projectTasksRoutes = require('../../src/routes/projectTasks');
 
-// Mock Supabase
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
     from: jest.fn(() => ({
       select: jest.fn(() => ({
         eq: jest.fn(() => ({
           single: jest.fn().mockResolvedValue({
-            data: { id: 1 },
+            data: { id: 1, assigned_to: [1] },
             error: null
           })
         }))
@@ -18,10 +16,23 @@ jest.mock('@supabase/supabase-js', () => ({
   }))
 }));
 
+const mockTimeSummary = {
+  total_hours: 3.5,
+  per_assignee: [{ user_id: 1, hours: 3.5 }]
+};
+
+jest.mock('../../src/services/taskAssigneeHoursService', () => ({
+  getTaskHoursSummary: jest.fn().mockResolvedValue(mockTimeSummary)
+}));
+
+const taskAssigneeHoursService = require('../../src/services/taskAssigneeHoursService');
+const projectTasksRoutes = require('../../src/routes/projectTasks');
+
 describe('ProjectTasks Routes', () => {
   let app;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     app = express();
     app.use(express.json());
     app.use('/projects', projectTasksRoutes);
@@ -194,6 +205,8 @@ describe('ProjectTasks Routes', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body).toHaveProperty('task');
+      expect(response.body.task.time_tracking).toEqual(mockTimeSummary);
+      expect(taskAssigneeHoursService.getTaskHoursSummary).toHaveBeenCalledWith(1, [1]);
     });
 
     test('should handle invalid project ID for task retrieval', async () => {

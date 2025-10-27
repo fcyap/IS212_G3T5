@@ -1,3 +1,10 @@
+const mockSupabase = {
+  from: jest.fn()
+};
+
+jest.mock('../../src/utils/supabase', () => mockSupabase);
+jest.mock('../../src/services/projectService');
+
 const {
   createProject,
   getAllProjects,
@@ -8,24 +15,6 @@ const {
   archiveProject
 } = require('../../src/controllers/projectController');
 const projectService = require('../../src/services/projectService');
-
-jest.mock('../../src/services/projectService');
-
-// Mock the database connection
-jest.mock('../../src/db', () => ({
-  sql: jest.fn((strings, ...values) => {
-    // Return mock user data
-    return Promise.resolve([{
-      id: 1,
-      name: 'Test User',
-      email: 'test@example.com',
-      role: 'admin',
-      hierarchy: 1,
-      division: 'Engineering',
-      department: 'Development'
-    }]);
-  })
-}));
 
 describe('ProjectController', () => {
   let req, res;
@@ -44,6 +33,34 @@ describe('ProjectController', () => {
       }
     };
     jest.clearAllMocks();
+
+    const buildQuery = (rows = []) => ({
+      select: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          limit: jest.fn(() =>
+            Promise.resolve({
+              data: rows,
+              error: null
+            })
+          )
+        }))
+      }))
+    });
+
+    mockSupabase.from.mockImplementation((table) => {
+      if (table === 'users') {
+        return buildQuery([{
+          id: 1,
+          name: 'Test User',
+          email: 'test@example.com',
+          role: 'admin',
+          hierarchy: 1,
+          division: 'Engineering',
+          department: 'Development'
+        }]);
+      }
+      return buildQuery([]);
+    });
   });
 
   describe('createProject', () => {

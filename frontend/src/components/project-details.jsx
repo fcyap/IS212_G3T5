@@ -1741,6 +1741,20 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   const [tags, setTags] = useState(Array.isArray(task.tags) ? task.tags : [])
   const [tagInput, setTagInput] = useState("")
   const [assignees, setAssignees] = useState([])
+  const [assigneeLookup, setAssigneeLookup] = useState(() => {
+    const lookup = {}
+    if (Array.isArray(task.assignees)) {
+      task.assignees.forEach((entry) => {
+        const rawId = entry?.id ?? entry?.user_id ?? entry?.userId
+        const numericId = Number(rawId)
+        if (Number.isFinite(numericId)) {
+          const truncated = Math.trunc(numericId)
+          lookup[truncated] = entry?.name ?? entry?.email ?? `User ${truncated}`
+        }
+      })
+    }
+    return lookup
+  })
   const [assigneeQuery, setAssigneeQuery] = useState("")
   const [attachments, setAttachments] = useState([])
   const MAX_ASSIGNEES = 5
@@ -1858,6 +1872,19 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
 
   useEffect(() => {
     setAssignees(initialAssignees)
+    setAssigneeLookup((prev) => {
+      const next = { ...prev }
+      initialAssignees.forEach((entry) => {
+        const numericId = Number(entry?.id ?? entry?.user_id ?? entry?.userId)
+        if (Number.isFinite(numericId)) {
+          const truncated = Math.trunc(numericId)
+          if (next[truncated] == null) {
+            next[truncated] = entry?.name ?? entry?.email ?? `User ${truncated}`
+          }
+        }
+      })
+      return next
+    })
   }, [initialAssignees])
 
   useEffect(() => {
@@ -1870,6 +1897,19 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
     if (extracted !== "") {
       setHoursSpent(extracted)
     }
+    setAssigneeLookup((prev) => {
+      const next = { ...prev }
+      summary.per_assignee.forEach(({ user_id }) => {
+        const numericId = Number(user_id)
+        if (Number.isFinite(numericId)) {
+          const truncated = Math.trunc(numericId)
+          if (next[truncated] == null) {
+            next[truncated] = `User ${truncated}`
+          }
+        }
+      })
+      return next
+    })
   }, [task.time_tracking, currentUserId])
 
   useEffect(() => {
@@ -1908,6 +1948,19 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
         if (extracted !== "") {
           setHoursSpent(extracted)
         }
+        setAssigneeLookup((prev) => {
+          const next = { ...prev }
+          summary.per_assignee.forEach(({ user_id }) => {
+            const numericId = Number(user_id)
+            if (Number.isFinite(numericId)) {
+              const truncated = Math.trunc(numericId)
+              if (next[truncated] == null) {
+                next[truncated] = `User ${truncated}`
+              }
+            }
+          })
+          return next
+        })
       } catch (error) {
         console.error('[TaskEditingSidePanel] Failed to fetch time tracking:', error)
       }
@@ -1950,6 +2003,16 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
       if (prev.length >= MAX_ASSIGNEES || prev.some((assignee) => assignee.id === member.id)) return prev
       return [...prev, member]
     })
+    if (member?.id != null) {
+      const numericId = Number(member.id)
+      if (Number.isFinite(numericId)) {
+        const truncated = Math.trunc(numericId)
+        setAssigneeLookup((prev) => ({
+          ...prev,
+          [truncated]: member.name ?? member.email ?? `User ${truncated}`
+        }))
+      }
+    }
     setAssigneeQuery("")
   }
 
@@ -1987,6 +2050,26 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
 
   const showNoAssigneeResults =
     canAddAssignees && assigneeQuery.trim().length > 0 && availableAssigneeResults.length === 0
+
+  const breakdownAssignees = useMemo(() => {
+    const ids = new Set()
+    if (Array.isArray(assignees)) {
+      assignees.forEach((entry) => {
+        const numericId = Number(entry?.id ?? entry?.user_id ?? entry?.userId)
+        if (Number.isFinite(numericId)) ids.add(Math.trunc(numericId))
+      })
+    }
+    if (Array.isArray(timeTracking?.per_assignee)) {
+      timeTracking.per_assignee.forEach((entry) => {
+        const numericId = Number(entry?.user_id ?? entry?.id)
+        if (Number.isFinite(numericId)) ids.add(Math.trunc(numericId))
+      })
+    }
+    return Array.from(ids).map((id) => ({
+      id,
+      name: assigneeLookup[id] ?? `User ${id}`
+    }))
+  }, [assignees, timeTracking?.per_assignee, assigneeLookup])
 
   const handleDelete = () => {
     if (window.confirm('Are you sure you want to delete this task?')) {
@@ -2117,7 +2200,7 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
             canEdit={canUpdateHours && canEditTask}
             totalHours={timeTracking.total_hours}
             perAssignee={timeTracking.per_assignee}
-            assignees={assignees}
+            assignees={breakdownAssignees}
           />
           {!isHoursValid && (
             <p className="text-xs text-red-400">Please enter a non-negative number of hours.</p>

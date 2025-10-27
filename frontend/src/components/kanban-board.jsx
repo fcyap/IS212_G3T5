@@ -875,6 +875,20 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
   const [tags, setTags] = useState(Array.isArray(task.tags) ? task.tags : []);
   const [tagInput, setTagInput] = useState("");
   const [assignees, setAssignees] = useState(Array.isArray(task.assignees) ? task.assignees : []);
+  const [assigneeLookup, setAssigneeLookup] = useState(() => {
+    const lookup = {};
+    if (Array.isArray(task.assignees)) {
+      task.assignees.forEach((entry) => {
+        const rawId = entry?.id ?? entry?.user_id ?? entry?.userId;
+        const numericId = Number(rawId);
+        if (Number.isFinite(numericId)) {
+          const truncated = Math.trunc(numericId);
+          lookup[truncated] = entry?.name ?? entry?.email ?? `User ${truncated}`;
+        }
+      });
+    }
+    return lookup;
+  });
   const [recurrence, setRecurrence] = useState(task.recurrence ?? null);
   const [attachments, setAttachments] = useState([]);
   const [timeTracking, setTimeTracking] = useState(() => normalizeTimeSummary(task.timeTracking));
@@ -907,6 +921,19 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
     if (extracted !== "") {
       setHoursSpent(extracted);
     }
+    setAssigneeLookup((prev) => {
+      const next = { ...prev };
+      summary.per_assignee.forEach(({ user_id }) => {
+        const numericId = Number(user_id);
+        if (Number.isFinite(numericId)) {
+          const truncated = Math.trunc(numericId);
+          if (next[truncated] == null) {
+            next[truncated] = `User ${truncated}`;
+          }
+        }
+      });
+      return next;
+    });
   }, [task.timeTracking, currentUserId]);
 
   useEffect(() => {
@@ -946,6 +973,19 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
         if (extracted !== "") {
           setHoursSpent(extracted);
         }
+        setAssigneeLookup((prev) => {
+          const next = { ...prev };
+          summary.per_assignee.forEach(({ user_id }) => {
+            const numericId = Number(user_id);
+            if (Number.isFinite(numericId)) {
+              const truncated = Math.trunc(numericId);
+              if (next[truncated] == null) {
+                next[truncated] = `User ${truncated}`;
+              }
+            }
+          });
+          return next;
+        });
       } catch (err) {
         console.error('[TaskSidePanel] Failed to load task hours:', err);
       }
@@ -1044,6 +1084,27 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
     priority &&
     assignees.length <= MAX_ASSIGNEES &&
     isHoursValid;
+
+  const breakdownAssignees = useMemo(() => {
+    const ids = new Set();
+    if (Array.isArray(assignees)) {
+      assignees.forEach((entry) => {
+        const raw = entry?.id ?? entry?.user_id ?? entry?.userId;
+        const numeric = Number(raw);
+        if (Number.isFinite(numeric)) ids.add(Math.trunc(numeric));
+      });
+    }
+    if (Array.isArray(timeTracking?.per_assignee)) {
+      timeTracking.per_assignee.forEach((entry) => {
+        const numeric = Number(entry?.user_id ?? entry?.id);
+        if (Number.isFinite(numeric)) ids.add(Math.trunc(numeric));
+      });
+    }
+    return Array.from(ids).map((id) => ({
+      id,
+      name: assigneeLookup[id] ?? `User ${id}`
+    }));
+  }, [assignees, timeTracking?.per_assignee, assigneeLookup]);
   function addTagFromInput() {
     if (!canEdit) return;
     const t = tagInput.trim();
@@ -1063,6 +1124,16 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
       if (prev.length >= MAX_ASSIGNEES || prev.some((a) => a.id === user.id)) return prev;
       return [...prev, user];
     });
+    if (user?.id != null) {
+      const numericId = Number(user.id);
+      if (Number.isFinite(numericId)) {
+        const truncated = Math.trunc(numericId);
+        setAssigneeLookup((prev) => ({
+          ...prev,
+          [truncated]: user.name ?? user.email ?? `User ${truncated}`
+        }));
+      }
+    }
     clearUserSearch();
   }
 
@@ -1370,7 +1441,7 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
               canEdit={canUpdateHours && canEdit}
               totalHours={timeTracking.total_hours}
               perAssignee={timeTracking.per_assignee}
-              assignees={assignees}
+              assignees={breakdownAssignees}
             />
             {!isHoursValid && (
               <p className="text-xs text-red-400">
