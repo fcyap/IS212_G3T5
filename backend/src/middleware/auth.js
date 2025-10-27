@@ -6,6 +6,10 @@ const cookieName = process.env.SESSION_COOKIE_NAME || 'spm_session';
 const buildUserFromSession = (session) => ({
   id: session.user_id,
   email: session.email,
+  role: session.role,
+  hierarchy: session.hierarchy,
+  division: session.division,
+  department: session.department,
 });
 
 const authMiddleware = () => async (req, res, next) => {

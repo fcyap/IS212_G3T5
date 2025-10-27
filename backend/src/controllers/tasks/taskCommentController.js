@@ -40,4 +40,9 @@ async function updateComment(commentId, body) {
   return service.editComment({ id: commentId, content, userId });
 }
 
-module.exports = { listForTask, createForTask, updateComment, __setImporter };
+async function deleteComment(commentId, requester) {
+  const service = await getService();
+  return service.deleteComment({ id: commentId, requester });
+}
+
+module.exports = { listForTask, createForTask, updateComment, deleteComment, __setImporter };

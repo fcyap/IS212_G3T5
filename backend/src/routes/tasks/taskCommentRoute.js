@@ -6,6 +6,7 @@ const {
   listForTask,
   createForTask,
   updateComment,
+  deleteComment,
 } = require('../../controllers/tasks/taskCommentController');
 
 // inline validator middleware
@@ -59,6 +60,30 @@ router.patch(
         msg.includes('not found') ? 404 :
         (e.httpCode || 400);
       res.status(code).json({ error: msg });
+    }
+  }
+);
+
+// DELETE /api/comments/:commentId
+router.delete(
+  '/comments/:commentId',
+  async (req, res) => {
+    try {
+      const requester = req.user || res.locals?.session || {};
+      const result = await deleteComment(req.params.commentId, requester);
+      res.json({
+        success: true,
+        message: 'Comment deleted successfully',
+        ...(result || {}),
+      });
+    } catch (e) {
+      const msg = e.message || 'Server error';
+      const code =
+        msg.includes('Only admins') ? 403 :
+        msg.includes('not found') ? 404 :
+        msg.includes('comment id') ? 400 :
+        (e.httpCode || e.statusCode || 500);
+      res.status(code).json({ success: false, error: msg });
     }
   }
 );

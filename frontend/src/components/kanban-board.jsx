@@ -496,7 +496,7 @@ export function KanbanBoard({ projectId = null }) {
 
       return false;
     });
-  }, [rawTasks, currentUserId, normalizedRole, usersById, hasUserDirectory, managerDivision, managerHierarchy, accessibleProjectIds]);
+  }, [rawTasks, currentUserId, normalizedRole, normalizedDepartment, usersById, hasUserDirectory, managerDivision, managerHierarchy, accessibleProjectIds]);
 
   useEffect(() => {
     if (!panelTask) return;

@@ -11,13 +11,13 @@ describe('TaskController', () => {
       body: {},
       params: {},
       query: {},
-      user: { id: 1, role: 'admin', hierarchy: 1, division: 'Engineering' }
+      user: { id: 1, role: 'admin', hierarchy: 1, division: 'Engineering', department: 'Engineering' }
     };
     res = {
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
       locals: {
-        session: { user_id: 1, role: 'admin', hierarchy: 1, division: 'Engineering' }
+        session: { user_id: 1, role: 'admin', hierarchy: 1, division: 'Engineering', department: 'Engineering' }
       }
     };
     jest.clearAllMocks();
@@ -40,7 +40,8 @@ describe('TaskController', () => {
         userId: 1,
         userRole: 'admin',
         userHierarchy: 1,
-        userDivision: 'Engineering'
+        userDivision: 'Engineering',
+        userDepartment: 'Engineering'
       });
       expect(res.json).toHaveBeenCalledWith(mockTasks);
     });
@@ -61,7 +62,8 @@ describe('TaskController', () => {
         userId: 1,
         userRole: 'admin',
         userHierarchy: 1,
-        userDivision: 'Engineering'
+        userDivision: 'Engineering',
+        userDepartment: 'Engineering'
       });
       expect(res.json).toHaveBeenCalledWith(mockTasks);
     });
@@ -82,7 +84,8 @@ describe('TaskController', () => {
         userId: 1,
         userRole: 'admin',
         userHierarchy: 1,
-        userDivision: 'Engineering'
+        userDivision: 'Engineering',
+        userDepartment: 'Engineering'
       });
       expect(res.json).toHaveBeenCalledWith(mockTasks);
     });

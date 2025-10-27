@@ -109,6 +109,31 @@ const toViewModel = (row) => ({
     }
   };
 
+  const handleDeleteComment = async (commentId) => {
+    if (!currentUser) {
+      console.error('[handleDeleteComment] currentUser is undefined!');
+      return;
+    }
+
+    try {
+      const res = await fetchWithCsrf(`${API}/comments/${commentId}`, {
+        method: 'DELETE',
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.error || res.statusText);
+      }
+
+      const reload = await fetchWithCsrf(`${API}/${taskId}/comments`, { cache: 'no-store' });
+      if (!reload.ok) throw new Error((await reload.json()).error || reload.statusText);
+      const data = await reload.json();
+      setComments(data.map(toViewModel));
+    } catch (err) {
+      console.error('Failed to delete comment:', err);
+      throw err;
+    }
+  };
+
   return (
     <div className="max-w-3xl mx-auto p-6 rounded-lg">
       <div className="mb-8">
@@ -133,6 +158,7 @@ const toViewModel = (row) => ({
               currentUser={currentUser}
               onUpdate={handleUpdateComment}
               onReply={handleCreateComment}
+              onDelete={handleDeleteComment}
             />
           ))}
         </div>

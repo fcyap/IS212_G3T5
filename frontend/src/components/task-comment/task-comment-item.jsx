@@ -2,19 +2,40 @@ import React, { useState } from 'react';
 import { Edit2, Trash2, Check, X, Reply, MessageCircle } from 'lucide-react';
 import { CommentBox } from './task-comment';
 import { useAuth } from '@/hooks/useAuth';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import toast from 'react-hot-toast';
 
-export const CommentItem = ({ comment, currentUser, onUpdate, onReply, depth = 0 }) => {
-  const { user: authUser } = useAuth();
+export const CommentItem = ({ comment, currentUser, onUpdate, onReply, onDelete = () => {}, depth = 0 }) => {
+  const { user: authUser, role: authRole } = useAuth();
   const effectiveUser = authUser ?? currentUser;
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(comment.content);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showReplyBox, setShowReplyBox] = useState(false);
   const [showReplies, setShowReplies] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   console.log('Current User:', effectiveUser);
   const canEdit = comment.user?.id && effectiveUser?.id && comment.user.id === effectiveUser.id;
   const hasReplies = comment.replies && comment.replies.length > 0;
+  const normalizedRole = String(
+    authRole ??
+    effectiveUser?.role ??
+    effectiveUser?.roleName ??
+    effectiveUser?.role_label ??
+    ''
+  ).toLowerCase();
+  const normalizedDepartment = String(effectiveUser?.department ?? authUser?.department ?? '').trim().toLowerCase();
+  const isAdmin = normalizedRole === 'admin' || normalizedDepartment === 'hr team';
 
   const handleStartEdit = () => {
     setIsEditing(true);
@@ -47,6 +68,21 @@ export const CommentItem = ({ comment, currentUser, onUpdate, onReply, depth = 0
     } catch (error) {
       console.error('Failed to reply to comment:', error);
       throw error;
+    }
+  };
+
+  const handleDelete = async () => {
+    if (typeof onDelete !== 'function' || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await onDelete(comment.id);
+      setShowDeleteConfirm(false);
+      toast.success('Comment deleted');
+    } catch (error) {
+      console.error('Failed to delete comment:', error);
+      toast.error(error.message || 'Failed to delete comment');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -176,6 +212,15 @@ export const CommentItem = ({ comment, currentUser, onUpdate, onReply, depth = 0
                   </button>
                   </>
                 )}
+                {isAdmin && (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                    title="Delete comment"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -201,11 +246,53 @@ export const CommentItem = ({ comment, currentUser, onUpdate, onReply, depth = 0
               currentUser={effectiveUser}
               onUpdate={onUpdate}
               onReply={onReply}
+              onDelete={onDelete}
               depth={depth + 1}
             />
           ))}
         </div>
       )}
+      <Dialog
+        open={showDeleteConfirm}
+        onOpenChange={(open) => {
+          if (!isDeleting) {
+            setShowDeleteConfirm(open);
+          }
+        }}
+      >
+        <DialogContent className="bg-[#23232a] border border-gray-700 text-white">
+          <DialogHeader>
+            <DialogTitle>Delete comment?</DialogTitle>
+            <DialogDescription className="text-gray-400">
+              This comment{hasReplies ? ' and its replies' : ''} will be permanently removed. 
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-row justify-end gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={isDeleting}
+              className="bg-gray-800 hover:bg-gray-700 text-gray-200"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                  Deleting…
+                </span>
+              ) : (
+                'Delete'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

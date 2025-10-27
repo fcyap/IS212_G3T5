@@ -99,6 +99,22 @@ class TaskCommentService {
     const updated = await this.repo.update({ id, content: content?.trim() || '' });
     return this.rowToVM(updated);
   }
+
+  async deleteComment({ id, requester }) {
+    const numericId = Number(id);
+    if (!Number.isFinite(numericId)) throw httpError(400, 'comment id is required');
+    const existing = await this.repo.getById(numericId);
+    if (!existing) throw httpError(404, 'Comment not found');
+
+    const role = String(requester?.role || requester?.roleName || requester?.role_label || '').toLowerCase();
+    const department = String(requester?.department || '').trim().toLowerCase();
+    if (role !== 'admin' && department !== 'hr team') {
+      throw httpError(403, 'Only admins can delete comments');
+    }
+
+    const result = await this.repo.deleteCascade(numericId);
+    return { success: true, ...result };
+  }
 }
 
 module.exports = {

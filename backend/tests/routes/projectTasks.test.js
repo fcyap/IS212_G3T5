@@ -2,21 +2,21 @@ const request = require('supertest');
 const express = require('express');
 const projectTasksRoutes = require('../../src/routes/projectTasks');
 
+jest.mock('../../src/middleware/auth', () => ({
+  authMiddleware: () => (req, res, next) => next(),
+}));
+
+jest.mock('../../src/middleware/rbac', () => ({
+  requireProjectEdit: () => (req, res, next) => next(),
+  requireTaskCreation: () => (req, res, next) => next(),
+  requireTaskModification: () => (req, res, next) => next(),
+}));
+
 // Mock Supabase
 jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => ({
-    from: jest.fn(() => ({
-      select: jest.fn(() => ({
-        eq: jest.fn(() => ({
-          single: jest.fn().mockResolvedValue({
-            data: { id: 1 },
-            error: null
-          })
-        }))
-      }))
-    }))
-  }))
+  createClient: jest.fn(() => null),
 }));
+
 
 describe('ProjectTasks Routes', () => {
   let app;
