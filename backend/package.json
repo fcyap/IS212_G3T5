@@ -29,7 +29,7 @@
     "morgan": "^1.10.1",
     "node-cron": "^4.2.1",
     "pdfkit": "^0.17.2",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
