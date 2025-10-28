@@ -208,6 +208,48 @@ describe('ProjectRepository', () => {
     });
   });
 
+  describe('getActiveProjects', () => {
+    test('should return only active projects ordered by name', async () => {
+      const mockProjects = [
+        { id: 1, name: 'Alpha', status: 'active' },
+        { id: 2, name: 'Beta', status: 'active' }
+      ];
+
+      mockOrder.mockResolvedValue({
+        data: mockProjects,
+        error: null
+      });
+
+      const result = await projectRepository.getActiveProjects();
+
+      expect(supabase.from).toHaveBeenCalledWith('projects');
+      expect(mockSelect).toHaveBeenCalledWith('*');
+      expect(mockEq).toHaveBeenCalledWith('status', 'active');
+      expect(mockOrder).toHaveBeenCalledWith('name', { ascending: true });
+      expect(result).toEqual(mockProjects);
+    });
+
+    test('should return empty array when no active projects found', async () => {
+      mockOrder.mockResolvedValue({
+        data: null,
+        error: null
+      });
+
+      const result = await projectRepository.getActiveProjects();
+
+      expect(result).toEqual([]);
+    });
+
+    test('should throw when database returns an error', async () => {
+      mockOrder.mockResolvedValue({
+        data: null,
+        error: { message: 'DB error' }
+      });
+
+      await expect(projectRepository.getActiveProjects()).rejects.toThrow('DB error');
+    });
+  });
+
   describe('getProjectsForUser', () => {
     test('should get projects for user successfully', async () => {
       const mockData = [

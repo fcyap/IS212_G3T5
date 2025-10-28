@@ -45,7 +45,7 @@ async function getSession(_sql, token) {
 
   const { data: user, error: userError } = await supabase
     .from('users')
-    .select('email')
+    .select('email, role, hierarchy, division, department')
     .eq('id', session.user_id)
     .single();
 
@@ -57,6 +57,10 @@ async function getSession(_sql, token) {
   return {
     ...session,
     email: user?.email ?? null,
+    role: user?.role ?? null,
+    hierarchy: user?.hierarchy ?? null,
+    division: user?.division ?? null,
+    department: user?.department ?? null,
   };
 }
 

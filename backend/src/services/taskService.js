@@ -1,8 +1,12 @@
 const taskRepository = require('../repository/taskRepository');
 const projectRepository = require('../repository/projectRepository');
+const projectMemberRepository = require('../repository/projectMemberRepository');
 const userRepository = require('../repository/userRepository');
 const crypto = require('crypto');
 const notificationService = require('./notificationService');
+const taskAttachmentService = require('./taskAttachmentService');
+const taskFilesService = require('./taskFilesService');
+const taskAssigneeHoursService = require('./taskAssigneeHoursService');
 const supabase = require('../utils/supabase');
 
 /**
@@ -43,7 +47,7 @@ function isCompleted(status) {
 
 class TaskService {
 
-  async listWithAssignees({ archived = false, parentId, userId, userRole, userHierarchy, userDivision } = {}) {
+  async listWithAssignees({ archived = false, parentId, userId, userRole, userHierarchy, userDivision, userDepartment } = {}) {
     try {
       const { data: tasks, error } = await taskRepository.list({ archived, parentId });
       if (error) throw error;
@@ -51,7 +55,7 @@ class TaskService {
       // Apply RBAC filtering if user context provided
       let filteredTasks = tasks;
       if (userId && userRole) {
-        filteredTasks = await this._filterTasksByRBAC(tasks, userId, userRole, userHierarchy, userDivision);
+        filteredTasks = await this._filterTasksByRBAC(tasks, userId, userRole, userHierarchy, userDivision, userDepartment);
       }
 
       const idSet = new Set();
@@ -81,7 +85,14 @@ class TaskService {
         return { ...t, assignees };
       });
     } catch (error) {
-      return await this.getAllTasks({ archived, userId, userRole, userHierarchy, userDivision });
+      const fallback = await this.getAllTasks({ archived, userId, userRole, userHierarchy, userDivision, userDepartment });
+      if (Array.isArray(fallback)) {
+        return fallback;
+      }
+      if (fallback && Array.isArray(fallback.tasks)) {
+        return fallback.tasks;
+      }
+      return [];
     }
   }
 
@@ -105,6 +116,17 @@ class TaskService {
     }
 
     const tasks = await taskRepository.getTasksWithFilters(rbacFilters);
+
+    const normalizedDept = String(filters.userDepartment || '').trim().toLowerCase();
+    const normalizedRole = String(filters.userRole || '').trim().toLowerCase();
+    if (normalizedRole === 'admin' || normalizedDept === 'hr team') {
+      const totalCount = tasks.length;
+      return {
+        tasks,
+        totalCount,
+        pagination: this._calculatePagination(filters, totalCount)
+      };
+    }
 
     // Additional RBAC filtering for tasks - only show tasks from accessible projects or assigned to user
     let filteredTasks = tasks;
@@ -161,7 +183,12 @@ class TaskService {
    * Get task by ID
    */
   async getTaskById(taskId) {
-    return await taskRepository.getTaskById(taskId);
+    const task = await taskRepository.getTaskById(taskId);
+    const summary = await taskAssigneeHoursService.getTaskHoursSummary(
+      task.id,
+      this._normalizeAssigneeIds(task.assigned_to)
+    );
+    return { ...task, time_tracking: summary };
   }
 
   /**
@@ -195,8 +222,55 @@ class TaskService {
       await userRepository.getUserById(validCreatorId);
     }
 
-    if (project_id && projectRepository.getProjectById) {
-      await projectRepository.getProjectById(project_id);
+    const normalizedProjectId =
+      project_id === null || project_id === undefined || project_id === ''
+        ? null
+        : Number(project_id);
+    if (normalizedProjectId !== null && !Number.isFinite(normalizedProjectId)) {
+      const err = new Error('Invalid project_id');
+      err.status = 400;
+      throw err;
+    }
+
+    const normalizedParentId =
+      parent_id === null || parent_id === undefined || parent_id === ''
+        ? null
+        : Number(parent_id);
+    if (normalizedParentId !== null && !Number.isFinite(normalizedParentId)) {
+      const err = new Error('Invalid parent_id');
+      err.status = 400;
+      throw err;
+    }
+
+    let parentTask = null;
+    if (normalizedParentId !== null) {
+      parentTask = await taskRepository.getTaskById(normalizedParentId);
+      if (!parentTask) {
+        const err = new Error('Parent task not found');
+        err.status = 404;
+        throw err;
+      }
+    }
+
+    // Determine final project assignment (subtasks inherit from parent)
+    let effectiveProjectId = parentTask
+      ? parentTask.project_id ?? null
+      : normalizedProjectId;
+
+    if (parentTask && normalizedProjectId !== null && parentTask.project_id !== normalizedProjectId) {
+      console.warn(
+        `[TaskService] Ignoring mismatched project_id (${normalizedProjectId}) for subtask; using parent project ${parentTask.project_id}`
+      );
+    }
+
+    if (effectiveProjectId !== null && projectRepository.getProjectById) {
+      const project = await projectRepository.getProjectById(effectiveProjectId);
+      const statusValue = project?.status ? String(project.status).toLowerCase() : null;
+      if (statusValue && statusValue !== 'active') {
+        const err = new Error('Tasks can only be assigned to active projects.');
+        err.status = 400;
+        throw err;
+      }
     }
 
     // Normalize priority and status
@@ -265,12 +339,10 @@ class TaskService {
       priority: normPriority,
       status: normStatus,
       deadline: deadline || null,
-      project_id: project_id || null,
+      project_id: effectiveProjectId,
       assigned_to: uniqueAssignees,
       tags: normTags,
-      parent_id: parent_id === null || parent_id === undefined
-     ? null
-     : Number(parent_id),
+      parent_id: normalizedParentId,
       created_at: new Date(),
       updated_at: new Date(),
       recurrence_freq: (recurrence && ['daily','weekly','monthly'].includes(recurrence.freq)) ? recurrence.freq : null,
@@ -280,6 +352,33 @@ class TaskService {
 
     if (taskRepository.insert) {
       const created = await taskRepository.insert(newTaskData); // returns hydrated task object
+      
+      // Copy attachments if this is a recurring task with a parent
+      if (parent_id && recurrence) {
+        try {
+          await taskAttachmentService.copyAttachmentsToTask(
+            parent_id,
+            created.id,
+            validCreatorId || created.assigned_to[0]
+          );
+        } catch (attachmentError) {
+          console.error('Failed to copy attachments for recurring task:', attachmentError);
+          // Don't fail task creation if attachment copy fails
+        }
+
+        // Also copy files from Supabase Storage
+        try {
+          await taskFilesService.copyTaskFiles(
+            parent_id,
+            created.id,
+            validCreatorId || created.assigned_to[0]
+          );
+        } catch (fileError) {
+          console.error('Failed to copy files for recurring task:', fileError);
+          // Don't fail task creation if file copy fails
+        }
+      }
+      
       const notifyAssignees = uniqueAssignees.filter((id) => id !== validCreatorId);
       if (notifyAssignees.length) {
         notificationService
@@ -299,6 +398,33 @@ class TaskService {
       ...newTaskData,
       assigned_to: usingLegacyCreate ? newTaskData.assigned_to : newTaskData.assigned_to
     });
+    
+    // Copy attachments if this is a recurring task with a parent
+    if (parent_id && recurrence) {
+      try {
+        await taskAttachmentService.copyAttachmentsToTask(
+          parent_id,
+          createdTask.id,
+          validCreatorId || createdTask.assigned_to[0]
+        );
+      } catch (attachmentError) {
+        console.error('Failed to copy attachments for recurring task:', attachmentError);
+        // Don't fail task creation if attachment copy fails
+      }
+
+      // Also copy files from Supabase Storage
+      try {
+        await taskFilesService.copyTaskFiles(
+          parent_id,
+          createdTask.id,
+          validCreatorId || createdTask.assigned_to[0]
+        );
+      } catch (fileError) {
+        console.error('Failed to copy files for recurring task:', fileError);
+        // Don't fail task creation if file copy fails
+      }
+    }
+    
     const notifyAssignees = uniqueAssignees.filter((id) => id !== validCreatorId);
     if (notifyAssignees.length) {
       notificationService
@@ -338,9 +464,26 @@ class TaskService {
 
     const twoArgOverload = (arguments.length === 2);
     const input = updates;
+    const rawHoursInput = input && (input.hours ?? input.time_spent_hours);
+    const hasHoursUpdate = rawHoursInput !== undefined;
+    let normalizedHoursInput;
+    if (hasHoursUpdate) {
+      if (normalizedRequesterId == null) {
+        const err = new Error('Hours spent can only be recorded by an assigned user.');
+        err.status = 403;
+        throw err;
+      }
+      normalizedHoursInput = taskAssigneeHoursService.normalizeHours(rawHoursInput);
+    }
 
     // Normalize patch (your existing logic, trimmed to keep the important bits)
     const patch = {};
+    if (input.project_id !== undefined) {
+      const err = new Error('Project assignment cannot be changed after creation.');
+      err.status = 400;
+      throw err;
+    }
+
     if (input.title !== undefined) patch.title = input.title;
     if (input.description !== undefined) patch.description = input.description;
     if (input.priority !== undefined) patch.priority = String(input.priority).toLowerCase();
@@ -394,7 +537,7 @@ class TaskService {
     // ---- Optional permission check (comprehensive path) ----
     let permissionGrantedByHook = false;
     if (!twoArgOverload && requestingUserId && this._canUserUpdateTask) {
-      const canUpdate = await this._canUserUpdateTask(currentTask.project_id, requestingUserId);
+      const canUpdate = await this._canUserUpdateTask(currentTask.project_id, requestingUserId, currentTask);
       if (canUpdate === false) {
         const err = new Error('You do not have permission to update this task');
         err.status = 403;
@@ -418,6 +561,21 @@ class TaskService {
     const updated = taskRepository.updateById
       ? await taskRepository.updateById(Number(taskId), patch)
       : await taskRepository.updateTask(Number(taskId), patch);
+    const numericTaskId = Number(taskId);
+
+    if (hasHoursUpdate) {
+      await taskAssigneeHoursService.recordHours({
+        taskId: numericTaskId,
+        userId: normalizedRequesterId,
+        hours: normalizedHoursInput
+      });
+    }
+
+    const summaryAssigneeIds = this._normalizeAssigneeIds(updated.assigned_to);
+    updated.time_tracking = await taskAssigneeHoursService.getTaskHoursSummary(
+      numericTaskId,
+      summaryAssigneeIds
+    );
 
     // ---- Send notifications for assignee changes ----
     if (patch.assigned_to !== undefined) {
@@ -462,6 +620,35 @@ class TaskService {
       actorId: normalizedRequesterId ?? null
     });
 
+    // ---- Send task deletion notification if task is being archived ----
+    if (patch.archived === true && !previousTask.archived) {
+      // Task is being archived (deleted), send notification to assignees
+      try {
+        // Get deleter information
+        let deleterName = 'A team member';
+        if (normalizedRequesterId) {
+          try {
+            const deleter = await userRepository.getUserById(normalizedRequesterId);
+            if (deleter) {
+              deleterName = deleter.name;
+            }
+          } catch (err) {
+            console.error('Failed to fetch deleter info:', err);
+          }
+        }
+
+        await notificationService.createTaskDeletedNotification({
+          task: previousTask,
+          deleterId: normalizedRequesterId,
+          deleterName: deleterName
+        });
+        console.log(`Task deletion notifications sent for archived task ${taskId}`);
+      } catch (notificationError) {
+        console.error('Failed to send task deletion notifications:', notificationError);
+        // Continue with task update even if notification fails
+      }
+    }
+
     // ---- Recurrence: spawn a next instance only on transition -> completed ----
     const beforeCompleted = isCompleted(currentTask.status);
     const afterCompleted  = isCompleted(updated.status);
@@ -503,6 +690,18 @@ class TaskService {
     };
 
     const newParent = await taskRepository.insert(newTaskPayload);
+
+    // Copy attachments and files from the completed task to the new recurring instance
+    try {
+      await taskFilesService.copyTaskFiles(
+        currentTask.id,
+        newParent.id,
+        currentTask.assigned_to[0] || normalizedRequesterId
+      );
+    } catch (fileError) {
+      console.error('[recurrence] Failed to copy files to new recurring task:', fileError);
+      // Non-blocking - don't fail recurrence if file copy fails
+    }
 
     // Ensure the whole chain shares a series id
     if (!currentTask.recurrence_series_id && seriesId) {
@@ -557,17 +756,58 @@ class TaskService {
    * Delete task
    */
   async deleteTask(taskId, requestingUserId) {
-    // Get current task
+    // Get current task before deletion
     const currentTask = await taskRepository.getTaskById(taskId);
 
     // Check if user can delete the task (project member or manager)
     if (requestingUserId && this._canUserUpdateTask) {
-      const canDelete = await this._canUserUpdateTask(currentTask.project_id, requestingUserId);
+      const canDelete = await this._canUserUpdateTask(currentTask.project_id, requestingUserId, currentTask);
       if (!canDelete) {
         const err = new Error('You do not have permission to delete this task');
         err.status = 403;
         throw err;
       }
+    }
+
+    // Get deleter information for notification
+    let deleterName = 'A team member';
+    if (requestingUserId) {
+      try {
+        const deleter = await userRepository.getUserById(requestingUserId);
+        if (deleter) {
+          deleterName = deleter.name;
+        }
+      } catch (err) {
+        console.error('Failed to fetch deleter info:', err);
+      }
+    }
+
+    // Delete all attachments associated with the task
+    try {
+      await taskAttachmentService.deleteByTaskId(taskId);
+    } catch (attachmentError) {
+      console.error('Failed to delete task attachments:', attachmentError);
+      // Continue with task deletion even if attachment deletion fails
+    }
+
+    // Delete all files from Supabase Storage
+    try {
+      await taskFilesService.deleteTaskFiles(taskId);
+    } catch (fileError) {
+      console.error('Failed to delete task files from Supabase:', fileError);
+      // Continue with task deletion even if file deletion fails
+    }
+
+    // Send deletion notifications before deleting the task
+    try {
+      await notificationService.createTaskDeletedNotification({
+        task: currentTask,
+        deleterId: requestingUserId,
+        deleterName: deleterName
+      });
+    } catch (notificationError) {
+      console.error('Failed to send task deletion notifications:', notificationError);
+      // Continue with task deletion even if notification fails
     }
 
     return await taskRepository.deleteTask(taskId);
@@ -655,17 +895,142 @@ class TaskService {
   /**
    * Private method to check if user can update task
    */
-  async _canUserUpdateTask(projectId, userId) {
+  async _canUserUpdateTask(projectId, userId, task = null) {
     try {
+      if (userId == null) {
+        return undefined;
+      }
+
+      // Fetch user role/hierarchy to evaluate RBAC conditions
+      const { data: userRows, error: userError } = await supabase
+        .from('users')
+        .select('id, role, hierarchy, division')
+        .eq('id', userId)
+        .limit(1);
+
+      if (userError) {
+        console.error('Failed to fetch user for task update permissions:', userError);
+        return undefined;
+      }
+
+      const user = userRows?.[0];
+      if (!user) {
+        return undefined;
+      }
+
+      const normalizedRole = String(user.role || '').toLowerCase();
+      const managerDivision = user.division ? String(user.division).toLowerCase() : null;
+      const managerHierarchy = Number(user.hierarchy);
+
+      if (normalizedRole === 'admin') {
+        return true;
+      }
+
       if (projectId == null) {
         return undefined;
       }
+
+      // Grant if user already has project-level manager/creator role
       if (projectRepository.canUserManageMembers) {
-        return await projectRepository.canUserManageMembers(projectId, userId);
+        try {
+          const canManage = await projectRepository.canUserManageMembers(projectId, userId);
+          if (canManage) {
+            return true;
+          }
+        } catch (err) {
+          console.error('Error checking project membership for task permissions:', err);
+        }
       }
-      return true; // Allow by default if no permission system
+
+      if (normalizedRole !== 'manager') {
+        return undefined;
+      }
+
+      // Fetch project details to compare against project creator
+      let project = null;
+      try {
+        project = await projectRepository.getProjectById(projectId);
+      } catch (err) {
+        console.error('Failed to fetch project for task update permissions:', err);
+      }
+
+      if (project) {
+        if (project.creator_id === userId) {
+          return true;
+        }
+
+        if (project.creator_id != null) {
+          try {
+            const { data: creatorRows, error: creatorError } = await supabase
+              .from('users')
+              .select('id, hierarchy, division')
+              .eq('id', project.creator_id)
+              .limit(1);
+            if (creatorError) {
+              console.error('Failed to fetch project creator for task permissions:', creatorError);
+            } else {
+              const creator = creatorRows?.[0];
+              if (creator) {
+                const creatorDivision = creator.division ? String(creator.division).toLowerCase() : null;
+                const creatorHierarchy = Number(creator.hierarchy);
+                const sameDivision =
+                  managerDivision != null &&
+                  creatorDivision != null &&
+                  managerDivision === creatorDivision;
+                const higherHierarchy =
+                  Number.isFinite(managerHierarchy) &&
+                  Number.isFinite(creatorHierarchy) &&
+                  managerHierarchy > creatorHierarchy;
+
+                if (sameDivision && higherHierarchy) {
+                  return true;
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Error evaluating project creator permissions for task update:', err);
+          }
+        }
+      }
+
+      // As a fallback, check if any assignee is a subordinate (same division, lower hierarchy)
+      if (task) {
+        const assigneeIds = this._normalizeAssigneeIds(task.assigned_to);
+        if (assigneeIds.length) {
+          try {
+            const { data: assigneeRows, error: assigneeError } = await supabase
+              .from('users')
+              .select('id, hierarchy, division')
+              .in('id', assigneeIds);
+
+            if (assigneeError) {
+              console.error('Failed to fetch task assignees for permission check:', assigneeError);
+            } else if (Array.isArray(assigneeRows)) {
+              const canManageAssignee = assigneeRows.some((assignee) => {
+                const assigneeDivision = assignee.division ? String(assignee.division).toLowerCase() : null;
+                if (!managerDivision || !assigneeDivision || managerDivision !== assigneeDivision) {
+                  return false;
+                }
+                const assigneeHierarchy = Number(assignee.hierarchy);
+                return Number.isFinite(managerHierarchy) &&
+                       Number.isFinite(assigneeHierarchy) &&
+                       managerHierarchy > assigneeHierarchy;
+              });
+
+              if (canManageAssignee) {
+                return true;
+              }
+            }
+          } catch (err) {
+            console.error('Error evaluating assignee hierarchy for task update:', err);
+          }
+        }
+      }
+
+      return undefined;
     } catch (error) {
-      return false;
+      console.error('Error while checking task update permissions:', error);
+      return undefined;
     }
   }
 
@@ -902,31 +1267,133 @@ class TaskService {
    * Filter tasks based on RBAC rules
    * @private
    */
-  async _filterTasksByRBAC(tasks, userId, userRole, userHierarchy, userDivision) {
-    const accessibleProjectIds = await this._getAccessibleProjectIds(
+  async _filterTasksByRBAC(tasks, userId, userRole, userHierarchy, userDivision, userDepartment) {
+    const normalizedRole = String(userRole || '').toLowerCase();
+    const normalizedDepartment = String(userDepartment || '').trim().toLowerCase();
+
+    if (normalizedRole === 'admin' || normalizedDepartment === 'hr team') {
+      return tasks;
+    }
+
+    let subordinateUserIds = [];
+    if (
+      normalizedRole === 'manager' &&
+      Number.isFinite(Number(userHierarchy)) &&
+      userDivision
+    ) {
+      subordinateUserIds = await this._getSubordinateUserIds(
+        Number(userHierarchy),
+        userDivision
+      );
+    }
+
+    const accessibleProjectIdsRaw = await this._getAccessibleProjectIds(
       userId,
       userRole,
       userHierarchy,
       userDivision
     );
+    const accessibleProjectIds = Array.isArray(accessibleProjectIdsRaw)
+      ? accessibleProjectIdsRaw
+          .map((value) => Number(value))
+          .filter(Number.isFinite)
+          .map((value) => Math.trunc(value))
+      : [];
+
+    let membershipProjectIds = [];
+    if (normalizedRole === 'staff') {
+      const membershipRaw = await this._getProjectMemberships(userId);
+      membershipProjectIds = Array.isArray(membershipRaw)
+        ? membershipRaw
+            .map((value) => Number(value))
+            .filter(Number.isFinite)
+            .map((value) => Math.trunc(value))
+        : [];
+    }
 
     return tasks.filter(task => {
-      // Show tasks from accessible projects
-      if (task.project_id && accessibleProjectIds.includes(task.project_id)) {
+      const projectId = Number(task.project_id ?? task.projectId);
+      const rawAssignees = Array.isArray(task.assigned_to)
+        ? task.assigned_to
+        : Array.isArray(task.assignees)
+          ? task.assignees.map((assignee) => assignee?.id)
+          : task.assigned_to != null
+            ? [task.assigned_to]
+            : [];
+      const assigneeIds = this._normalizeAssigneeIds(rawAssignees);
+
+      // Admin/manager accessible project checks (also covers staff membership if supabase provided)
+      if (Number.isFinite(projectId) && accessibleProjectIds.includes(projectId)) {
         return true;
       }
-      // Show personal tasks (no project_id) assigned to user
-      if (!task.project_id && task.assigned_to && Array.isArray(task.assigned_to) &&
-          task.assigned_to.includes(userId)) {
+
+      // Personal tasks (no project) assigned to user
+      if (!Number.isFinite(projectId) && assigneeIds.includes(userId)) {
         return true;
       }
-      // Show tasks assigned to user even if not in accessible project
-      if (task.assigned_to && Array.isArray(task.assigned_to) &&
-          task.assigned_to.includes(userId)) {
+
+      // Tasks explicitly assigned to user
+      if (assigneeIds.includes(userId)) {
         return true;
       }
+
+      // Staff can view tasks within their project memberships
+      if (normalizedRole === 'staff' &&
+          Number.isFinite(projectId) &&
+          membershipProjectIds.includes(projectId)) {
+        return true;
+      }
+
+      if (
+        normalizedRole === 'manager' &&
+        subordinateUserIds.length &&
+        assigneeIds.some((assigneeId) => subordinateUserIds.includes(assigneeId))
+      ) {
+        return true;
+      }
+
       return false;
     });
+  }
+
+  async _getProjectMemberships(userId) {
+    try {
+      if (!Number.isFinite(Number(userId))) {
+        return [];
+      }
+      return await projectMemberRepository.getProjectIdsForUser(Number(userId));
+    } catch (error) {
+      console.error('Error fetching project memberships:', error);
+      return [];
+    }
+  }
+
+  async _getSubordinateUserIds(userHierarchy, userDivision) {
+    try {
+      if (!Number.isFinite(Number(userHierarchy)) || !userDivision) {
+        return [];
+      }
+
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('division', userDivision)
+        .lt('hierarchy', Number(userHierarchy));
+
+      if (error) {
+        throw error;
+      }
+
+      return Array.isArray(data)
+        ? data
+            .map((row) => Number(row?.id))
+            .filter(Number.isFinite)
+            .map((value) => Math.trunc(value))
+        : [];
+    } catch (error) {
+      console.error('Error fetching subordinate user ids:', error);
+      return [];
+    }
   }
 }
 

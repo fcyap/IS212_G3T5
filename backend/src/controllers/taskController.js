@@ -20,9 +20,26 @@ const list = async (req, res) => {
     const user = res.locals.session || req.user;
     const userId = user ? (user.user_id || user.id) : null;
 
+    const userDepartment = user?.department;
     const tasks = taskService.listWithAssignees
-      ? await taskService.listWithAssignees({ archived, parentId, userId, userRole: user?.role, userHierarchy: user?.hierarchy, userDivision: user?.division })
-      : await taskService.getAllTasks({ archived, parentId, userId, userRole: user?.role, userHierarchy: user?.hierarchy, userDivision: user?.division });
+      ? await taskService.listWithAssignees({
+          archived,
+          parentId,
+          userId,
+          userRole: user?.role,
+          userHierarchy: user?.hierarchy,
+          userDivision: user?.division,
+          userDepartment,
+        })
+      : await taskService.getAllTasks({
+          archived,
+          parentId,
+          userId,
+          userRole: user?.role,
+          userHierarchy: user?.hierarchy,
+          userDivision: user?.division,
+          userDepartment,
+        });
 
     res.json(tasks);
   } catch (e) {
@@ -93,6 +110,7 @@ const getAllTasks = async (req, res) => {
       filters.userRole = user.role;
       filters.userHierarchy = user.hierarchy;
       filters.userDivision = user.division;
+      filters.userDepartment = user.department;
     }
 
     filters.offset = (filters.page - 1) * filters.limit;
@@ -282,11 +300,9 @@ const updateTask = async (req, res) => {
     console.log("[taskcontroller]:", res.json(updatedTask));
   } catch (err) {
     console.error('Error in updateTask:', err);
-    if (err.message.includes('permission')) {
-      res.status(403).json({ success: false, message: err.message });
-    } else {
-      res.status(500).json({ success: false, message: err.message });
-    }
+    const statusCode = err.status
+      || (err.message && err.message.includes('permission') ? 403 : 500);
+    res.status(statusCode).json({ success: false, message: err.message });
   }
 };
 

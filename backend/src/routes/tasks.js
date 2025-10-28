@@ -17,6 +17,7 @@ router.use((req, res, next) => {
 });
 
 router.get('/', authMiddleware(), taskController.list);
+router.get('/:id', authMiddleware(), taskController.getTaskById);
 router.post('/', authMiddleware(), requireTaskCreation(), taskController.create);
 router.put('/:id', authMiddleware(), requireTaskModification(), taskController.update);
 

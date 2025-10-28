@@ -25,6 +25,23 @@ class ProjectRepository {
   }
 
   /**
+   * Get only active projects from database
+   */
+  async getActiveProjects() {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('status', 'active')
+      .order('name', { ascending: true });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data || [];
+  }
+
+  /**
    * Get all projects from the database with their members
    * @returns {Array} Array of projects with user_ids populated from project_members
    */
@@ -635,9 +652,12 @@ class ProjectRepository {
    */
   async exists(projectId) {
     try {
+      console.log('ProjectRepository.exists called with:', projectId);
       const project = await this.getProjectById(projectId);
+      console.log('Project found:', !!project, project ? `(id: ${project.id})` : '(null)');
       return !!project;
     } catch (error) {
+      console.log('Error checking project existence:', error.message);
       if (error.message.includes('not found')) {
         return false;
       }

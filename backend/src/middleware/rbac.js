@@ -7,11 +7,11 @@ const supabase = require('../utils/supabase');
  */
 const requireProjectCreation = (req, res, next) => {
   const user = req.user; // Use req.user which has full user data from DB
-  
+
   if (!user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  
+
   // Get user data from database to ensure we have latest role/hierarchy info
   const userData = {
     id: user.id,
@@ -19,14 +19,14 @@ const requireProjectCreation = (req, res, next) => {
     hierarchy: user.hierarchy || 1,
     division: user.division
   };
-  
+
   if (!canCreateProject(userData)) {
-    return res.status(403).json({ 
-      error: 'Access denied', 
-      message: 'Only managers and admins can create projects' 
+    return res.status(403).json({
+      error: 'Access denied',
+      message: 'Only managers and admins can create projects'
     });
   }
-  
+
   next();
 };
 
@@ -62,7 +62,7 @@ const requireProjectEdit = (sql) => {
       }
 
       const project = projects[0];
-      
+
       // Get creator info separately
       const { data: creator, error: creatorError } = await supabase
         .from('users')
@@ -279,8 +279,8 @@ const requireTaskCreation = () => {
       };
 
       const hasManagerAccess = userData.role === 'manager' &&
-                               userData.division === projectCreator.division &&
-                               (userData.hierarchy || 0) > (projectCreator.hierarchy || 0);
+        userData.division === projectCreator.division &&
+        (userData.hierarchy || 0) > (projectCreator.hierarchy || 0);
 
       if (isProjectMember || isCreator || hasManagerAccess) {
         return next();
@@ -380,7 +380,7 @@ const requireTaskModification = () => {
 
             if (creatorData) {
               hasManagerAccess = userData.division === creatorData.division &&
-                                (userData.hierarchy || 0) > (creatorData.hierarchy || 0);
+                (userData.hierarchy || 0) > (creatorData.hierarchy || 0);
             }
           }
         }

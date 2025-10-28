@@ -102,6 +102,29 @@ class taskCommentRepository {
     if (error) throw error;
     return data;
   }
+
+  async deleteCascade(id) {
+    const numericId = Number(id);
+    if (!Number.isFinite(numericId)) {
+      throw new Error('Invalid comment id');
+    }
+
+    const { error: deleteError } = await supabase
+      .from(this.table())
+      .delete()
+      .or(`id.eq.${numericId},parent_id.eq.${numericId}`);
+
+    if (deleteError) throw deleteError;
+
+    const { data: remaining, error: countError } = await supabase
+      .from(this.table())
+      .select('id')
+      .eq('parent_id', numericId);
+
+    if (countError) throw countError;
+
+    return { deletedReplies: Array.isArray(remaining) ? remaining.length === 0 : true };
+  }
 }
 
 module.exports = { taskCommentRepository };
