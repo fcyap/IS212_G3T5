@@ -108,15 +108,15 @@ export function ProjectsList({ onProjectSelect }) {
   }
 
   return (
-    <div className="flex-1 bg-[#1a1a1d] p-6">
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold text-white mb-6">My Projects</h1>
+    <div className="flex-1 bg-[#1a1a1d] p-3 sm:p-6 overflow-y-auto">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6">My Projects</h1>
 
         {/* Filters and Search */}
-        <div className="bg-[#2a2a2e] rounded-lg p-4 mb-6">
-          <div className="flex flex-wrap gap-4 items-center">
+        <div className="bg-[#2a2a2e] rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4 items-stretch sm:items-center">
             {/* Search */}
-            <div className="relative flex-1 min-w-[200px]">
+            <div className="relative flex-1 min-w-full sm:min-w-[200px]">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
                 placeholder="Search projects..."
@@ -128,11 +128,11 @@ export function ProjectsList({ onProjectSelect }) {
 
             {/* Sort */}
             <div className="flex items-center gap-2">
-              <label className="text-white text-sm">Sort by:</label>
+              <label className="text-white text-sm whitespace-nowrap">Sort by:</label>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="bg-gray-700 border border-gray-600 text-white rounded px-3 py-2"
+                className="bg-gray-700 border border-gray-600 text-white rounded px-2 sm:px-3 py-2 text-sm flex-1"
               >
                 <option value="name">Name</option>
                 <option value="created_at">Creation Date</option>
@@ -142,7 +142,7 @@ export function ProjectsList({ onProjectSelect }) {
                 variant="ghost"
                 size="sm"
                 onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className="text-gray-400 hover:text-white"
+                className="text-gray-400 hover:text-white flex-shrink-0"
               >
                 {sortOrder === 'asc' ? <SortAsc className="w-4 h-4" /> : <SortDesc className="w-4 h-4" />}
               </Button>
@@ -150,11 +150,11 @@ export function ProjectsList({ onProjectSelect }) {
 
             {/* Filter Status */}
             <div className="flex items-center gap-2">
-              <label className="text-white text-sm">Status:</label>
+              <label className="text-white text-sm whitespace-nowrap">Status:</label>
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="bg-gray-700 border border-gray-600 text-white rounded px-3 py-2"
+                className="bg-gray-700 border border-gray-600 text-white rounded px-2 sm:px-3 py-2 text-sm flex-1"
               >
                 <option value="all">All</option>
                 <option value="active">Active</option>
@@ -166,11 +166,11 @@ export function ProjectsList({ onProjectSelect }) {
 
             {/* Filter Role */}
             <div className="flex items-center gap-2">
-              <label className="text-white text-sm">Role:</label>
+              <label className="text-white text-sm whitespace-nowrap">Role:</label>
               <select
                 value={filterRole}
                 onChange={(e) => setFilterRole(e.target.value)}
-                className="bg-gray-700 border border-gray-600 text-white rounded px-3 py-2"
+                className="bg-gray-700 border border-gray-600 text-white rounded px-2 sm:px-3 py-2 text-sm flex-1"
               >
                 <option value="all">All</option>
                 <option value="creator">Creator</option>
@@ -182,7 +182,7 @@ export function ProjectsList({ onProjectSelect }) {
         </div>
 
         {/* Projects Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
           {filteredProjects.map((project) => {
             const taskCount = project.task_count || 0
             const collaborators = project.collaborators || 'None'
@@ -190,12 +190,12 @@ export function ProjectsList({ onProjectSelect }) {
             return (
               <div
                 key={project.id}
-                className="bg-[#2a2a2e] rounded-lg p-6 cursor-pointer hover:bg-[#3a3a3e] transition-colors"
+                className="bg-[#2a2a2e] rounded-lg p-4 sm:p-6 cursor-pointer hover:bg-[#3a3a3e] transition-all duration-200 hover:scale-[1.02] hover:shadow-xl"
                 onClick={() => onProjectSelect(project.id)}
               >
-                <div className="flex items-start justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-white">{project.name || 'Unnamed Project'}</h3>
-                  <span className={`text-xs px-2 py-1 rounded-full ${
+                <div className="flex items-start justify-between mb-3 sm:mb-4">
+                  <h3 className="text-base sm:text-lg font-semibold text-white line-clamp-2 flex-1 mr-2">{project.name || 'Unnamed Project'}</h3>
+                  <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0 ${
                     project.status === 'active' ? 'bg-green-600 text-white' :
                     project.status === 'hold' ? 'bg-yellow-600 text-white' :
                     project.status === 'completed' ? 'bg-blue-600 text-white' :
@@ -206,14 +206,22 @@ export function ProjectsList({ onProjectSelect }) {
                   </span>
                 </div>
 
-                <p className="text-gray-300 text-sm mb-4 line-clamp-2">
+                <p className="text-gray-300 text-xs sm:text-sm mb-3 sm:mb-4 line-clamp-2">
                   {project.description || 'No description'}
                 </p>
 
-                <div className="space-y-2 text-xs text-gray-400">
-                  <div>Tasks: {taskCount}</div>
-                  <div>Project Members: {collaborators}</div>
-                  <div>Created: {project.created_at ? new Date(project.created_at).toLocaleDateString() : 'Unknown'}</div>
+                <div className="space-y-1.5 sm:space-y-2 text-xs text-gray-400">
+                  <div className="flex items-center justify-between">
+                    <span>Tasks:</span>
+                    <span className="font-semibold">{taskCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Members:</span>
+                    <span className="font-semibold">{collaborators}</span>
+                  </div>
+                  <div className="text-[10px] sm:text-xs pt-1 border-t border-gray-700">
+                    {project.created_at ? new Date(project.created_at).toLocaleDateString() : 'Unknown'}
+                  </div>
                 </div>
               </div>
             )
@@ -221,8 +229,8 @@ export function ProjectsList({ onProjectSelect }) {
         </div>
 
         {filteredProjects.length === 0 && (
-          <div className="text-center text-gray-400 mt-12">
-            No projects found matching your criteria.
+          <div className="text-center text-gray-400 mt-8 sm:mt-12">
+            <p className="text-sm sm:text-base">No projects found matching your criteria.</p>
           </div>
         )}
       </div>

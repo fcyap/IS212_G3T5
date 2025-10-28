@@ -1,7 +1,7 @@
 /*path: backend/src/auth.roles*/
 const { supabase } = require('../supabase-client');
 
-const getEffectiveRole = async (userId) => {
+const getEffectiveRole = async (sql, userId) => {
   try {
     console.log('[getEffectiveRole] Called with userId:', userId, 'type:', typeof userId);
 

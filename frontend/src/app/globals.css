@@ -43,6 +43,48 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* Smooth scrolling and performance optimizations */
+* {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+}
+
+/* Smooth transitions for all interactive elements */
+button, a, input, select, textarea {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Prevent layout shift during loading */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Improve scrollbar on webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1d;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3a3a3e;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4a4e;
+}
+
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);

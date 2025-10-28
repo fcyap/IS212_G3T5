@@ -1,121 +1,98 @@
 // src/middleware/rbac.js
 const { canCreateProject, canEditProject, canAddProjectMembers, canViewUserData } = require('../auth/roles');
-const { supabase } = require('../supabase-client');
+const supabase = require('../utils/supabase');
 
 /**
  * Middleware to check if user can create projects
  */
-const requireProjectCreation = async (req, res, next) => {
-  const session = res.locals.session || req.user;
+const requireProjectCreation = (req, res, next) => {
+  const user = req.user; // Use req.user which has full user data from DB
 
-  console.log('requireProjectCreation middleware - session:', session);
-
-  if (!session) {
-    console.log('No session found');
+  if (!user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  try {
-    // Get full user data from database using session user_id
-    const { data: users, error } = await supabase
-      .from('users')
-      .select('id, role, hierarchy, division, department')
-      .eq('id', session.user_id)
-      .limit(1);
+  // Get user data from database to ensure we have latest role/hierarchy info
+  const userData = {
+    id: user.id,
+    role: user.role || 'staff',
+    hierarchy: user.hierarchy || 1,
+    division: user.division
+  };
 
-    if (error) {
-      console.error('Database query error:', error);
-      return res.status(500).json({ error: 'Database query failed' });
-    }
-
-    const user = users?.[0];
-    if (!user) {
-      console.log('User not found in database:', session.user_id);
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    console.log('requireProjectCreation - user from database:', user);
-
-    // Build user data for RBAC check
-    const userData = {
-      id: user.id,
-      role: user.role || 'staff',
-      hierarchy: user.hierarchy || 1,
-      division: user.division
-    };
-
-    console.log('requireProjectCreation - userData for RBAC:', userData);
-
-    if (!canCreateProject(userData)) {
-      console.log('canCreateProject returned false for user:', userData);
-      return res.status(403).json({
-        error: 'Access denied',
-        message: 'Only managers can create projects'
-      });
-    }
-
-    console.log('canCreateProject passed, proceeding to next()');
-    next();
-  } catch (error) {
-    console.error('Error in requireProjectCreation:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+  if (!canCreateProject(userData)) {
+    return res.status(403).json({
+      error: 'Access denied',
+      message: 'Only managers and admins can create projects'
+    });
   }
+
+  next();
 };
 
 /**
  * Middleware to check if user can edit projects
  */
-const requireProjectEdit = () => {
+const requireProjectEdit = (sql) => {
   return async (req, res, next) => {
     try {
-      const user = res.locals.session || req.user;
+      const user = req.user; // Use req.user which has full user data from DB
       const projectId = req.params.projectId || req.params.id;
 
+      console.log('[requireProjectEdit] User:', user?.id, 'ProjectId:', projectId, 'Params:', req.params);
+
       if (!user || !projectId) {
+        console.log('[requireProjectEdit] Missing user or projectId, returning 401');
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      // Get project and creator info
-      const { data: projects, error } = await supabase
+      // Get project and creator info using Supabase - simplified query without foreign key
+      console.log('[requireProjectEdit] Querying project with ID:', projectId);
+      const { data: projects, error: projectError } = await supabase
         .from('projects')
-        .select(`
-          id, 
-          creator_id,
-          users!inner (role, hierarchy, division)
-        `)
+        .select('id, creator_id, name, status')
         .eq('id', projectId)
         .limit(1);
 
-      if (error) {
-        console.error('Database query error:', error);
-        return res.status(500).json({ error: 'Database query failed' });
-      }
+      console.log('[requireProjectEdit] Query result - projects:', projects?.length, 'error:', projectError);
 
-      if (!projects?.length) {
+      if (!projects || !projects.length) {
+        console.log('[requireProjectEdit] Project not found, returning 404');
         return res.status(404).json({ error: 'Project not found' });
       }
 
       const project = projects[0];
+
+      // Get creator info separately
+      const { data: creator, error: creatorError } = await supabase
+        .from('users')
+        .select('id, role, hierarchy, division')
+        .eq('id', project.creator_id)
+        .single();
+
       const userData = {
-        id: user.user_id || user.id,
+        id: user.id,
         role: user.role || 'staff',
         hierarchy: user.hierarchy || 1,
         division: user.division
       };
 
-      const projectCreator = {
-        role: project.users.role,
-        hierarchy: project.users.hierarchy,
-        division: project.users.division
+      const projectCreator = creator || {
+        role: null,
+        hierarchy: null,
+        division: null
       };
 
+      console.log('[requireProjectEdit] Checking canEditProject...');
       if (!canEditProject(userData, project, projectCreator)) {
+        console.log('[requireProjectEdit] Access denied');
         return res.status(403).json({
           error: 'Access denied',
           message: 'You do not have permission to edit this project'
         });
       }
 
+      console.log('[requireProjectEdit] Access granted, calling next()');
       next();
     } catch (error) {
       console.error('Error in requireProjectEdit middleware:', error);
@@ -127,47 +104,24 @@ const requireProjectEdit = () => {
 /**
  * Middleware to check if user can add members to projects
  */
-const requireAddProjectMembers = () => {
+const requireAddProjectMembers = (sql) => {
   return async (req, res, next) => {
     try {
-      const session = res.locals.session || req.user;
+      const user = req.user; // Use req.user which has full user data from DB
       const projectId = req.params.projectId || req.params.id;
 
-      if (!session || !projectId) {
+      if (!user || !projectId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      // Get full user data from database using session user_id
-      const { data: users, error: userError } = await supabase
-        .from('users')
-        .select('id, role, hierarchy, division, department')
-        .eq('id', session.user_id)
-        .limit(1);
-
-      if (userError) {
-        console.error('Database query error (user):', userError);
-        return res.status(500).json({ error: 'Database query failed' });
-      }
-
-      const user = users?.[0];
-      if (!user) {
-        console.log('User not found in database:', session.user_id);
-        return res.status(404).json({ error: 'User not found' });
-      }
-
-      // Get project info
-      const { data: projects, error } = await supabase
+      // Get project info using Supabase
+      const { data: projects, error: projectError } = await supabase
         .from('projects')
         .select('id, creator_id')
         .eq('id', projectId)
         .limit(1);
 
-      if (error) {
-        console.error('Database query error (project):', error);
-        return res.status(500).json({ error: 'Database query failed' });
-      }
-
-      if (!projects?.length) {
+      if (!projects || !projects.length) {
         return res.status(404).json({ error: 'Project not found' });
       }
 
@@ -197,28 +151,23 @@ const requireAddProjectMembers = () => {
 /**
  * Middleware to filter projects based on user hierarchy and division
  */
-const filterVisibleProjects = () => {
+const filterVisibleProjects = (sql) => {
   return async (req, res, next) => {
     try {
-      const user = res.locals.session || req.user;
+      const user = req.user; // Use req.user which has full user data from DB
 
       if (!user) {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      // Get current user's complete info
-      const { data: users, error } = await supabase
+      // Get current user's complete info using Supabase
+      const { data: users, error: userError } = await supabase
         .from('users')
         .select('id, role, hierarchy, division, department')
-        .eq('id', user.user_id || user.id)
+        .eq('id', user.id)
         .limit(1);
 
-      if (error) {
-        console.error('Database query error:', error);
-        return res.status(500).json({ error: 'Database query failed' });
-      }
-
-      if (!users?.length) {
+      if (!users || !users.length) {
         return res.status(404).json({ error: 'User not found' });
       }
 
@@ -452,11 +401,73 @@ const requireTaskModification = () => {
   };
 };
 
+/**
+ * Middleware to check if user has one of the required roles
+ * @param {string[]} requiredRoles - Array of roles that are allowed (e.g., ['hr', 'admin'])
+ */
+const requireRole = (requiredRoles) => {
+  return (req, res, next) => {
+    const user = req.user;
+
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized: Authentication required' });
+    }
+
+    if (!user.role || !requiredRoles.includes(user.role)) {
+      return res.status(403).json({ error: 'Forbidden: Insufficient permissions' });
+    }
+
+    next();
+  };
+};
+
+/**
+ * Middleware to check if user has access to requested departments
+ */
+const checkDepartmentAccess = () => {
+  return (req, res, next) => {
+    const user = req.user;
+
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized: Authentication required' });
+    }
+
+    // Admin has access to all departments
+    if (user.role === 'admin') {
+      return next();
+    }
+
+    // HR can access their own department and subdepartments
+    if (user.role === 'hr') {
+      const requestedDepts = req.body?.departments || [];
+      
+      // Check if all requested departments are accessible to this HR
+      const hasAccess = requestedDepts.every(dept => {
+        // Can access own department or subdepartments
+        return dept === user.department || dept.startsWith(user.department + '.');
+      });
+
+      if (!hasAccess) {
+        return res.status(403).json({ 
+          error: 'Forbidden: Access denied to requested departments' 
+        });
+      }
+
+      return next();
+    }
+
+    // Other roles don't have department access for reports
+    return res.status(403).json({ error: 'Forbidden: Insufficient permissions' });
+  };
+};
+
 module.exports = {
   requireProjectCreation,
   requireProjectEdit,
   requireAddProjectMembers,
   filterVisibleProjects,
   requireTaskCreation,
-  requireTaskModification
+  requireTaskModification,
+  requireRole,
+  checkDepartmentAccess
 };

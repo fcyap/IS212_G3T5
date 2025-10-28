@@ -5,17 +5,31 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 class ProjectService {
   async getAllProjects() {
-    const response = await fetch(`${API_BASE_URL}/api/projects`, {
-      credentials: 'include', // Include cookies for authentication
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch projects: ${response.statusText}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/projects`, {
+        credentials: 'include',
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch projects: ${response.statusText}`);
+      }
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to fetch projects');
+      }
+      return data.projects;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        throw new Error('Request timeout - please check your connection');
+      }
+      throw error;
     }
-    const data = await response.json();
-    if (!data.success) {
-      throw new Error(data.message || 'Failed to fetch projects');
-    }
-    return data.projects; // Return just the projects array
   }
 
   async getProjectById(id) {

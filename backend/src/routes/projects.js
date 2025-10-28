@@ -1,5 +1,13 @@
 const express = require('express');
 const router = express.Router();
+
+// Debug middleware to log all requests
+router.use((req, res, next) => {
+  console.log(`[ProjectRouter] ${req.method} ${req.path}`);
+  next();
+});
+
+// No longer need sql import - RBAC middleware now uses Supabase directly
 const {
   createProject,
   getAllProjects,
@@ -10,6 +18,9 @@ const {
   archiveProject
 } = require('../controllers/projectController');
 
+// Import auth middleware
+const { authMiddleware } = require('../middleware/auth');
+
 // Import RBAC middleware
 const {
   requireProjectCreation,
@@ -17,9 +28,6 @@ const {
   requireAddProjectMembers,
   filterVisibleProjects
 } = require('../middleware/rbac');
-
-// Import authentication middleware
-const { authMiddleware } = require('../middleware/auth');
 
 // We need to add updateProject and deleteProject controllers
 const projectService = require('../services/projectService');
@@ -68,5 +76,10 @@ router.get('/:projectId/members', authMiddleware(), getProjectMembers);
 router.post('/:projectId/members', authMiddleware(), requireAddProjectMembers(), addProjectMembers);
 router.delete('/:projectId/members/:userId', authMiddleware(), requireProjectEdit(), removeProjectMember);
 router.patch('/:projectId/archive', authMiddleware(), requireProjectEdit(), archiveProject);
+
+// Less specific routes come after
+router.get('/:projectId', authMiddleware(), getProjectById);
+router.put('/:projectId', authMiddleware(), requireProjectEdit(), updateProject);
+router.delete('/:projectId', authMiddleware(), requireProjectEdit(), deleteProject);
 
 module.exports = router;

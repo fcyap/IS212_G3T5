@@ -349,6 +349,26 @@ const getProjectTaskStats = async (req, res) => {
   }
 };
 
+const getSubtasks = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+
+    if (!taskId || isNaN(taskId)) {
+      return res.status(400).json({ success: false, message: 'Valid task ID is required' });
+    }
+
+    const subtasks = await taskService.getSubtasks(parseInt(taskId));
+
+    res.json({
+      success: true,
+      subtasks
+    });
+  } catch (err) {
+    console.error('Error in getSubtasks:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 module.exports = {
   list,
   create,
@@ -361,5 +381,6 @@ module.exports = {
   createTask,
   updateTask,
   deleteTask,
-  getProjectTaskStats
+  getProjectTaskStats,
+  getSubtasks
 };

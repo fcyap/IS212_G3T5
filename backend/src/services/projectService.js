@@ -495,36 +495,25 @@ class ProjectService {
       }
 
       // Managers can see:
-      // 1. Projects they CREATED (not just member of)
-      // 2. Projects that contain their subordinates from their division (lower hierarchy numbers)
-      // Note: Same hierarchy level managers CANNOT see each other's projects unless they contain subordinates
+      // 1. Their own projects (as creator or member)
+      // 2. Projects created by staff in their division with lower hierarchy
       if (currentUser.role === 'manager') {
-        console.log('🏢 [ProjectService] Manager user - getting created projects + projects with subordinates');
-        console.log('🏢 [ProjectService] Manager details:', { 
-          id: currentUser.id, 
-          division: currentUser.division, 
-          hierarchy: currentUser.hierarchy 
-        });
+        console.log('🏢 [ProjectService] Manager user - getting division projects');
         
-        // Get projects where current manager is the creator (not just a member)
-        const ownCreatedProjects = await projectRepository.getProjectsByCreator(currentUser.id);
-        console.log('✅ [ProjectService] Manager created projects:', ownCreatedProjects.length);
+        // Get own projects first
+        const ownProjects = await this.getAllProjectsForUser(currentUser.id);
         
-        // Get projects that contain subordinates from current manager's division
+        // Get projects from subordinates in same division
         const subordinateProjects = await projectRepository.getProjectsByDivisionAndHierarchy(
           currentUser.division,
-          currentUser.hierarchy,
-          currentUser.id
+          currentUser.hierarchy
         );
-        console.log('✅ [ProjectService] Projects with subordinates:', subordinateProjects.length);
         
         // Combine and deduplicate
         const allProjectIds = [...new Set([
-          ...ownCreatedProjects.map(p => p.id),
+          ...ownProjects.map(p => p.id),
           ...subordinateProjects.map(p => p.id)
         ])];
-        
-        console.log('📊 [ProjectService] Combined project IDs:', allProjectIds);
         
         if (allProjectIds.length === 0) {
           return [];
