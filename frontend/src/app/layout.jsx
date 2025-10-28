@@ -4,6 +4,7 @@ import { Analytics } from "@vercel/analytics/next"
 import { Suspense } from "react"
 import { Toast } from "@/components/ui/toast"
 import { ProjectProvider } from "@/contexts/project-context"
+import { NotificationProvider } from "@/contexts/notification-context"
 import { AuthProvider } from "@/hooks/useAuth"
 import { SessionProvider } from "@/components/session-provider"
 import { DeadlineNotificationToaster } from "@/components/deadline-notification-toaster"
@@ -26,11 +27,13 @@ export default function RootLayout({ children }) {
         <ErrorBoundary>
           <SessionProvider>
             <AuthProvider>
-              <ProjectProvider>
-                <Suspense fallback={null}>{children}</Suspense>
-                <Toast />
-                <DeadlineNotificationToaster />
-              </ProjectProvider>
+              <NotificationProvider>
+                <ProjectProvider>
+                  <Suspense fallback={null}>{children}</Suspense>
+                  <Toast />
+                  <DeadlineNotificationToaster />
+                </ProjectProvider>
+              </NotificationProvider>
             </AuthProvider>
           </SessionProvider>
         </ErrorBoundary>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useSession } from "@/components/session-provider"
+import { useRouter, useSearchParams } from "next/navigation"
 import { SidebarNavigation } from "@/components/sidebar-navigation"
 import { BoardHeader } from "@/components/board-header"
 import { KanbanBoard } from "@/components/kanban-board"
@@ -28,10 +29,15 @@ const ReportsPage = dynamic(() => import('./reports/page'), { ssr: false })
 }*/
 
 function ProtectedProjectTimelinePage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
-  const [selectedProjectId, setSelectedProjectId] = useState(null)
-  const [currentView, setCurrentView] = useState('home') // 'home', 'board', 'projects', etc.
+
+  // Read state from URL
+  const selectedProjectId = searchParams.get('project') ? Number(searchParams.get('project')) : null
+  const currentView = searchParams.get('view') || 'home'
+
   const { user, loading: sessionLoading } = useSession()
   const { projects, loading: projectsLoading } = useProjects()
   const [stats, setStats] = useState({
@@ -112,17 +118,22 @@ function ProtectedProjectTimelinePage() {
   const toggleMobileSidebar = () => setIsMobileSidebarOpen(!isMobileSidebarOpen)
 
   const handleProjectSelect = (projectId) => {
-    setSelectedProjectId(projectId)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('project', projectId.toString())
+    params.delete('view') // Clear view when selecting project
+    router.push(`/?${params.toString()}`)
+    setIsMobileSidebarOpen(false)
   }
 
   const handleViewSelect = (view) => {
-    setCurrentView(view)
-    setSelectedProjectId(null) // Clear project selection when switching views
-    setIsMobileSidebarOpen(false) // Close mobile sidebar after selection
+    const params = new URLSearchParams()
+    params.set('view', view)
+    router.push(`/?${params.toString()}`)
+    setIsMobileSidebarOpen(false)
   }
 
   const handleBackToBoard = () => {
-    setSelectedProjectId(null)
+    router.push('/')
   }
 
   return (
@@ -253,7 +264,7 @@ function ProtectedProjectTimelinePage() {
                       </h2>
                       <div className="space-y-3">
                         <button
-                          onClick={() => setCurrentView('board')}
+                          onClick={() => handleViewSelect('board')}
                           className="w-full text-left p-3 sm:p-4 bg-[#1f1f23] rounded-lg text-gray-300 hover:bg-blue-600 hover:text-white active:bg-blue-700 transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group touch-manipulation min-h-[44px]"
                         >
                           <div className="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center group-hover:bg-white/20">
@@ -265,7 +276,7 @@ function ProtectedProjectTimelinePage() {
                           </div>
                         </button>
                         <button
-                          onClick={() => setCurrentView('projects')}
+                          onClick={() => handleViewSelect('projects')}
                           className="w-full text-left p-3 sm:p-4 bg-[#1f1f23] rounded-lg text-gray-300 hover:bg-green-600 hover:text-white active:bg-green-700 transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group touch-manipulation min-h-[44px]"
                         >
                           <div className="w-10 h-10 bg-green-600/20 rounded-lg flex items-center justify-center group-hover:bg-white/20">
