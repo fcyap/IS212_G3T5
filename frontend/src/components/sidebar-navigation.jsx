@@ -23,10 +23,10 @@ const NavItem = ({ icon: Icon, label, isActive, isCollapsed, onClick, hasChevron
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors ${
+      className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors touch-manipulation min-h-[44px] ${
         isActive
           ? "bg-blue-500 text-white"
-          : "text-gray-300 hover:bg-gray-700 hover:text-white"
+          : "text-gray-300 hover:bg-gray-700 hover:text-white active:bg-gray-600"
       }`}
     >
       <Icon className="w-4 h-4" />
@@ -98,12 +98,12 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
 
     return (
         <div
-            className={`${isCollapsed ? "w-16" : "w-64"} bg-[#1f1f23] text-white flex flex-col h-screen transition-all duration-300 flex-shrink-0 border-r border-gray-700`}
+            className={`${isCollapsed ? "w-16" : "w-64"} bg-[#1f1f23] text-white flex flex-col h-screen transition-all duration-300 flex-shrink-0 border-r border-gray-700 safe-area-inset-left`}
         >
             {/* Header */}
             <div className="p-4 border-b border-gray-700">
                 <div className="flex items-center gap-3 mb-4">
-                    <button onClick={onToggleCollapse} className="p-1 hover:bg-gray-700 rounded transition-colors">
+                    <button onClick={onToggleCollapse} className="p-2 hover:bg-gray-700 active:bg-gray-600 rounded transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Toggle sidebar">
                         <Menu className="w-5 h-5" />
                     </button>
                     {!isCollapsed && (
@@ -119,13 +119,13 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                 {canCreateProject() && (
                     isCollapsed ? (
                         <CreateProjectDialog isCollapsed={true}>
-                            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-lg p-2">
+                            <Button className="w-full bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white rounded-lg p-2 min-h-[44px] touch-manipulation">
                                 <Plus className="w-4 h-4" />
                             </Button>
                         </CreateProjectDialog>
                     ) : (
                         <CreateProjectDialog isCollapsed={false}>
-                            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-lg">
+                            <Button className="w-full bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white rounded-lg min-h-[44px] touch-manipulation">
                                 <Plus className="w-4 h-4 mr-2" />
                                 Create
                             </Button>
@@ -156,7 +156,7 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                         {!isCollapsed && (
                             <button
                                 onClick={handleNotificationClick}
-                                className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-gray-300 hover:bg-gray-700 hover:text-white relative"
+                                className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-gray-300 hover:bg-gray-700 hover:text-white active:bg-gray-600 relative touch-manipulation min-h-[44px]"
                             >
                                 <Bell className="w-4 h-4" />
                                 <span className="flex-1 text-left">Notifications</span>
@@ -170,7 +170,7 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                         {isCollapsed && (
                             <button
                                 onClick={handleNotificationClick}
-                                className="w-full flex items-center justify-center px-3 py-2 text-sm rounded-lg transition-colors text-gray-300 hover:bg-gray-700 hover:text-white relative"
+                                className="w-full flex items-center justify-center px-3 py-2 text-sm rounded-lg transition-colors text-gray-300 hover:bg-gray-700 hover:text-white active:bg-gray-600 relative touch-manipulation min-h-[44px]"
                             >
                                 <Bell className="w-4 h-4" />
                                 {notificationCount > 0 && (

@@ -137,7 +137,8 @@ function ProtectedProjectTimelinePage() {
         <div className="lg:hidden bg-[#1f1f23] border-b border-gray-700 p-3 flex items-center justify-between">
           <button
             onClick={() => setIsMobileSidebarOpen(true)}
-            className="p-2 text-white hover:bg-gray-700 rounded-lg transition-colors"
+            className="p-2 text-white hover:bg-gray-700 active:bg-gray-600 rounded-lg transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label="Open menu"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -175,9 +176,9 @@ function ProtectedProjectTimelinePage() {
                 </div>
 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                   {/* Total Projects */}
-                  <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 cursor-pointer">
+                  <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 active:scale-95 sm:hover:scale-105 cursor-pointer touch-manipulation">
                     <div className="flex items-center justify-between mb-3">
                       <FolderOpen className="w-8 h-8 text-white/90" />
                       <div className="bg-white/20 rounded-lg px-2 py-1">
@@ -189,7 +190,7 @@ function ProtectedProjectTimelinePage() {
                   </div>
 
                   {/* Active Projects */}
-                  <div className="bg-gradient-to-br from-green-600 to-green-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 cursor-pointer">
+                  <div className="bg-gradient-to-br from-green-600 to-green-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 active:scale-95 sm:hover:scale-105 cursor-pointer touch-manipulation">
                     <div className="flex items-center justify-between mb-3">
                       <CheckCircle2 className="w-8 h-8 text-white/90" />
                       <div className="bg-white/20 rounded-lg px-2 py-1">
@@ -201,7 +202,7 @@ function ProtectedProjectTimelinePage() {
                   </div>
 
                   {/* Pending Tasks */}
-                  <div className="bg-gradient-to-br from-amber-600 to-amber-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 cursor-pointer">
+                  <div className="bg-gradient-to-br from-amber-600 to-amber-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 active:scale-95 sm:hover:scale-105 cursor-pointer touch-manipulation">
                     <div className="flex items-center justify-between mb-3">
                       <Clock className="w-8 h-8 text-white/90" />
                     </div>
@@ -210,7 +211,7 @@ function ProtectedProjectTimelinePage() {
                   </div>
 
                   {/* Overdue Tasks */}
-                  <div className="bg-gradient-to-br from-red-600 to-red-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 cursor-pointer">
+                  <div className="bg-gradient-to-br from-red-600 to-red-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 active:scale-95 sm:hover:scale-105 cursor-pointer touch-manipulation">
                     <div className="flex items-center justify-between mb-3">
                       <AlertCircle className="w-8 h-8 text-white/90" />
                       {stats.overdueTasks > 0 && (
@@ -225,10 +226,10 @@ function ProtectedProjectTimelinePage() {
                 </div>
 
                 {/* Quick Actions & Recent Projects */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
                   {/* Quick Actions */}
                   <div className="lg:col-span-1">
-                    <div className="bg-[#2a2a2e] rounded-xl p-6 border border-gray-700/50">
+                    <div className="bg-[#2a2a2e] rounded-xl p-4 sm:p-6 border border-gray-700/50">
                       <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
                         <TrendingUp className="w-5 h-5 text-blue-400" />
                         Quick Actions
@@ -236,7 +237,7 @@ function ProtectedProjectTimelinePage() {
                       <div className="space-y-3">
                         <button
                           onClick={() => setCurrentView('board')}
-                          className="w-full text-left p-4 bg-[#1f1f23] rounded-lg text-gray-300 hover:bg-blue-600 hover:text-white transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group"
+                          className="w-full text-left p-3 sm:p-4 bg-[#1f1f23] rounded-lg text-gray-300 hover:bg-blue-600 hover:text-white active:bg-blue-700 transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group touch-manipulation min-h-[44px]"
                         >
                           <div className="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center group-hover:bg-white/20">
                             <CheckCircle2 className="w-5 h-5" />
@@ -248,7 +249,7 @@ function ProtectedProjectTimelinePage() {
                         </button>
                         <button
                           onClick={() => setCurrentView('projects')}
-                          className="w-full text-left p-4 bg-[#1f1f23] rounded-lg text-gray-300 hover:bg-green-600 hover:text-white transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group"
+                          className="w-full text-left p-3 sm:p-4 bg-[#1f1f23] rounded-lg text-gray-300 hover:bg-green-600 hover:text-white active:bg-green-700 transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group touch-manipulation min-h-[44px]"
                         >
                           <div className="w-10 h-10 bg-green-600/20 rounded-lg flex items-center justify-center group-hover:bg-white/20">
                             <FolderOpen className="w-5 h-5" />
@@ -264,7 +265,7 @@ function ProtectedProjectTimelinePage() {
 
                   {/* Recent Projects */}
                   <div className="lg:col-span-2">
-                    <div className="bg-[#2a2a2e] rounded-xl p-6 border border-gray-700/50">
+                    <div className="bg-[#2a2a2e] rounded-xl p-4 sm:p-6 border border-gray-700/50">
                       <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
                         <Calendar className="w-5 h-5 text-purple-400" />
                         Recent Projects
@@ -277,7 +278,7 @@ function ProtectedProjectTimelinePage() {
                             <button
                               key={project.id}
                               onClick={() => handleProjectSelect(project.id)}
-                              className="w-full text-left p-4 bg-[#1f1f23] rounded-lg hover:bg-[#3a3a3e] transition-all duration-200 hover:translate-x-1"
+                              className="w-full text-left p-3 sm:p-4 bg-[#1f1f23] rounded-lg hover:bg-[#3a3a3e] active:bg-[#4a4a4e] transition-all duration-200 hover:translate-x-1 touch-manipulation min-h-[44px]"
                             >
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">

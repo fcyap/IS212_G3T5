@@ -598,62 +598,67 @@ export function ProjectDetails({ projectId, onBack }) {
   }
 
   return (
-    <div className="flex-1 bg-[#1a1a1d] p-6">
+    <div className="flex-1 bg-[#1a1a1d] p-3 sm:p-6 overflow-x-hidden">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <Button variant="ghost" onClick={onBack} className="text-gray-400 hover:text-white">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
+          <Button variant="ghost" onClick={onBack} className="text-gray-400 hover:text-white self-start sm:self-auto">
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Board
+            <span className="hidden sm:inline">Back to Board</span>
+            <span className="sm:hidden">Back</span>
           </Button>
-          <div className="flex items-center gap-2 flex-1">
-            <h1 className="text-2xl font-bold text-white">{project.name || 'Unnamed Project'}</h1>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-white truncate">{project.name || 'Unnamed Project'}</h1>
             {project.status === 'archived' && (
-              <span className="px-2 py-1 bg-gray-600 text-gray-200 text-sm rounded-full">
+              <span className="px-2 py-1 bg-gray-600 text-gray-200 text-xs sm:text-sm rounded-full flex-shrink-0">
                 Archived
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* View Mode Toggle */}
-            <div className="flex items-center bg-[#2a2a2e] rounded-lg p-1 mr-2">
+            <div className="flex items-center bg-[#2a2a2e] rounded-lg p-1">
               <Button
                 size="sm"
                 variant={viewMode === 'details' ? 'default' : 'ghost'}
                 onClick={() => setViewMode('details')}
-                className={viewMode === 'details' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#1f1f23]'}
+                className={viewMode === 'details' ? 'bg-blue-600 text-white text-xs sm:text-sm' : 'text-gray-400 hover:text-white hover:bg-[#1f1f23] text-xs sm:text-sm'}
               >
-                <List className="w-4 h-4 mr-1" />
-                Details
+                <List className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
+                <span className="hidden sm:inline">Details</span>
               </Button>
               <Button
                 size="sm"
                 variant={viewMode === 'timeline' ? 'default' : 'ghost'}
                 onClick={() => setViewMode('timeline')}
-                className={viewMode === 'timeline' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#1f1f23]'}
+                className={viewMode === 'timeline' ? 'bg-blue-600 text-white text-xs sm:text-sm' : 'text-gray-400 hover:text-white hover:bg-[#1f1f23] text-xs sm:text-sm'}
               >
-                <Calendar className="w-4 h-4 mr-1" />
-                Timeline
+                <Calendar className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
+                <span className="hidden sm:inline">Timeline</span>
               </Button>
             </div>
             {userPermissions.isCreator && project.status !== 'archived' && (
               <Button
                 onClick={() => setShowEditProject(true)}
                 variant="outline"
-                className="border-blue-500 text-blue-400 hover:bg-blue-500 hover:text-white"
+                size="sm"
+                className="border-blue-500 text-blue-400 hover:bg-blue-500 hover:text-white text-xs sm:text-sm"
               >
-                <Edit className="w-4 h-4 mr-2" />
-                Edit Project
+                <Edit className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Edit Project</span>
+                <span className="sm:hidden">Edit</span>
               </Button>
             )}
             {userPermissions.canManageMembers && project.status !== 'archived' && (
               <Button
                 onClick={() => setShowArchiveConfirm(true)}
                 variant="outline"
-                className="border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white"
+                size="sm"
+                className="border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white text-xs sm:text-sm"
               >
-                <Archive className="w-4 h-4 mr-2" />
-                Archive Project
+                <Archive className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Archive</span>
+                <span className="sm:hidden">Archive</span>
               </Button>
             )}
           </div>
@@ -663,19 +668,20 @@ export function ProjectDetails({ projectId, onBack }) {
         {viewMode === 'details' ? (
           <>
         {/* Project Info */}
-        <div className="bg-[#2a2a2e] rounded-lg p-6 mb-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Project Details</h2>
-          <p className="text-gray-300">{project.description || "No description available."}</p>
+        <div className="bg-[#2a2a2e] rounded-lg p-4 sm:p-6 mb-4 sm:mb-6">
+          <h2 className="text-base sm:text-lg font-semibold text-white mb-3 sm:mb-4">Project Details</h2>
+          <p className="text-sm sm:text-base text-gray-300">{project.description || "No description available."}</p>
         </div>
 
         {/* Members Section */}
-        <div className="bg-[#2a2a2e] rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">Project Members</h2>
+        <div className="bg-[#2a2a2e] rounded-lg p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <h2 className="text-base sm:text-lg font-semibold text-white">Project Members</h2>
             {userPermissions.canManageMembers && (
               <Button
                 onClick={() => setShowAddMember(!showAddMember)}
-                className="bg-blue-500 hover:bg-blue-600 text-white"
+                className="bg-blue-500 hover:bg-blue-600 text-white self-start sm:self-auto"
+                size="sm"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Member
@@ -685,7 +691,7 @@ export function ProjectDetails({ projectId, onBack }) {
 
           {/* Add Member Search */}
           {showAddMember && (
-            <div className="mb-4 p-4 bg-[#1f1f23] rounded-lg">
+            <div className="mb-4 p-3 sm:p-4 bg-[#1f1f23] rounded-lg">
               <div className="relative mb-2">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <Input
@@ -708,16 +714,16 @@ export function ProjectDetails({ projectId, onBack }) {
               
               {/* Bulk Actions */}
               {filteredUsers.length > 0 && (
-                <div className="flex items-center justify-between mb-4 p-3 bg-[#2a2a2e] rounded-lg">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-4 p-3 bg-[#2a2a2e] rounded-lg">
                   <div className="flex items-center gap-2">
-                    <span className="text-gray-300 text-sm">
+                    <span className="text-gray-300 text-xs sm:text-sm">
                       {selectedUsers.length > 0 ? `${selectedUsers.length} user(s) selected` : 'Select users to add in bulk'}
                     </span>
                   </div>
                   <Button
                     onClick={handleBulkAddMembers}
                     disabled={selectedUsers.length === 0}
-                    className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white"
+                    className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white self-start sm:self-auto"
                     size="sm"
                   >
                     Add Selected ({selectedUsers.length})
@@ -733,28 +739,28 @@ export function ProjectDetails({ projectId, onBack }) {
                   </div>
                 ) : (
                   filteredUsers.map((user) => (
-                    <div key={user.id} className="flex items-center justify-between p-2 hover:bg-gray-700 rounded">
-                      <div className="flex items-center gap-2">
+                    <div key={user.id} className="flex items-center justify-between gap-2 p-2 hover:bg-gray-700 rounded">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
                         <input
                           type="checkbox"
                           checked={selectedUsers.includes(user.id)}
                           onChange={() => toggleUserSelection(user.id)}
-                          className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
+                          className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2 flex-shrink-0"
                         />
-                        <Avatar className="w-6 h-6">
+                        <Avatar className="w-6 h-6 flex-shrink-0">
                           <AvatarFallback className="bg-purple-500 text-white text-xs">
                             {(user.name || user.email || 'U').charAt(0).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
-                        <div>
-                          <p className="text-white text-sm">{user.name || 'Unknown User'}</p>
-                          <p className="text-gray-400 text-xs">{user.email}</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white text-sm truncate">{user.name || 'Unknown User'}</p>
+                          <p className="text-gray-400 text-xs truncate">{user.email}</p>
                         </div>
                       </div>
                       <Button
                         size="sm"
                         onClick={() => handleAddMember(user.id)}
-                        className="bg-green-600 hover:bg-green-700 text-white"
+                        className="bg-green-600 hover:bg-green-700 text-white flex-shrink-0"
                       >
                         Add
                       </Button>
@@ -775,17 +781,17 @@ export function ProjectDetails({ projectId, onBack }) {
               const userRole = member.role; // 'creator', 'manager', or 'collaborator'
 
               return (
-                <div key={member.user_id} className="flex items-center justify-between p-3 bg-[#1f1f23] rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="w-8 h-8">
+                <div key={member.user_id} className="flex items-center justify-between gap-3 p-3 bg-[#1f1f23] rounded-lg">
+                  <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                    <Avatar className="w-8 h-8 flex-shrink-0">
                       <AvatarFallback className="bg-purple-500 text-white">
                         {(member.name || member.email || 'U').charAt(0).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-white font-medium">{member.name || 'Unknown User'}</p>
-                        <span className={`text-xs px-2 py-1 rounded-full ${
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                        <p className="text-white font-medium text-sm sm:text-base truncate">{member.name || 'Unknown User'}</p>
+                        <span className={`text-xs px-2 py-0.5 sm:py-1 rounded-full self-start sm:self-auto flex-shrink-0 ${
                           userRole === 'manager' ? 'bg-blue-600 text-white' :
                           userRole === 'creator' ? 'bg-red-600 text-white' :
                           'bg-gray-600 text-white'
@@ -793,7 +799,7 @@ export function ProjectDetails({ projectId, onBack }) {
                           {userRole}
                         </span>
                       </div>
-                      <p className="text-gray-400 text-sm">{member.email}</p>
+                      <p className="text-gray-400 text-xs sm:text-sm truncate">{member.email}</p>
                     </div>
                   </div>
                   {userPermissions.canManageMembers && userRole !== 'creator' && (
@@ -801,7 +807,7 @@ export function ProjectDetails({ projectId, onBack }) {
                       size="sm"
                       variant="ghost"
                       onClick={() => handleRemoveMember(member.user_id)}
-                      className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                      className="text-red-400 hover:text-red-300 hover:bg-red-900/20 flex-shrink-0 p-2"
                     >
                       <X className="w-4 h-4" />
                     </Button>
@@ -813,47 +819,52 @@ export function ProjectDetails({ projectId, onBack }) {
         </div>
 
         {/* Tasks Section */}
-        <div className="bg-[#2a2a2e] rounded-lg p-6 mt-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
-              <h2 className="text-lg font-semibold text-white">Project Tasks</h2>
-              {/* Progress Indicator */}
-              <div className="flex items-center gap-2">
-                <div className="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-green-500 transition-all duration-300"
-                    style={{ width: `${progressPercent}%` }}
-                  ></div>
+        <div className="bg-[#2a2a2e] rounded-lg p-4 sm:p-6 mt-4 sm:mt-6">
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                <h2 className="text-base sm:text-lg font-semibold text-white">Project Tasks</h2>
+                {/* Progress Indicator */}
+                <div className="flex items-center gap-2">
+                  <div className="w-20 sm:w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-green-500 transition-all duration-300"
+                      style={{ width: `${progressPercent}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-xs sm:text-sm text-gray-300 whitespace-nowrap">
+                    {completedTasks}/{totalTasks} ({progressPercent}%)
+                  </span>
                 </div>
-                <span className="text-sm text-gray-300">
-                  {completedTasks}/{totalTasks} ({progressPercent}%)
-                </span>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={() => setShowFilters(!showFilters)}
-                variant="outline"
-                className="border-gray-600 text-gray-300 hover:text-white"
-              >
-                <Filter className="w-4 h-4 mr-2" />
-                Filter
-              </Button>
-              <Button
-                onClick={() => setIsAddingTask(true)}
-                className="bg-green-500 hover:bg-green-600 text-white"
-                disabled={isAddingTask}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Task
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  onClick={() => setShowFilters(!showFilters)}
+                  variant="outline"
+                  size="sm"
+                  className="border-gray-600 text-gray-300 hover:text-white"
+                >
+                  <Filter className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Filter</span>
+                </Button>
+                <Button
+                  onClick={() => setIsAddingTask(true)}
+                  className="bg-green-500 hover:bg-green-600 text-white"
+                  size="sm"
+                  disabled={isAddingTask}
+                >
+                  <Plus className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Add Task</span>
+                  <span className="sm:hidden">Add</span>
+                </Button>
+              </div>
             </div>
           </div>
 
           {/* Filters */}
           {showFilters && (
-            <div className="bg-[#1f1f23] rounded-lg p-4 mb-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+            <div className="bg-[#1f1f23] rounded-lg p-3 sm:p-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-3">
                 <div>
                   <label className="block text-xs text-gray-400 mb-1">Assignee</label>
                   <Input
@@ -2454,11 +2465,12 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
   const [hoveredTask, setHoveredTask] = useState(null)
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
   const [editingTask, setEditingTask] = useState(null)
-  const [taskColumnWidth, setTaskColumnWidth] = useState(256) // 64 * 4 = 256px (w-64)
+  const [taskColumnWidth, setTaskColumnWidth] = useState(180) // Default width - more space for timeline
   const [isResizing, setIsResizing] = useState(false)
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [hasInitialized, setHasInitialized] = useState(false)
   const [showBlockedOnly, setShowBlockedOnly] = useState(false)
+  const [isTaskColumnCollapsed, setIsTaskColumnCollapsed] = useState(false)
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -2632,8 +2644,10 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
     syncScroll(e.target.scrollLeft)
   }
 
-  // Mouse drag handlers
+  // Mouse drag handlers - only for desktop
   const handleMouseDown = (e) => {
+    // Skip drag on touch devices - use native scroll instead
+    if (e.type === 'touchstart' || 'ontouchstart' in window) return
     if (!scrollContainerRef.current) return
     setIsDragging(true)
     setStartX(e.pageX - scrollContainerRef.current.offsetLeft)
@@ -2675,7 +2689,7 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
       if (!isResizing) return
       e.preventDefault()
       const delta = e.clientX - resizeStartXRef.current
-      const newWidth = Math.max(200, Math.min(500, resizeStartWidthRef.current + delta))
+      const newWidth = Math.max(150, Math.min(400, resizeStartWidthRef.current + delta))
       setTaskColumnWidth(newWidth)
     }
 
@@ -2817,55 +2831,58 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
 
   return (
     <>
-    <div className="bg-[#2a2a2e] rounded-lg p-6">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold text-white">Project Timeline</h2>
-          <div className="text-xs text-gray-400 bg-[#1f1f23] px-3 py-1.5 rounded border border-gray-700">
-            {minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} → {maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+    <div className="bg-[#2a2a2e] rounded-lg p-4 sm:p-6 overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+          <h2 className="text-base sm:text-lg font-semibold text-white">Project Timeline</h2>
+          <div className="text-xs text-gray-400 bg-[#1f1f23] px-2 sm:px-3 py-1.5 rounded border border-gray-700 self-start">
+            <span className="hidden sm:inline">{minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} → {maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+            <span className="sm:hidden">{minDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} → {maxDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex items-center gap-2 cursor-pointer touch-manipulation">
             <input
               type="checkbox"
               checked={showBlockedOnly}
               onChange={(e) => setShowBlockedOnly(e.target.checked)}
               className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-red-500 focus:ring-red-500 focus:ring-offset-0"
             />
-            <span className="text-sm text-gray-300">Show blocked tasks only</span>
+            <span className="text-xs sm:text-sm text-gray-300 whitespace-nowrap">Show blocked only</span>
           </label>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Zoom controls */}
-          <div className="flex items-center gap-2 bg-[#1f1f23] px-2 py-1.5 rounded border border-gray-700">
+          <div className="flex items-center gap-1 sm:gap-2 bg-[#1f1f23] px-2 py-1.5 rounded border border-gray-700">
             <button
               onClick={() => zoomWithAnchor(0.9)}
-              className="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-700 transition-colors"
+              className="text-gray-400 hover:text-white active:text-white px-2 py-1 rounded hover:bg-gray-700 active:bg-gray-600 transition-colors touch-manipulation min-w-[32px] min-h-[32px] flex items-center justify-center"
               title="Zoom out (Ctrl + -)"
             >
               −
             </button>
-            <div className="text-xs text-gray-400 min-w-[70px] text-center">
-              {Math.round(pixelsPerDay)}px/day
+            <div className="text-xs text-gray-400 min-w-[50px] sm:min-w-[70px] text-center">
+              <span className="hidden sm:inline">{Math.round(pixelsPerDay)}px/day</span>
+              <span className="sm:hidden">{Math.round(pixelsPerDay)}px</span>
             </div>
             <button
               onClick={() => zoomWithAnchor(1.1)}
-              className="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-700 transition-colors"
+              className="text-gray-400 hover:text-white active:text-white px-2 py-1 rounded hover:bg-gray-700 active:bg-gray-600 transition-colors touch-manipulation min-w-[32px] min-h-[32px] flex items-center justify-center"
               title="Zoom in (Ctrl + +)"
             >
               +
             </button>
             <button
               onClick={() => zoomWithAnchor(20 / pixelsPerDay)}
-              className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-700 transition-colors ml-1"
+              className="text-xs text-gray-400 hover:text-white active:text-white px-2 py-1 rounded hover:bg-gray-700 active:bg-gray-600 transition-colors touch-manipulation min-h-[32px]"
               title="Reset zoom (Ctrl + 0)"
             >
-              Reset
+              <span className="hidden sm:inline">Reset</span>
+              <span className="sm:hidden">↺</span>
             </button>
           </div>
           {/* Help button */}
           <button
             onClick={() => setShowKeyboardShortcuts(prev => !prev)}
-            className="text-xs text-gray-400 hover:text-white bg-[#1f1f23] px-3 py-1.5 rounded border border-gray-700 transition-colors"
+            className="text-xs text-gray-400 hover:text-white active:text-white bg-[#1f1f23] px-3 py-1.5 rounded border border-gray-700 transition-colors touch-manipulation min-h-[32px]"
             title="Keyboard shortcuts (?)"
           >
             ?
@@ -2875,11 +2892,11 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
 
       {/* Keyboard shortcuts modal */}
       {showKeyboardShortcuts && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowKeyboardShortcuts(false)} />
-          <div className="relative bg-[#2a2a2e] border border-gray-600 rounded-lg p-6 max-w-md mx-4 shadow-2xl">
-            <h3 className="text-lg font-semibold text-white mb-4">Keyboard Shortcuts</h3>
-            <div className="space-y-2 text-sm">
+          <div className="relative bg-[#2a2a2e] border border-gray-600 rounded-lg p-4 sm:p-6 max-w-md w-full mx-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-base sm:text-lg font-semibold text-white mb-3 sm:mb-4">Keyboard Shortcuts</h3>
+            <div className="space-y-2 text-xs sm:text-sm">
               <div className="flex justify-between items-center">
                 <span className="text-gray-400">Zoom in</span>
                 <kbd className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs">Ctrl/Cmd + +</kbd>
@@ -2907,7 +2924,7 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
             </div>
             <button
               onClick={() => setShowKeyboardShortcuts(false)}
-              className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors"
+              className="mt-4 w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-4 py-2 rounded transition-colors touch-manipulation min-h-[44px]"
             >
               Close
             </button>
@@ -2915,37 +2932,39 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
         </div>
       )}
 
-      {/* Legend */}
+      {/* Legend - Compact Grid Layout */}
       <div className="mb-4 p-3 bg-[#1f1f23] rounded-lg border border-gray-700">
-        <div className="flex items-center gap-6 flex-wrap text-xs">
-          <span className="text-gray-400 font-semibold">Legend:</span>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-3 bg-gray-500 rounded"></div>
-            <span className="text-gray-300">Pending</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-3 bg-blue-500 rounded"></div>
-            <span className="text-gray-300">In Progress</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-3 bg-green-500 rounded"></div>
-            <span className="text-gray-300">Completed</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-3 bg-red-500 rounded"></div>
-            <span className="text-gray-300">Overdue</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-3 bg-gradient-to-r from-blue-500 to-red-400 rounded"></div>
-            <span className="text-gray-300">Late Completion</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-3 bg-gradient-to-r from-gray-500 to-gray-500/20 rounded"></div>
-            <span className="text-gray-300">No Deadline</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-3 bg-red-900 border-2 border-red-600 rounded"></div>
-            <span className="text-gray-300">🚫 Blocked</span>
+        <div className="flex items-start gap-3">
+          <span className="text-gray-400 font-semibold text-xs whitespace-nowrap pt-0.5">Legend:</span>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-x-4 gap-y-2 text-xs flex-1">
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-2.5 bg-gray-500 rounded flex-shrink-0"></div>
+              <span className="text-gray-300 truncate">Pending</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-2.5 bg-blue-500 rounded flex-shrink-0"></div>
+              <span className="text-gray-300 truncate">In Progress</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-2.5 bg-green-500 rounded flex-shrink-0"></div>
+              <span className="text-gray-300 truncate">Completed</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-2.5 bg-red-500 rounded flex-shrink-0"></div>
+              <span className="text-gray-300 truncate">Overdue</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-2.5 bg-gradient-to-r from-blue-500 to-red-400 rounded flex-shrink-0"></div>
+              <span className="text-gray-300 truncate">Late</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-2.5 bg-gradient-to-r from-gray-500 to-gray-500/20 rounded flex-shrink-0"></div>
+              <span className="text-gray-300 truncate">No Deadline</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-2.5 bg-red-900 border border-red-600 rounded flex-shrink-0"></div>
+              <span className="text-gray-300 truncate">🚫 Blocked</span>
+            </div>
           </div>
         </div>
       </div>
@@ -2959,31 +2978,52 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
           {/* Header row - sticky */}
           <div className="flex border-b border-gray-600 sticky top-0 bg-[#2a2a2e] z-20">
             {/* Task header - fixed with resize handle */}
-            <div className="flex-shrink-0 h-20 flex items-center pr-2 relative" style={{ width: `${taskColumnWidth}px` }}>
-              <h3 className="text-sm font-semibold text-gray-300">Tasks</h3>
-              {/* Resize handle */}
-              <div
-                className="absolute right-0 top-0 bottom-0 w-1 hover:w-2 bg-gray-600 hover:bg-blue-500 cursor-col-resize transition-all group"
-                onMouseDown={handleResizeStart}
-                title="Drag to resize"
-              >
-                <div className="absolute inset-y-0 -left-1 -right-1" />
+            {!isTaskColumnCollapsed ? (
+              <div className="flex-shrink-0 h-16 sm:h-20 flex items-center pr-2 relative" style={{ width: `${taskColumnWidth}px` }}>
+                <button
+                  onClick={() => setIsTaskColumnCollapsed(true)}
+                  className="text-gray-400 hover:text-white active:text-white transition-colors touch-manipulation p-1 mr-1"
+                  title="Collapse tasks column"
+                  aria-label="Collapse tasks column"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <h3 className="text-xs sm:text-sm font-semibold text-gray-300 truncate flex-1">Tasks</h3>
+                {/* Resize handle - hidden on mobile */}
+                <div
+                  className="hidden sm:block absolute right-0 top-0 bottom-0 w-1 hover:w-2 bg-gray-600 hover:bg-blue-500 cursor-col-resize transition-all group"
+                  onMouseDown={handleResizeStart}
+                  title="Drag to resize"
+                >
+                  <div className="absolute inset-y-0 -left-1 -right-1" />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex-shrink-0 h-16 sm:h-20 flex items-center border-r border-gray-600">
+                <button
+                  onClick={() => setIsTaskColumnCollapsed(false)}
+                  className="text-gray-400 hover:text-white active:text-white bg-[#1f1f23] hover:bg-gray-700 active:bg-gray-600 transition-colors touch-manipulation p-2 h-full flex items-center"
+                  title="Expand tasks column"
+                  aria-label="Expand tasks column"
+                >
+                  <ChevronRight className="w-4 h-4 rotate-180" />
+                </button>
+              </div>
+            )}
 
             {/* Timeline header - scrollable */}
             <div
               ref={headerScrollRef}
-              className="flex-1 overflow-x-auto overflow-y-hidden"
+              className="flex-1 overflow-x-auto overflow-y-hidden -webkit-overflow-scrolling-touch"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', pointerEvents: 'none' }}
             >
-              <div className="relative h-20" style={{ width: `${timelineWidth}px`, pointerEvents: 'auto' }}>
+              <div className="relative h-16 sm:h-20" style={{ width: `${timelineWidth}px`, pointerEvents: 'auto' }}>
                 {dateMarkers.map((date, index) => {
                   const position = getDatePosition(date)
                   return (
                     <div
                       key={index}
-                      className="absolute text-sm font-medium text-gray-300 top-4"
+                      className="absolute text-xs sm:text-sm font-medium text-gray-300 top-2 sm:top-4"
                       style={{ left: `${position}px`, transform: 'translateX(-50%)' }}
                     >
                       <div className="whitespace-nowrap">
@@ -2995,10 +3035,10 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
 
                 {/* Today indicator line */}
                 <div
-                  className="absolute top-0 bottom-0 w-1 bg-blue-400 z-10 pointer-events-none shadow-lg"
+                  className="absolute top-0 bottom-0 w-0.5 sm:w-1 bg-blue-400 z-10 pointer-events-none shadow-lg"
                   style={{ left: `${todayPosition}px` }}
                 >
-                  <div className="absolute top-1 left-1/2 -translate-x-1/2 px-3 py-1 bg-blue-400 text-white text-xs font-semibold rounded-md shadow-md whitespace-nowrap">
+                  <div className="absolute top-0.5 sm:top-1 left-1/2 -translate-x-1/2 px-1.5 sm:px-3 py-0.5 sm:py-1 bg-blue-400 text-white text-[10px] sm:text-xs font-semibold rounded-md shadow-md whitespace-nowrap">
                     {today.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }).toUpperCase()}
                   </div>
                 </div>
@@ -3007,10 +3047,11 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
           </div>
 
           {/* Task rows container with scroll */}
-          <div className="mt-4 flex">
+          <div className="mt-2 sm:mt-4 flex">
             {/* Fixed task labels column */}
-            <div className="flex-shrink-0" style={{ width: `${taskColumnWidth}px` }}>
-              <div className="pr-2 space-y-3">
+            {!isTaskColumnCollapsed && (
+              <div className="flex-shrink-0" style={{ width: `${taskColumnWidth}px` }}>
+                <div className="pr-1 sm:pr-2 space-y-2 sm:space-y-3">
                 {filteredTasks.map((task, index) => {
                   const isExpanded = expandedTasks.has(task.id)
                   const assigneeNames = task.assigned_to?.map(userId => {
@@ -3022,24 +3063,24 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                   return (
                     <div
                       key={`label-${task.id}`}
-                      className={`pr-2 cursor-pointer hover:bg-[#1f1f23] rounded-l transition-all duration-200 ${index % 2 === 0 ? 'bg-[#25252a]/30' : ''}`}
+                      className={`pr-1 sm:pr-2 cursor-pointer hover:bg-[#1f1f23] active:bg-[#1f1f23] rounded-l transition-all duration-200 touch-manipulation ${index % 2 === 0 ? 'bg-[#25252a]/30' : ''}`}
                       onClick={() => toggleTaskExpansion(task.id)}
                       style={{ height: `${totalHeight}px` }}
                     >
-                      <div className="h-14 flex items-center gap-2">
-                        <ChevronRight className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+                      <div className="h-12 sm:h-14 flex items-center gap-1 sm:gap-2">
+                        <ChevronRight className={`w-3 h-3 sm:w-4 sm:h-4 text-gray-400 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <div className="text-sm font-medium text-white truncate" title={task.title}>
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <div className="text-xs sm:text-sm font-medium text-white truncate" title={task.title}>
                               {task.title}
                             </div>
                             {task.subtasks && task.subtasks.length > 0 && (
-                              <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5 bg-blue-900/50 text-blue-300 border-blue-700">
-                                {task.subtasks.length} subtask{task.subtasks.length !== 1 ? 's' : ''}
+                              <Badge variant="secondary" className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0 h-4 sm:h-5 bg-blue-900/50 text-blue-300 border-blue-700 flex-shrink-0">
+                                {task.subtasks.length}
                               </Badge>
                             )}
                           </div>
-                          <div className="text-xs text-gray-400 truncate">
+                          <div className="text-[10px] sm:text-xs text-gray-400 truncate">
                             {assigneeNames}
                           </div>
                         </div>
@@ -3087,21 +3128,22 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                     </div>
                   )
                 })}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Scrollable timeline bars */}
             <div
               ref={scrollContainerRef}
-              className={`flex-1 overflow-x-auto overflow-y-hidden ${isDragging ? 'cursor-grabbing' : 'cursor-grab'} active:cursor-grabbing`}
+              className={`flex-1 overflow-x-auto overflow-y-hidden -webkit-overflow-scrolling-touch ${isDragging ? 'cursor-grabbing sm:cursor-grabbing' : 'sm:cursor-grab'} sm:active:cursor-grabbing`}
               onScroll={handleTimelineScroll}
               onMouseDown={handleMouseDown}
               onMouseMove={handleDragMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseLeaveContainer}
-              style={{ userSelect: 'none' }}
+              style={{ userSelect: isDragging ? 'none' : 'auto' }}
             >
-              <div style={{ width: `${timelineWidth}px` }} className="space-y-3">
+              <div style={{ width: `${timelineWidth}px` }} className="space-y-2 sm:space-y-3">
                 {filteredTasks.map((task, index) => {
                   const createdDate = new Date(task.created_at)
                   const deadlineDate = task.deadline ? new Date(task.deadline) : null
@@ -3140,11 +3182,11 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                   return (
                     <div
                       key={`bar-${task.id}`}
-                      className={`relative group hover:bg-[#1f1f23]/50 rounded-r transition-all duration-200 ${index % 2 === 0 ? 'bg-[#25252a]/30' : ''}`}
+                      className={`relative group hover:bg-[#1f1f23]/50 active:bg-[#1f1f23]/50 rounded-r transition-all duration-200 ${index % 2 === 0 ? 'bg-[#25252a]/30' : ''}`}
                       style={{ height: `${totalHeight}px` }}
                     >
                       {/* Main task bar section */}
-                      <div className="relative h-14">
+                      <div className="relative h-12 sm:h-14">
                         {/* Monthly grid lines (darker) */}
                         {dateMarkers.map((date, index) => (
                           <div

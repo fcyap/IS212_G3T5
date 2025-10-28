@@ -532,15 +532,15 @@ export function KanbanBoard({ projectId = null }) {
           </div>
         </div>
       )}
-      <div className="overflow-x-auto overflow-y-hidden h-full">
-        <div className="flex gap-3 sm:gap-6 min-w-max h-full pb-4">
+      <div className="overflow-x-auto overflow-y-hidden h-full -webkit-overflow-scrolling-touch">
+        <div className="flex gap-3 sm:gap-6 min-w-max h-full pb-4 px-2 sm:px-0">
 
           {/* To do Column */}
-          <div className="w-[280px] sm:w-[360px] flex-none space-y-4 flex flex-col">
+          <div className="w-[260px] sm:w-[320px] md:w-[360px] flex-none space-y-3 sm:space-y-4 flex flex-col">
             <div className="flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-white font-medium">To do</h2>
-                <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
+                <h2 className="text-white font-medium text-sm sm:text-base">To do</h2>
+                <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full flex-shrink-0">
                   {todo.length + (isAdding && editorLane === "pending" ? 1 : 0)}
                 </span>
 
@@ -599,10 +599,10 @@ export function KanbanBoard({ projectId = null }) {
           </div>
 
           {/* Doing Column */}
-          <div className="w-[280px] sm:w-[360px] flex-none space-y-4 flex flex-col">
+          <div className="w-[260px] sm:w-[320px] md:w-[360px] flex-none space-y-3 sm:space-y-4 flex flex-col">
             <div className="flex items-center gap-2 flex-shrink-0">
-              <h2 className="text-white font-medium">Doing</h2>
-              <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
+              <h2 className="text-white font-medium text-sm sm:text-base">Doing</h2>
+              <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full flex-shrink-0">
                 {doing.length + (isAdding && editorLane === "in_progress" ? 1 : 0)}
               </span>
 
@@ -660,10 +660,10 @@ export function KanbanBoard({ projectId = null }) {
           </div>
 
           {/* Done Column */}
-          <div className="w-[280px] sm:w-[360px] flex-none space-y-4 flex flex-col">
+          <div className="w-[260px] sm:w-[320px] md:w-[360px] flex-none space-y-3 sm:space-y-4 flex flex-col">
             <div className="flex items-center gap-2 flex-shrink-0">
-              <h2 className="text-white font-medium">Done</h2>
-              <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
+              <h2 className="text-white font-medium text-sm sm:text-base">Done</h2>
+              <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full flex-shrink-0">
                 {done.length + (isAdding && editorLane === "completed" ? 1 : 0)}
               </span>
             </div>
@@ -717,10 +717,10 @@ export function KanbanBoard({ projectId = null }) {
             </div>
           </div>
           {/* Blocked Column */}
-          <div className="w-[280px] sm:w-[360px] flex-none space-y-4 flex flex-col">
+          <div className="w-[260px] sm:w-[320px] md:w-[360px] flex-none space-y-3 sm:space-y-4 flex flex-col">
             <div className="flex items-center gap-2 flex-shrink-0">
-              <h2 className="text-white font-medium">Blocked</h2>
-              <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
+              <h2 className="text-white font-medium text-sm sm:text-base">Blocked</h2>
+              <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full flex-shrink-0">
                 {blocked.length + (isAdding && editorLane === "blocked" ? 1 : 0)}
               </span>
             </div>
