@@ -48,37 +48,7 @@ function ProtectedProjectTimelinePage() {
     overdueTasks: 0
   })
 
-  // Show loading state while checking authentication
-  if (sessionLoading) {
-    return (
-      <div className="flex h-screen bg-[#1a1a1d] items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Redirect to login if not authenticated (SessionProvider will handle this, but show nothing while it does)
-  if (!user) {
-    return null
-  }
-
-  useEffect(() => {
-    if (projects && projects.length > 0) {
-      const activeProjects = projects.filter(p => p.status === 'active').length
-      setStats(prev => ({
-        ...prev,
-        totalProjects: projects.length,
-        activeProjects
-      }))
-      
-      // Fetch task stats
-      fetchTaskStats()
-    }
-  }, [projects])
-
+  // Define fetchTaskStats before useEffect
   const fetchTaskStats = async () => {
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/tasks`, {
@@ -134,6 +104,38 @@ function ProtectedProjectTimelinePage() {
 
   const handleBackToBoard = () => {
     router.push('/')
+  }
+
+  // useEffect must come after all useState calls but before conditional returns
+  useEffect(() => {
+    if (projects && projects.length > 0) {
+      const activeProjects = projects.filter(p => p.status === 'active').length
+      setStats(prev => ({
+        ...prev,
+        totalProjects: projects.length,
+        activeProjects
+      }))
+
+      // Fetch task stats
+      fetchTaskStats()
+    }
+  }, [projects])
+
+  // Show loading state while checking authentication (after all hooks)
+  if (sessionLoading) {
+    return (
+      <div className="flex h-screen bg-[#1a1a1d] items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Redirect to login if not authenticated (SessionProvider will handle this, but show nothing while it does)
+  if (!user) {
+    return null
   }
 
   return (
