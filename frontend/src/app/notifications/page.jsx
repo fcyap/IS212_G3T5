@@ -7,26 +7,8 @@ import { notificationService, userService } from "@/lib/api"
 import { useAuth } from "@/hooks/useAuth"
 import { useRouter } from "next/navigation"
 
-const NotificationItem = ({ notification }) => {
+const NotificationItem = ({ notification, sender }) => {
   console.log('NotificationItem received:', notification)
-  const [sender, setSender] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const fetchSender = async () => {
-      if (notification.creator_id) {
-        try {
-          const senderData = await userService.getUserById(notification.creator_id)
-          setSender(senderData)
-        } catch (error) {
-          console.error('Failed to fetch sender:', error)
-        }
-      }
-      setLoading(false)
-    }
-
-    fetchSender()
-  }, [notification.creator_id])
 
   const formatTimeAgo = (timestamp) => {
     const now = new Date()
@@ -100,15 +82,15 @@ const NotificationItem = ({ notification }) => {
       <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
         {/* Sender Avatar */}
         <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
-          {loading ? <User className="w-5 h-5 sm:w-6 sm:h-6" /> : senderInitials}
+          {senderInitials}
         </div>
-        
+
         {/* Notification Content */}
         <div className="flex-1 min-w-0 w-full">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 sm:mb-3 gap-2">
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <h3 className="font-semibold text-white text-sm sm:text-base">
-                {loading ? 'Loading...' : senderName}
+                {senderName}
               </h3>
               {notification.notif_types && (
                 <span className={`px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs text-white rounded-full ${getTypeColor(notification.notif_types)}`}>
@@ -133,6 +115,7 @@ const NotificationItem = ({ notification }) => {
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState([])
+  const [senders, setSenders] = useState({}) // Map of creator_id -> user data
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const { user, loading: authLoading } = useAuth()
@@ -183,6 +166,24 @@ export default function NotificationsPage() {
       })
       console.log('Filtered notifications:', userNotifications)
       setNotifications(userNotifications)
+
+      // Fetch all unique senders in one batch
+      const uniqueCreatorIds = [...new Set(userNotifications.map(n => n.creator_id).filter(Boolean))]
+      if (uniqueCreatorIds.length > 0) {
+        try {
+          const allUsers = await userService.getAllUsers()
+          const sendersMap = {}
+          uniqueCreatorIds.forEach(creatorId => {
+            const sender = allUsers.find(u => u.id === creatorId)
+            if (sender) {
+              sendersMap[creatorId] = sender
+            }
+          })
+          setSenders(sendersMap)
+        } catch (err) {
+          console.error('Failed to fetch senders:', err)
+        }
+      }
     } catch (err) {
       console.error('Failed to fetch notifications:', err)
       setError('Failed to load notifications')
@@ -259,6 +260,7 @@ export default function NotificationsPage() {
                 <NotificationItem
                   key={notification.notif_id}
                   notification={notification}
+                  sender={senders[notification.creator_id] || null}
                 />
               ))}
             </div>

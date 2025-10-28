@@ -205,7 +205,7 @@ export function ProjectDetails({ projectId, onBack }) {
 
   const handleBulkAddMembers = async () => {
     if (selectedUsers.length === 0) {
-      alert('Please select users to add first.');
+      toast.error('Please select users to add first.');
       return;
     }
 
@@ -430,7 +430,7 @@ export function ProjectDetails({ projectId, onBack }) {
       return updatedTask
     } catch (error) {
       console.error('Error updating task:', error)
-      alert(`Error updating task: ${error.message}`)
+      toast.error(`Error updating task: ${error.message}`)
       throw error
     }
   }
@@ -454,7 +454,7 @@ export function ProjectDetails({ projectId, onBack }) {
       setEditingTask(null)
     } catch (error) {
       console.error('Error deleting task:', error)
-      alert(`Error deleting task: ${error.message}`)
+      toast.error(`Error deleting task: ${error.message}`)
     }
   }
 
@@ -473,7 +473,7 @@ export function ProjectDetails({ projectId, onBack }) {
       if (response.ok) {
         const responseData = await response.json()
         console.log('Successfully archived project:', responseData)
-        alert('Project and all its tasks have been archived successfully!')
+        toast.success('Project and all its tasks have been archived successfully!')
 
         // Update the project state to reflect archived status
         setProject(prev => ({ ...prev, status: 'archived' }))
@@ -485,11 +485,11 @@ export function ProjectDetails({ projectId, onBack }) {
       } else {
         const errorData = await response.json()
         console.error('Failed to archive project:', errorData.message)
-        alert(`Failed to archive project: ${errorData.message}`)
+        toast.error(`Failed to archive project: ${errorData.message}`)
       }
     } catch (error) {
       console.error('Error archiving project:', error)
-      alert('Error archiving project. Please try again.')
+      toast.error('Error archiving project. Please try again.')
     }
   }
 
@@ -1479,7 +1479,7 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
     })
 
     if (errors.length > 0) {
-      alert(errors.join('\n'))
+      toast.error(errors.join(', '))
     }
 
     setAttachments(prev => [...prev, ...validFiles])

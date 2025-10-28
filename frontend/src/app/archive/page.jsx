@@ -7,6 +7,7 @@ import Link from "next/link"
 import { fetchWithCsrf } from "@/lib/csrf";
 import { useAuth } from "@/hooks/useAuth";
 import { userService } from "@/lib/api";
+import toast from "react-hot-toast";
 const API = process.env.NEXT_PUBLIC_API_URL ;
 
 export default function ArchivePage() {
@@ -191,7 +192,7 @@ export default function ArchivePage() {
     });
     if (!res.ok) {
       const { error } = await res.json().catch(() => ({}));
-      alert(error || "Failed to unarchive");
+      toast.error(error || "Failed to unarchive");
       return;
     }
 

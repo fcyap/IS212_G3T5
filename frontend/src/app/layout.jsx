@@ -7,6 +7,7 @@ import { ProjectProvider } from "@/contexts/project-context"
 import { AuthProvider } from "@/hooks/useAuth"
 import { SessionProvider } from "@/components/session-provider"
 import { DeadlineNotificationToaster } from "@/components/deadline-notification-toaster"
+import ErrorBoundary from "@/components/error-boundary"
 import "./globals.css"
 
 export const metadata = {
@@ -22,15 +23,17 @@ export default function RootLayout({ children }) {
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes" />
       </head>
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable} antialiased`}>
-        <SessionProvider>
-          <AuthProvider>
-            <ProjectProvider>
-              <Suspense fallback={null}>{children}</Suspense>
-              <Toast />
-              <DeadlineNotificationToaster />
-            </ProjectProvider>
-          </AuthProvider>
-        </SessionProvider>
+        <ErrorBoundary>
+          <SessionProvider>
+            <AuthProvider>
+              <ProjectProvider>
+                <Suspense fallback={null}>{children}</Suspense>
+                <Toast />
+                <DeadlineNotificationToaster />
+              </ProjectProvider>
+            </AuthProvider>
+          </SessionProvider>
+        </ErrorBoundary>
         <Analytics />
       </body>
     </html>

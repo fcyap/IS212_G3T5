@@ -291,7 +291,7 @@ export function KanbanBoard({ projectId = null }) {
           : null;
       console.log('[KanbanBoard] Resolved project id:', { resolvedProjectIdRaw, resolvedProjectId });
       if (resolvedProjectId == null) {
-        alert('Please select an active project before creating a task.');
+        toast.error('Please select an active project before creating a task.');
         return;
       }
       const payload = {
@@ -315,7 +315,7 @@ export function KanbanBoard({ projectId = null }) {
       })
       console.log('[KanbanBoard] POST /tasks status:', res.status);
       if (res.status === 401) {
-        alert('Your session has expired. Please sign in again and retry.');
+        toast.error('Your session has expired. Please sign in again and retry.');
         return;
       }
       if (!res.ok) {
@@ -360,7 +360,7 @@ export function KanbanBoard({ projectId = null }) {
       cancelAddTask()
     } catch (err) {
       console.error("[save task]", err)
-      alert(err.message || 'Failed to create task.');
+      toast.error(err.message || 'Failed to create task.');
     }
   }
   const [panelTask, setPanelTask] = useState(null)
@@ -842,7 +842,7 @@ export function KanbanBoard({ projectId = null }) {
               return row
             } catch (e) {
               console.error("[update task]", e)
-              alert(e.message)
+              toast.error(e.message)
             }
           }}
           onDeleted={(id) => {
@@ -1181,7 +1181,7 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
       onDeleted?.(task.id);
     } catch (e) {
       console.error("[archive task]", e);
-      alert(e.message);
+      toast.error(e.message);
     }
   }
 
@@ -1293,7 +1293,7 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
               return row;
             } catch (e) {
               console.error("[update subtask]", e);
-              alert(e.message);
+              toast.error(e.message);
             }
           }}
           onDeleted={(id) => {
@@ -1807,7 +1807,7 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultProjectI
       onCancel?.()
     } catch (e) {
       console.error("[archive task]", e)
-      alert(e.message)
+      toast.error(e.message)
     }
   }
 
@@ -2153,7 +2153,7 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
     });
 
     if (errors.length > 0) {
-      alert(errors.join('\n'));
+      toast.error(errors.join(', '));
     }
 
     setAttachments(prev => [...prev, ...validFiles]);
@@ -2198,7 +2198,7 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
   async function handleCreate() {
     try {
       if (parentMax && deadline && deadline > parentMax) {
-        alert(`Subtask deadline must be on or before ${parentMax}.`);
+        toast.error(`Subtask deadline must be on or before ${parentMax}.`);
         return;
       }
       const assignedTo =
@@ -2254,7 +2254,7 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
       onCreated?.(row); // push into list in parent
     } catch (e) {
       console.error("[create subtask]", e);
-      alert(e.message);
+      toast.error(e.message);
     }
   }
 

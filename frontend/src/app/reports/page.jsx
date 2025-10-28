@@ -4,10 +4,11 @@ import { useState, useEffect } from "react";
 import { useSession } from "@/components/session-provider";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { 
-  BarChart3, 
+import toast from "react-hot-toast";
+import {
+  BarChart3,
   FileText,
-  Download, 
+  Download,
   Filter,
   Calendar,
   TrendingUp,
@@ -304,7 +305,7 @@ export default function ReportsPage() {
       document.body.removeChild(a);
     } catch (err) {
       console.error('Error exporting report:', err);
-      alert('Failed to export report');
+      toast.error('Failed to export report');
     }
   };
 
