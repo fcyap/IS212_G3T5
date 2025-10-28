@@ -18,13 +18,30 @@ import {
 } from "lucide-react";
 
 export default function ReportsPage() {
-  const { user, role } = useSession();
+  const { user, role, loading: sessionLoading } = useSession();
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [csrfToken, setCsrfToken] = useState(null);
   const [openFilter, setOpenFilter] = useState(null);
   const [reportType, setReportType] = useState('tasks'); // 'tasks' or 'departments'
+
+  // Show loading state while checking authentication
+  if (sessionLoading) {
+    return (
+      <div className="flex h-screen bg-[#1a1a1d] items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Return null if not authenticated (will be redirected by SessionProvider)
+  if (!user) {
+    return null
+  }
   
   const [filters, setFilters] = useState({
     startDate: '',

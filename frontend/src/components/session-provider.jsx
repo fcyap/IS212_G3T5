@@ -49,24 +49,22 @@ export function SessionProvider({ children }) {
   const load = async (reason = 'manual') => {
     console.info('[SessionProvider] load triggered', { reason, devMode: DEV_MODE });
     if (DEV_MODE) {
-      // Mock user data for development
-      setTimeout(() => {
-        const devState = {
-          loading: false,
-          user: { id: 1, name: "Dev User", email: "dev@example.com" },
-          role: { id: 1, label: "Developer", name: "developer" }
-        };
-        console.info('[SessionProvider] Dev mode login:', devState.user, 'reason:', reason);
-        writeCachedProfile({ user: devState.user, role: devState.role });
-        setState(devState);
-      }, 1000); // Simulate loading time
+      // Mock user data for development - no delay for better UX
+      const devState = {
+        loading: false,
+        user: { id: 1, name: "Dev User", email: "dev@example.com" },
+        role: { id: 1, label: "Developer", name: "developer" }
+      };
+      console.info('[SessionProvider] Dev mode login:', devState.user, 'reason:', reason);
+      writeCachedProfile({ user: devState.user, role: devState.role });
+      setState(devState);
       return;
     }
 
     try {
-      if (!(cachedProfile && reason === 'initial')) {
-        setState(prev => ({ ...prev, loading: true }));
-      }
+      // Always set loading to true during auth check to prevent content flash
+      setState(prev => ({ ...prev, loading: true }));
+
       const res = await fetch(process.env.NEXT_PUBLIC_API_URL + "/auth/me", {
         credentials: "include",
       });
@@ -94,9 +92,11 @@ export function SessionProvider({ children }) {
   };
 
   useEffect(() => {
+    // Don't set cached profile immediately - wait for API verification to avoid flash
+    // This ensures we don't show content before confirming auth status
     if (cachedProfile) {
-      setState({ loading: false, user: cachedProfile.user ?? null, role: cachedProfile.role ?? null });
-      console.info('[SessionProvider] Loaded user from localStorage:', cachedProfile.user, {
+      console.info('[SessionProvider] Found cached profile, verifying with API...', {
+        user: cachedProfile.user,
         role: cachedProfile.role,
       });
     }

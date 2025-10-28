@@ -32,7 +32,7 @@ function ProtectedProjectTimelinePage() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState(null)
   const [currentView, setCurrentView] = useState('home') // 'home', 'board', 'projects', etc.
-  const { user } = useSession()
+  const { user, loading: sessionLoading } = useSession()
   const { projects, loading: projectsLoading } = useProjects()
   const [stats, setStats] = useState({
     totalProjects: 0,
@@ -41,6 +41,23 @@ function ProtectedProjectTimelinePage() {
     pendingTasks: 0,
     overdueTasks: 0
   })
+
+  // Show loading state while checking authentication
+  if (sessionLoading) {
+    return (
+      <div className="flex h-screen bg-[#1a1a1d] items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Redirect to login if not authenticated (SessionProvider will handle this, but show nothing while it does)
+  if (!user) {
+    return null
+  }
 
   useEffect(() => {
     if (projects && projects.length > 0) {
