@@ -1643,29 +1643,27 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
 
             <RecurrencePicker value={recurrence} onChange={setRecurrence} disabled={!canEdit} />
 
+            {/* Actions & Comments */}
+            <div className="mt-8 space-y-6">
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleSave}
+                  disabled={!canSave || saving}
+                  className="bg-white/90 text-black"
+                >
+                  {saving ? "Saving…" : "Save"}
+                </Button>
+                <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleDelete}
+                  className="bg-red-400 hover:bg-red-700 text-white ml-auto"
+                  type="button" disabled={!canEdit}>
+                  <Trash className="w-4 h-4 mr-1" /> Delete
+                </Button>
+              </div>
 
-            {/* Actions */}
-            <div className="mt-6 flex gap-2">
-              <Button
-                onClick={handleSave}
-                disabled={!canSave || saving}
-                className="bg-white/90 text-black"
-              >
-                {saving ? "Saving…" : "Save"}
-              </Button>
-              <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button
-                onClick={handleDelete}
-                className="bg-red-400 hover:bg-red-700 text-white ml-auto"
-                type="button" disabled={!canEdit}>
-                <Trash className="w-4 h-4 mr-1" /> Delete
-              </Button>
-            </div>
-
-            {/* Comment Section */}
-            <div className="mt-8">
               <CommentSection taskId={task.id} />
             </div>
           </div>

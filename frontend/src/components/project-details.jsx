@@ -2397,30 +2397,31 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
             )}
           </div>
 
-          {/* Comments */}
-          <div className="pt-4 border-t border-gray-700">
-            <CommentSection taskId={task.id} />
-          </div>
-        </div>
+          {/* Actions & Comments */}
+          <div className="mt-8 space-y-6">
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSave}
+                disabled={!canSave || saving}
+                className="bg-white/90 text-black"
+              >
+                {saving ? "Saving…" : "Save"}
+              </Button>
+              <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleDelete}
+                className="bg-red-400 hover:bg-red-700 text-white ml-auto"
+                type="button">
+                <Trash className="w-4 h-4 mr-1" /> Delete
+              </Button>
+            </div>
 
-        {/* Actions */}
-        <div className="mt-6 flex gap-2">
-          <Button
-            onClick={handleSave}
-            disabled={!canSave || saving}
-            className="bg-white/90 text-black"
-          >
-            {saving ? "Saving…" : "Save"}
-          </Button>
-          <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleDelete}
-            className="bg-red-400 hover:bg-red-700 text-white ml-auto"
-            type="button">
-            <Trash className="w-4 h-4 mr-1" /> Delete
-          </Button>
+            <div className="pt-4 border-t border-gray-700">
+              <CommentSection taskId={task.id} />
+            </div>
+          </div>
         </div>
       </div>
     </div>
