@@ -16,6 +16,7 @@ import { TaskAttachmentsDisplay } from "./task-attachments-display"
 import { FileUploadInput } from "./file-upload-input"
 import { useUserSearch } from "@/hooks/useUserSearch"
 import { useAuth } from "@/hooks/useAuth"
+import { useSession } from "@/components/session-provider"
 import { TaskTimeTracking } from "./task-time-tracking"
 import { projectService, userService } from "@/lib/api"
 import { extractUserHours, normalizeTimeSummary } from "@/lib/time-tracking"
@@ -41,6 +42,20 @@ const prettyStatus = (s) => {
 
 const API = process.env.NEXT_PUBLIC_API_URL
 const cap = (s) => (s ? s.toString().charAt(0).toUpperCase() + s.toString().slice(1).toLowerCase() : "")
+const resolveRoleLabel = (roleLike) => {
+  if (!roleLike) return ''
+  if (typeof roleLike === 'string') return roleLike.trim().toLowerCase()
+  if (typeof roleLike?.label === 'string') return roleLike.label.trim().toLowerCase()
+  if (typeof roleLike?.name === 'string') return roleLike.name.trim().toLowerCase()
+  if (typeof roleLike?.role === 'string') return roleLike.role.trim().toLowerCase()
+  return ''
+}
+const isManagerLike = (...roles) => {
+  return roles.some((role) => {
+    const label = resolveRoleLabel(role)
+    return label === 'manager' || label === 'admin'
+  })
+}
 
 function rowToCard(r) {
   const workflow = String(r.status || 'pending').toLowerCase();
@@ -131,7 +146,9 @@ function RecurrencePicker({ value, onChange, disabled = false }) {
 
 export function KanbanBoard({ projectId = null }) {
   const boardProjectId = projectId != null ? Number(projectId) : null;
-  const { user: currentUser } = useAuth()
+  const session = useSession()
+  const sessionRole = resolveRoleLabel(session?.role)
+  const { user: currentUser, role: currentRole } = useAuth()
   const [activeProjects, setActiveProjects] = useState([]);
   const [projectLookup, setProjectLookup] = useState({});
   const [projectsLoading, setProjectsLoading] = useState(false);
@@ -210,14 +227,10 @@ export function KanbanBoard({ projectId = null }) {
       return;
     }
 
-    const roleLabel = typeof currentUser?.role === 'string'
-      ? currentUser.role.toLowerCase()
-      : typeof currentUser?.role?.label === 'string'
-        ? currentUser.role.label.toLowerCase()
-        : '';
+    const managerLike = isManagerLike(currentRole, currentUser?.role, sessionRole);
 
     // Only managers need the user directory to evaluate subordinate access
-    if (roleLabel !== 'manager') {
+    if (!managerLike) {
       setUsersById({});
       return;
     }
@@ -248,7 +261,7 @@ export function KanbanBoard({ projectId = null }) {
     return () => {
       active = false;
     };
-  }, [currentUser?.id, currentUser?.role]);
+  }, [currentUser?.id, currentRole, currentUser?.role, sessionRole]);
   async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees, recurrence, projectId: selectedProjectId, attachments }) {
     if (!currentUser?.id) {
       console.error('[KanbanBoard] Cannot create task without an authenticated user')
@@ -381,12 +394,7 @@ export function KanbanBoard({ projectId = null }) {
   }, [])
 
   const currentUserId = currentUser?.id != null ? Number(currentUser.id) : null;
-  const rawRoleValue = currentUser?.role;
-  const normalizedRole = typeof rawRoleValue === 'string'
-    ? rawRoleValue.toLowerCase()
-    : typeof rawRoleValue?.label === 'string'
-      ? rawRoleValue.label.toLowerCase()
-      : '';
+  const normalizedRole = resolveRoleLabel(currentRole ?? currentUser?.role ?? sessionRole);
   const normalizedDepartment = typeof currentUser?.department === 'string'
     ? currentUser.department.trim().toLowerCase()
     : '';
@@ -850,17 +858,14 @@ export function KanbanBoard({ projectId = null }) {
 
 function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, projectsError = null, ensureProject = async () => null, onClose, onSave, onDeleted, nested = false }) {
   const [childPanelTask, setChildPanelTask] = useState(null);
-  const { user: currentUser } = useAuth()
+  const { user: currentUser, role: currentRole } = useAuth()
+  const session = useSession()
+  const sessionRole = resolveRoleLabel(session?.role)
   const currentUserId = currentUser?.id
   console.log('[TaskSidePanel] opened for task:', task);
   console.log('[TaskSidePanel] initial task.timeTracking', task.timeTracking);
-  const normalizedRole =
-    typeof currentUser?.role === 'string'
-      ? currentUser.role.toLowerCase()
-      : typeof currentUser?.role?.label === 'string'
-        ? currentUser.role.label.toLowerCase()
-        : '';
-  const isManager = normalizedRole === 'manager' || normalizedRole === 'admin';
+  const normalizedRole = resolveRoleLabel(currentRole ?? currentUser?.role ?? sessionRole);
+  const isManager = isManagerLike(currentRole, currentUser?.role, sessionRole);
   const isSelfAssignee =
     Array.isArray(task.assignees) &&
     currentUserId != null &&
