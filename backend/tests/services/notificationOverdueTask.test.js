@@ -74,7 +74,10 @@ describe('Overdue Task Notification - User Story Tests', () => {
 
   // Helper to create a date string (YYYY-MM-DD format)
   const formatDate = (date) => {
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   beforeEach(() => {
@@ -225,15 +228,17 @@ describe('Overdue Task Notification - User Story Tests', () => {
     });
 
     test('should NOT send notification for tasks due today', async () => {
-      // Arrange
-      const today = new Date();
+      // Arrange - Use a fixed date string to avoid timezone issues
+      const nowObj = new Date();
+      const today = new Date(nowObj.getFullYear(), nowObj.getMonth(), nowObj.getDate());
+      const todayDateStr = formatDate(today);
       
       const taskDueToday = {
         id: 103,
         title: 'Review Code',
         status: 'in_progress',
         assigned_to: [10],
-        deadline: formatDate(today),
+        deadline: todayDateStr,
         project_id: 10
       };
 
@@ -247,8 +252,13 @@ describe('Overdue Task Notification - User Story Tests', () => {
         
         const overdueTasks = tasks.filter(task => {
           if (!task.deadline || task.status === 'completed') return false;
-          const deadline = new Date(task.deadline);
-          const deadlineDate = new Date(deadline.getFullYear(), deadline.getMonth(), deadline.getDate());
+          // Parse the deadline string and normalize to local midnight
+          const deadlineParts = task.deadline.split('-');
+          const deadlineDate = new Date(
+            parseInt(deadlineParts[0]), 
+            parseInt(deadlineParts[1]) - 1, 
+            parseInt(deadlineParts[2])
+          );
           return deadlineDate < today;
         });
 

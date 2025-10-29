@@ -23,6 +23,8 @@ class NotificationRepository {
      * @param {Number} notificationData.creator_id - Creator user ID
      * @param {String|Array<String>} notificationData.recipient_emails - Recipient email(s) - string or array
      * @param {String} notificationData.notif_types - Type of notification
+     * @param {Number} notificationData.task_id - Task ID (optional)
+     * @param {Number} notificationData.project_id - Project ID (optional)
      * @returns {Object} Created notification
      */
     async create(notificationData) {
@@ -32,15 +34,26 @@ class NotificationRepository {
             recipientEmails = recipientEmails.join(',');
         }
 
+        const insertData = {
+            message: notificationData.message,
+            creator_id: notificationData.creator_id || null,
+            recipient_emails: recipientEmails || '',
+            notif_types: notificationData.notif_types || 'general',
+            dismissed: false
+        };
+
+        // Add optional fields if provided
+        if (notificationData.task_id !== undefined) {
+            insertData.task_id = notificationData.task_id;
+        }
+        
+        if (notificationData.project_id !== undefined) {
+            insertData.project_id = notificationData.project_id;
+        }
+
         const { data, error } = await supabase
             .from('notifications')
-            .insert([{
-                message: notificationData.message,
-                creator_id: notificationData.creator_id || null,
-                recipient_emails: recipientEmails || '',
-                notif_types: notificationData.notif_types || 'general',
-                dismissed: false
-            }])
+            .insert([insertData])
             .select('*')
             .single();
 

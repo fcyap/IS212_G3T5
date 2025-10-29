@@ -55,6 +55,7 @@ export function DeadlineNotificationToaster() {
         'comment',
         'invitation',
         'task_deletion',
+        'overdue',
         'general'
       ])
 
@@ -180,6 +181,14 @@ export function DeadlineNotificationToaster() {
       color: () => 'text-amber-400',
       gradient: () => 'from-amber-500/20 to-orange-500/20',
       border: () => 'border-amber-400/40'
+    },
+    overdue: {
+      title: '⚠️ Task Overdue',
+      icon: () => <AlertTriangle className="w-6 h-6" />,
+      color: () => 'text-red-500',
+      gradient: () => 'from-red-600/30 to-red-700/30',
+      border: () => 'border-red-500/50',
+      showUrgentBadge: () => true
     },
     comment: {
       title: '💬 New Comment',

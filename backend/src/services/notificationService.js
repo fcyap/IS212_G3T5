@@ -1548,6 +1548,370 @@ class NotificationService {
       throw error;
     }
   }
+
+  /**
+   * Check for overdue tasks and send notifications
+   * This method should be called periodically (e.g., daily via cron job)
+   * Sends notifications to managers, directors, and assignees for overdue tasks
+   * @returns {Object} Summary of notifications sent
+   */
+  async checkAndSendOverdueNotifications() {
+    try {
+      console.log('Checking for overdue tasks...');
+
+      // Get all non-archived tasks
+      const { data: tasks, error } = await taskRepository.list({ archived: false });
+      
+      if (error) {
+        throw new Error(`Failed to fetch tasks: ${error.message}`);
+      }
+
+      if (!tasks || tasks.length === 0) {
+        console.log('No tasks found');
+        return { notificationsSent: 0, tasksChecked: 0 };
+      }
+
+      // Filter for overdue tasks
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      const overdueTasks = tasks.filter(task => {
+        // Skip if no deadline or already completed
+        if (!task.deadline || task.status === 'completed') {
+          return false;
+        }
+
+        // Check if deadline has passed
+        const deadline = new Date(task.deadline);
+        const deadlineDate = new Date(deadline.getFullYear(), deadline.getMonth(), deadline.getDate());
+        
+        return deadlineDate < today;
+      });
+
+      console.log(`Found ${overdueTasks.length} overdue tasks out of ${tasks.length} total tasks`);
+
+      if (overdueTasks.length === 0) {
+        return { notificationsSent: 0, tasksChecked: tasks.length };
+      }
+
+      let notificationsSent = 0;
+
+      // Process each overdue task
+      for (const task of overdueTasks) {
+        try {
+          const result = await this.createOverdueNotifications(task);
+          notificationsSent += result.notificationsSent;
+        } catch (error) {
+          console.error(`Error processing overdue notifications for task ${task.id}:`, error);
+          // Continue processing other tasks even if one fails
+        }
+      }
+
+      console.log(`Overdue notification check completed. Sent ${notificationsSent} notifications for ${overdueTasks.length} overdue tasks.`);
+      
+      return { 
+        notificationsSent, 
+        tasksChecked: tasks.length,
+        overdueTasksFound: overdueTasks.length 
+      };
+
+    } catch (error) {
+      console.error('Error in checkAndSendOverdueNotifications:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create overdue notifications for a specific task
+   * Sends to managers, directors, and all assignees
+   * @param {Object} task - Task object that is overdue
+   * @returns {Object} Summary of notifications created
+   */
+  async createOverdueNotifications(task) {
+    try {
+      if (!task || !task.id) {
+        throw new Error('Invalid task object');
+      }
+
+      console.log(`Creating overdue notifications for task ${task.id}: "${task.title}"`);
+
+      const recipients = [];
+      let notificationsSent = 0;
+
+      // Get project details if available
+      let project = null;
+      if (task.project_id) {
+        try {
+          project = await projectRepository.getProjectById(task.project_id);
+        } catch (error) {
+          console.warn(`Could not fetch project ${task.project_id}:`, error.message);
+        }
+      }
+
+      // Add project manager to recipients
+      if (project && project.creator_id) {
+        try {
+          const manager = await userRepository.getUserById(project.creator_id);
+          if (manager && manager.email) {
+            recipients.push({
+              user: manager,
+              role: 'manager'
+            });
+          }
+        } catch (error) {
+          console.warn(`Could not fetch manager for project ${project.id}:`, error.message);
+        }
+      }
+
+      // Add director to recipients if available
+      if (project && project.director_id) {
+        try {
+          const director = await userRepository.getUserById(project.director_id);
+          if (director && director.email) {
+            recipients.push({
+              user: director,
+              role: 'director'
+            });
+          }
+        } catch (error) {
+          console.warn(`Could not fetch director for project ${project.id}:`, error.message);
+        }
+      }
+
+      // Add all assignees to recipients
+      if (task.assigned_to && Array.isArray(task.assigned_to) && task.assigned_to.length > 0) {
+        try {
+          const { data: assignees, error } = await userRepository.getUsersByIds(task.assigned_to);
+          
+          if (error) {
+            console.warn(`Could not fetch assignees:`, error.message);
+          } else if (assignees && assignees.length > 0) {
+            assignees.forEach(assignee => {
+              if (assignee && assignee.email) {
+                recipients.push({
+                  user: assignee,
+                  role: 'assignee'
+                });
+              }
+            });
+          }
+        } catch (error) {
+          console.warn(`Could not fetch assignees for task ${task.id}:`, error.message);
+        }
+      }
+
+      // Remove duplicates (in case manager/director is also an assignee)
+      const uniqueRecipients = [];
+      const seenEmails = new Set();
+      
+      for (const recipient of recipients) {
+        if (!seenEmails.has(recipient.user.email)) {
+          seenEmails.add(recipient.user.email);
+          uniqueRecipients.push(recipient);
+        }
+      }
+
+      console.log(`Sending overdue notifications to ${uniqueRecipients.length} unique recipients`);
+
+      // Send notification to each recipient
+      for (const recipient of uniqueRecipients) {
+        try {
+          // Check if we already sent an overdue notification for this task to this user
+          const existingNotification = await this.checkExistingOverdueNotification(
+            task.id, 
+            recipient.user.email
+          );
+
+          if (existingNotification) {
+            console.log(`Already sent overdue notification for task ${task.id} to ${recipient.user.email}`);
+            continue;
+          }
+
+          // Create notification message
+          const deadline = new Date(task.deadline);
+          const now = new Date();
+          const daysOverdue = Math.floor((now - deadline) / (1000 * 60 * 60 * 24));
+          
+          let message = `⚠️ OVERDUE TASK\n\n`;
+          message += `Task "${task.title}" has missed its deadline.\n`;
+          message += `Original deadline: ${deadline.toLocaleDateString()}\n`;
+          
+          if (daysOverdue === 1) {
+            message += `This task is 1 day overdue.\n`;
+          } else if (daysOverdue > 1) {
+            message += `This task is ${daysOverdue} days overdue.\n`;
+          }
+          
+          if (project) {
+            message += `Project: ${project.name}\n`;
+          }
+          
+          if (task.priority) {
+            message += `Priority: ${task.priority}\n`;
+          }
+          
+          message += `\nPlease address this task immediately.`;
+
+          // Create in-app notification
+          const notificationData = {
+            notif_types: 'overdue',
+            message: message,
+            creator_id: null, // System-generated notification
+            recipient_emails: recipient.user.email,
+            // task_id: task.id, // Commented out until column exists in DB
+            // project_id: task.project_id || null, // Commented out until column exists in DB
+            created_at: new Date().toISOString()
+          };
+
+          await notificationRepository.create(notificationData);
+          
+          // Send email notification
+          await this.sendOverdueEmailNotification(task, recipient.user, project, daysOverdue);
+          
+          notificationsSent++;
+          console.log(`Sent overdue notification for task ${task.id} to ${recipient.user.email} (${recipient.role})`);
+        } catch (error) {
+          console.error(`Failed to send overdue notification to ${recipient.user.email}:`, error);
+          // Continue with other recipients even if one fails
+        }
+      }
+
+      return { 
+        notificationsSent,
+        recipientsNotified: uniqueRecipients.length 
+      };
+
+    } catch (error) {
+      console.error('Error creating overdue notifications:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if an overdue notification was already sent for a task to a specific user
+   * @param {Number} taskId - Task ID
+   * @param {String} userEmail - User email
+   * @returns {Boolean} Whether notification already exists
+   */
+  async checkExistingOverdueNotification(taskId, userEmail) {
+    try {
+      // Get recent notifications for this user
+      const notifications = await notificationRepository.getByUserEmail(
+        userEmail,
+        { limit: 100 }
+      );
+
+      if (!notifications || !Array.isArray(notifications)) {
+        return false;
+      }
+
+      // Check if an overdue notification exists for this task
+      const existingNotification = notifications.find(notification => {
+        return notification.notif_types === 'overdue' &&
+               notification.task_id === taskId &&
+               notification.recipient_emails.includes(userEmail);
+      });
+
+      return !!existingNotification;
+    } catch (error) {
+      console.error('Error checking existing overdue notification:', error);
+      // If we can't check, assume no notification exists to avoid missing notifications
+      return false;
+    }
+  }
+
+  /**
+   * Send overdue email notification
+   * @param {Object} task - Task object
+   * @param {Object} user - User object
+   * @param {Object} project - Project object (optional)
+   * @param {Number} daysOverdue - Number of days overdue
+   */
+  async sendOverdueEmailNotification(task, user, project = null, daysOverdue = 0) {
+    try {
+      if (!sgMail || !process.env.SENDGRID_API_KEY) {
+        console.warn('SendGrid not configured, skipping email notification');
+        return;
+      }
+
+      const deadline = new Date(task.deadline);
+      
+      let subject = `⚠️ Task Overdue: ${task.title}`;
+      if (daysOverdue === 1) {
+        subject = `⚠️ Task 1 Day Overdue: ${task.title}`;
+      } else if (daysOverdue > 1) {
+        subject = `⚠️ Task ${daysOverdue} Days Overdue: ${task.title}`;
+      }
+
+      const priorityColors = {
+        critical: '#dc3545',
+        high: '#fd7e14',
+        medium: '#ffc107',
+        low: '#28a745'
+      };
+      
+      const priorityColor = priorityColors[task.priority?.toLowerCase()] || '#dc3545';
+
+      const htmlContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: ${priorityColor}; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+            <h2 style="margin: 0; color: white;">⚠️ Task Overdue Alert</h2>
+          </div>
+
+          <div style="background-color: #f8f9fa; padding: 20px; border-left: 4px solid ${priorityColor};">
+            <h3 style="margin-top: 0;">Task Details:</h3>
+            <p><strong>Task:</strong> ${task.title}</p>
+            ${project ? `<p><strong>Project:</strong> ${project.name}</p>` : ''}
+            <p><strong>Original Deadline:</strong> ${deadline.toLocaleDateString()} at ${deadline.toLocaleTimeString()}</p>
+            <p><strong>Status:</strong> ${task.status || 'In Progress'}</p>
+            ${task.priority ? `<p><strong>Priority:</strong> <span style="color: ${priorityColor}; font-weight: bold;">${task.priority.toUpperCase()}</span></p>` : ''}
+            <p><strong>Days Overdue:</strong> <span style="color: #dc3545; font-weight: bold; font-size: 18px;">${daysOverdue} ${daysOverdue === 1 ? 'day' : 'days'}</span></p>
+          </div>
+
+          ${task.description ? `
+          <div style="background-color: #ffffff; padding: 20px; margin-top: 20px; border: 1px solid #dee2e6; border-radius: 8px;">
+            <h4 style="margin-top: 0;">Description:</h4>
+            <p style="color: #495057;">${task.description}</p>
+          </div>
+          ` : ''}
+
+          <div style="background-color: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0; color: #856404;">
+              <strong>⚠️ Action Required:</strong> This task has missed its deadline. Please take immediate action to complete or reschedule this task.
+            </p>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:3002'}/projects/${task.project_id || ''}"
+               style="background-color: ${priorityColor}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+              View Task Details
+            </a>
+          </div>
+
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+          <p style="color: #6c757d; font-size: 12px; text-align: center;">
+            This is an automated notification from the Project Management System.<br>
+            You are receiving this because you are ${user.role === 'manager' ? 'managing' : user.role === 'director' ? 'overseeing' : 'assigned to'} this task.
+          </p>
+        </div>
+      `;
+
+      const msg = {
+        to: user.email,
+        from: process.env.FROM_EMAIL || 'noreply@yourapp.com',
+        subject,
+        html: htmlContent,
+      };
+
+      await sgMail.send(msg);
+      console.log(`Sent overdue email notification for task "${task.title}" to ${user.email}`);
+
+    } catch (error) {
+      console.error('Error sending overdue email notification:', error);
+      // Don't throw error - we still want to create the in-app notification
+    }
+  }
 }
 
 module.exports = new NotificationService();
