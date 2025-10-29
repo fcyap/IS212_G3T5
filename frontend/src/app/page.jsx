@@ -51,17 +51,19 @@ function ProtectedProjectTimelinePage() {
   // Define fetchTaskStats before useEffect
   const fetchTaskStats = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/tasks`, {
+      // Request all tasks with maximum page size to get accurate counts
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/tasks?limit=1000`, {
         credentials: 'include'
       })
       if (response.ok) {
         const data = await response.json()
-        const tasks = data.tasks || []
-        
+        // API can return either an array directly or an object with tasks property
+        const tasks = Array.isArray(data) ? data : (data.tasks || [])
+
         const completed = tasks.filter(t => t.status === 'completed').length
         const pending = tasks.filter(t => t.status === 'pending').length
         const now = new Date()
-        const overdue = tasks.filter(t => 
+        const overdue = tasks.filter(t =>
           t.status !== 'completed' && t.deadline && new Date(t.deadline) < now
         ).length
 
