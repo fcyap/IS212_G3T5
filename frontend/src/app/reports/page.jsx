@@ -26,24 +26,6 @@ export default function ReportsPage() {
   const [csrfToken, setCsrfToken] = useState(null);
   const [openFilter, setOpenFilter] = useState(null);
   const [reportType, setReportType] = useState('tasks'); // 'tasks' or 'departments'
-
-  // Show loading state while checking authentication
-  if (sessionLoading) {
-    return (
-      <div className="flex h-screen bg-[#1a1a1d] items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Return null if not authenticated (will be redirected by SessionProvider)
-  if (!user) {
-    return null
-  }
-  
   const [filters, setFilters] = useState({
     startDate: '',
     endDate: '',
@@ -52,13 +34,11 @@ export default function ReportsPage() {
     departments: [],
     interval: '' // 'week' or 'month' for departmental reports
   });
-
   const [searchTerms, setSearchTerms] = useState({
     project: '',
     user: '',
     department: ''
   });
-
   const [availableFilters, setAvailableFilters] = useState({
     projects: [],
     users: [],
@@ -308,6 +288,23 @@ export default function ReportsPage() {
       toast.error('Failed to export report');
     }
   };
+
+  // Show loading state while checking authentication (after all hooks)
+  if (sessionLoading) {
+    return (
+      <div className="flex h-screen bg-[#1a1a1d] items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Return null if not authenticated (will be redirected by SessionProvider)
+  if (!user) {
+    return null
+  }
 
   if (!hasPermission) {
     return (
@@ -701,7 +698,7 @@ export default function ReportsPage() {
                   </div>
                   <h3 className="text-2xl font-bold text-white mb-3">No Report Generated Yet</h3>
                   <p className="text-gray-400 mb-6 leading-relaxed">
-                    Configure your filters and click the "Generate Report" button to view comprehensive task analytics and insights.
+                    Configure your filters and click the &quot;Generate Report&quot; button to view comprehensive task analytics and insights.
                   </p>
                   <div className="inline-flex items-center gap-2 text-sm text-blue-400 bg-blue-500/10 px-4 py-2 rounded-lg border border-blue-500/20">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

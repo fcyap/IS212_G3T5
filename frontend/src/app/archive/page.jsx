@@ -15,23 +15,6 @@ export default function ArchivePage() {
   const [rawTasks, setRawTasks] = useState([]);
   const [usersById, setUsersById] = useState({});
 
-  // Show loading state while checking authentication
-  if (authLoading) {
-    return (
-      <div className="flex h-screen bg-[#1a1a1d] items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Return null if not authenticated (will be redirected by SessionProvider)
-  if (!currentUser) {
-    return null
-  }
-
   useEffect(() => {
     (async () => {
       try {
@@ -197,6 +180,23 @@ export default function ArchivePage() {
     }
 
     setRawTasks((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  // Show loading state while checking authentication (after all hooks)
+  if (authLoading) {
+    return (
+      <div className="flex h-screen bg-[#1a1a1d] items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Return null if not authenticated (will be redirected by SessionProvider)
+  if (!currentUser) {
+    return null
   }
 
   return (

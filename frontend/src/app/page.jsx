@@ -202,7 +202,7 @@ function ProtectedProjectTimelinePage() {
                   <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">
                     {getGreeting()}, {user?.name || 'User'}!
                   </h1>
-                  <p className="text-gray-400">Here's what's happening with your projects today</p>
+                  <p className="text-gray-400">Here&apos;s what&apos;s happening with your projects today</p>
                 </div>
 
                 {/* Stats Grid */}

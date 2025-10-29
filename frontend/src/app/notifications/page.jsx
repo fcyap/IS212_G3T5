@@ -121,32 +121,6 @@ export default function NotificationsPage() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
 
-  // Show loading state while checking authentication
-  if (authLoading) {
-    return (
-      <div className="flex h-screen bg-[#1a1a1d] items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Return null if not authenticated (will be redirected by SessionProvider)
-  if (!user) {
-    return null
-  }
-
-  useEffect(() => {
-    if (user) {
-      fetchNotifications()
-      // Auto-refresh every 10 seconds
-      const interval = setInterval(fetchNotifications, 10000)
-      return () => clearInterval(interval)
-    }
-  }, [user])
-
   const fetchNotifications = async () => {
     if (!user?.email) return
 
@@ -196,6 +170,32 @@ export default function NotificationsPage() {
     router.back()
   }
 
+  useEffect(() => {
+    if (user) {
+      fetchNotifications()
+      // Auto-refresh every 10 seconds
+      const interval = setInterval(fetchNotifications, 10000)
+      return () => clearInterval(interval)
+    }
+  }, [user, fetchNotifications])
+
+  // Show loading state while checking authentication (after all hooks)
+  if (authLoading) {
+    return (
+      <div className="flex h-screen bg-[#1a1a1d] items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Return null if not authenticated (will be redirected by SessionProvider)
+  if (!user) {
+    return null
+  }
+
   return (
     <div className="min-h-screen bg-[#1a1a1d] text-white overflow-y-auto">
       <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-8">
@@ -239,7 +239,7 @@ export default function NotificationsPage() {
             <div className="text-center py-16">
               <Bell className="w-16 h-16 text-gray-600 mx-auto mb-4" />
               <h2 className="text-xl font-semibold text-white mb-2">No notifications yet</h2>
-              <p className="text-gray-400">You'll see notifications here when you receive them.</p>
+              <p className="text-gray-400">You&apos;ll see notifications here when you receive them.</p>
             </div>
           ) : (
             <div className="space-y-3 sm:space-y-4">
