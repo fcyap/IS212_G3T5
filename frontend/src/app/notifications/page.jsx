@@ -171,13 +171,20 @@ export default function NotificationsPage() {
   }
 
   useEffect(() => {
-    if (user) {
+    if (user?.email) {
       fetchNotifications()
-      // Auto-refresh every 10 seconds
-      const interval = setInterval(fetchNotifications, 10000)
-      return () => clearInterval(interval)
     }
-  }, [user, fetchNotifications])
+  }, [user?.email]) // Only depend on email, not the function or entire user object
+
+  useEffect(() => {
+    if (!user?.email) return
+
+    // Auto-refresh every 30 seconds (less aggressive)
+    const interval = setInterval(() => {
+      fetchNotifications()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [user?.email]) // Only depend on email
 
   // Show loading state while checking authentication (after all hooks)
   if (authLoading) {

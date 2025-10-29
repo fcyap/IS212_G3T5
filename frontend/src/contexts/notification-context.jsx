@@ -42,18 +42,27 @@ export function NotificationProvider({ children }) {
     }
   }, [user?.email]);
 
-  // Fetch notifications when user changes
+  // Fetch notifications when user email changes
   useEffect(() => {
+    if (!user?.email) {
+      setNotifications([]);
+      setUnreadCount(0);
+      setLoading(false);
+      return;
+    }
+
     fetchNotifications();
-  }, [fetchNotifications]);
+  }, [user?.email]); // Only depend on email, not the function
 
   // Auto-refresh every 2 minutes (less aggressive than before)
   useEffect(() => {
-    if (!user) return;
+    if (!user?.email) return;
 
-    const interval = setInterval(fetchNotifications, 2 * 60 * 1000);
+    const interval = setInterval(() => {
+      fetchNotifications();
+    }, 2 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [user, fetchNotifications]);
+  }, [user?.email, fetchNotifications]);
 
   const value = {
     notifications,
