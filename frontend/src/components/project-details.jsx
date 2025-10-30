@@ -383,6 +383,11 @@ export function ProjectDetails({ projectId, onBack }) {
 
   const handleUpdateTask = async (taskData) => {
     try {
+      const taskId = taskData.id
+      if (!taskId) {
+        throw new Error('Task ID is required for update')
+      }
+
       const normalizedAssignees = Array.isArray(taskData.assignees)
         ? Array.from(
             new Set(
@@ -400,7 +405,7 @@ export function ProjectDetails({ projectId, onBack }) {
           )
         : undefined;
       const hasValidAssignees = Array.isArray(normalizedAssignees) && normalizedAssignees.length > 0;
-      const response = await fetchWithCsrf(`${API}/api/tasks/${editingTask.id}`, {
+      const response = await fetchWithCsrf(`${API}/api/tasks/${taskId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -425,7 +430,24 @@ export function ProjectDetails({ projectId, onBack }) {
       }
 
       const updatedTask = await response.json()
-      setTasks(prev => prev.map(task => task.id === updatedTask.id ? updatedTask : task))
+      setTasks(prev => prev.map(task => {
+        // Update if this is the task itself
+        if (task.id === updatedTask.id) {
+          // Preserve existing subtasks if the updated task doesn't include them
+          return {
+            ...updatedTask,
+            subtasks: updatedTask.subtasks || task.subtasks || []
+          }
+        }
+        // Update if this is a parent task containing the updated subtask
+        if (task.subtasks && task.subtasks.some(st => st.id === updatedTask.id)) {
+          return {
+            ...task,
+            subtasks: task.subtasks.map(st => st.id === updatedTask.id ? updatedTask : st)
+          }
+        }
+        return task
+      }))
       setEditingTask(null)
       return updatedTask
     } catch (error) {
@@ -2107,6 +2129,7 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   const handleSave = async () => {
     if (!canSave || saving) return
     const payload = {
+      id: task.id,
       title: title.trim(),
       description: description.trim(),
       priority,
@@ -3283,30 +3306,92 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                           {task.subtasks.map((subtask) => {
                             const subtaskCreatedDate = new Date(subtask.created_at)
                             const subtaskDeadlineDate = subtask.deadline ? new Date(subtask.deadline) : null
+                            const subtaskUpdatedDate = subtask.updated_at ? new Date(subtask.updated_at) : null
                             const subtaskIsCompleted = subtask.status === 'completed'
                             const subtaskIsBlocked = subtask.status === 'blocked'
+                            const subtaskIsOverdue = subtaskDeadlineDate && !subtaskIsCompleted && subtaskDeadlineDate < today
 
                             const subtaskStartPos = getDatePosition(subtaskCreatedDate)
-                            const subtaskEndPos = subtaskDeadlineDate ? getDatePosition(subtaskDeadlineDate) : startPos + barWidth
+                            let subtaskEndPos
+                            let subtaskShowOverdueExtension = false
+                            let subtaskWasLateCompletion = false
+
+                            if (subtaskIsCompleted && subtaskUpdatedDate) {
+                              subtaskEndPos = getDatePosition(subtaskUpdatedDate)
+                              if (subtaskDeadlineDate && subtaskUpdatedDate > subtaskDeadlineDate) {
+                                subtaskWasLateCompletion = true
+                              }
+                            } else if (subtaskDeadlineDate) {
+                              subtaskEndPos = getDatePosition(subtaskDeadlineDate)
+                              if (subtaskIsOverdue) {
+                                subtaskShowOverdueExtension = true
+                              }
+                            } else {
+                              // No deadline - use parent task end
+                              subtaskEndPos = startPos + barWidth
+                            }
+
                             const subtaskBarWidth = subtaskEndPos - subtaskStartPos
+                            const subtaskOverdueExtensionWidth = subtaskShowOverdueExtension
+                              ? getDatePosition(today) - subtaskEndPos
+                              : 0
 
                             return (
                               <div key={`subtask-bar-${subtask.id}`} className="relative flex items-center" style={{ height: `${TIMELINE_HEIGHTS.SUBTASK_ITEM}px` }}>
                                 <div
-                                  className="absolute h-4 rounded cursor-pointer hover:shadow-lg transition-shadow"
+                                  className="absolute h-6 rounded cursor-pointer hover:shadow-lg transition-shadow"
                                   style={{
                                     left: `${subtaskStartPos}px`,
-                                    width: `${Math.max(subtaskBarWidth, 20)}px`,
+                                    width: `${subtaskBarWidth}px`,
+                                    pointerEvents: 'auto',
                                   }}
                                   onMouseMove={(e) => handleMouseMove(e, `subtask-${subtask.id}`)}
                                   onMouseLeave={handleMouseLeaveBar}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setEditingTask(subtask)
+                                  }}
                                 >
-                                  <div className={`h-full rounded ${
-                                    subtaskIsBlocked ? 'bg-red-400 border border-red-600' :
-                                    subtaskIsCompleted ? 'bg-green-400' :
-                                    subtask.status === 'in_progress' ? 'bg-blue-400' :
-                                    'bg-gray-400'
-                                  } opacity-80`} />
+                                  {subtaskWasLateCompletion && subtaskDeadlineDate ? (
+                                    <>
+                                      <div
+                                        className="absolute h-full bg-blue-500 rounded-l"
+                                        style={{
+                                          left: 0,
+                                          width: `${getDatePosition(subtaskDeadlineDate) - subtaskStartPos}px`,
+                                        }}
+                                      />
+                                      <div
+                                        className="absolute h-full bg-red-400 rounded-r"
+                                        style={{
+                                          left: `${getDatePosition(subtaskDeadlineDate) - subtaskStartPos}px`,
+                                          right: 0,
+                                        }}
+                                      />
+                                    </>
+                                  ) : (
+                                    <div
+                                      className={`h-full ${subtaskShowOverdueExtension ? 'rounded-l' : 'rounded'} ${
+                                        subtaskIsBlocked ? 'bg-red-900 border-2 border-red-600' :
+                                        subtaskIsCompleted ? 'bg-green-500' :
+                                        subtask.status === 'in_progress' ? 'bg-blue-500' :
+                                        'bg-gray-500'
+                                      } ${
+                                        !subtaskDeadlineDate && !subtaskIsCompleted && !subtaskIsBlocked ? 'bg-gradient-to-r from-gray-500 to-gray-500/20' : ''
+                                      }`}
+                                    />
+                                  )}
+
+                                  {/* Overdue extension for subtask */}
+                                  {subtaskShowOverdueExtension && (
+                                    <div
+                                      className="absolute top-0 h-full bg-red-500 rounded-r"
+                                      style={{
+                                        left: '100%',
+                                        width: `${subtaskOverdueExtensionWidth}px`,
+                                      }}
+                                    />
+                                  )}
                                 </div>
                               </div>
                             )
