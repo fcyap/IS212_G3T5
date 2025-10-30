@@ -219,12 +219,15 @@ const createTask = async (req, res) => {
       });
     }
 
-    const validPriorities = ['low', 'medium', 'high'];
-    if (priority && !validPriorities.includes(priority)) {
-      return res.status(400).json({
-        success: false,
-        message: `Priority must be one of: ${validPriorities.join(', ')}`
-      });
+    // Validate priority is between 1-10
+    if (priority !== undefined && priority !== null) {
+      const priorityNum = Number(priority);
+      if (!Number.isInteger(priorityNum) || priorityNum < 1 || priorityNum > 10) {
+        return res.status(400).json({
+          success: false,
+          message: 'Priority must be an integer between 1 and 10'
+        });
+      }
     }
 
     const taskData = {
@@ -233,7 +236,7 @@ const createTask = async (req, res) => {
       project_id: project_id ? parseInt(project_id) : undefined,
       assigned_to: assigned_to || [],
       status: status || 'pending',
-      priority: priority || 'medium',
+      priority: priority ? Number(priority) : 5, // Default to medium priority (5)
       deadline: deadline || null,
       parent_id: (parent_id === null || parent_id === undefined) ? null : parseInt(parent_id),
     };
@@ -281,14 +284,14 @@ const updateTask = async (req, res) => {
     }
 
     if (priority !== undefined) {
-      const validPriorities = ['low', 'medium', 'high'];
-      if (!validPriorities.includes(priority)) {
+      const priorityNum = Number(priority);
+      if (!Number.isInteger(priorityNum) || priorityNum < 1 || priorityNum > 10) {
         return res.status(400).json({
           success: false,
-          message: `Priority must be one of: ${validPriorities.join(', ')}`
+          message: 'Priority must be an integer between 1 and 10'
         });
       }
-      updates.priority = priority;
+      updates.priority = priorityNum;
     }
 
     if (Object.keys(updates).length === 0) {

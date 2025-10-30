@@ -9,8 +9,30 @@ import { TaskAttachmentsDisplay } from "./task-attachments-display"
 export function TaskCard({ title, priority, status, assignees = [], dateRange, description, deadline, onClick, tags = [], onUnarchive, taskId, }) {
 
   const cap = (s) => (s ? s.toString().charAt(0).toUpperCase() + s.toString().slice(1).toLowerCase() : "")
-  const p = (priority || "").toLowerCase()
+  const p = Number(priority) || 5; // Priority is now a number 1-10
   const s = (status || "").toLowerCase()
+
+  // Priority system: 1-10 integer scale with visual mapping
+  const getPriorityLabel = (priority) => {
+    const p = Number(priority);
+    if (p >= 9) return "Critical";
+    if (p >= 7) return "High";
+    if (p >= 4) return "Medium";
+    return "Low";
+  };
+
+  const priorityChipClasses = {
+    1: "bg-slate-200 text-slate-800",
+    2: "bg-slate-200 text-slate-800", 
+    3: "bg-teal-200 text-teal-900",
+    4: "bg-teal-200 text-teal-900",
+    5: "bg-amber-200 text-amber-900",
+    6: "bg-amber-300 text-amber-950",
+    7: "bg-orange-300 text-orange-950",
+    8: "bg-red-300 text-red-950",
+    9: "bg-fuchsia-400 text-fuchsia-950",
+    10: "bg-purple-500 text-white",
+  };
 
 
   const a = assignees ?? {
@@ -23,12 +45,7 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
   const dueText = deadline || (dateRange ? dateRange.replace(/^Due\s*/i, "") : null)
 
   const getPriorityColor = () => {
-    switch (p) {
-      case "low": return "bg-teal-200 text-teal-900"
-      case "medium": return "bg-amber-300 text-amber-950"
-      case "high": return "bg-fuchsia-300 text-fuchsia-950"
-      default: return "bg-gray-600 text-white"
-    }
+    return priorityChipClasses[p] || "bg-gray-600 text-white";
   }
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -74,7 +91,9 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
 
       {/* Badges */}
       <div className="mt-3 flex items-center gap-2">
-        {priority ? <Badge className={`text-xs px-2 py-1 ${getPriorityColor()}`}>{cap(priority)}</Badge> : null}
+        {priority ? <Badge className={`text-xs px-2 py-1 ${getPriorityColor()}`}>
+          {p}
+        </Badge> : null}
       </div>
 
 

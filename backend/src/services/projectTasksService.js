@@ -10,7 +10,7 @@ class ProjectTasksService {
    * Validation constants
    */
   static VALID_TASK_STATUSES = ['pending', 'in_progress', 'completed', 'cancelled'];
-  static VALID_TASK_PRIORITIES = ['low', 'medium', 'high'];
+  static VALID_TASK_PRIORITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]; // New 1-10 priority system
   static VALID_SORT_FIELDS = ['id', 'title', 'status', 'priority', 'created_at', 'updated_at', 'deadline'];
   static VALID_SORT_ORDERS = ['asc', 'desc'];
 

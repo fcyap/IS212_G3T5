@@ -27,6 +27,28 @@ import { CommentSection } from "./task-comment/task-comment-section"
 import { extractUserHours, normalizeTimeSummary } from "@/lib/time-tracking"
 import toast from "react-hot-toast"
 
+// Priority system: 1-10 integer scale with visual mapping
+const getPriorityLabel = (priority) => {
+  const p = Number(priority);
+  if (p >= 9) return "Critical";
+  if (p >= 7) return "High";
+  if (p >= 4) return "Medium";
+  return "Low";
+};
+
+const priorityChipClasses = {
+  1: "bg-slate-200 text-slate-800",
+  2: "bg-slate-200 text-slate-800", 
+  3: "bg-teal-200 text-teal-900",
+  4: "bg-teal-200 text-teal-900",
+  5: "bg-amber-200 text-amber-900",
+  6: "bg-amber-300 text-amber-950",
+  7: "bg-orange-300 text-orange-950",
+  8: "bg-red-300 text-red-950",
+  9: "bg-fuchsia-400 text-fuchsia-950",
+  10: "bg-purple-500 text-white",
+};
+
 const API = process.env.NEXT_PUBLIC_API_URL ;
 
 export function ProjectDetails({ projectId, onBack }) {
@@ -533,7 +555,7 @@ export function ProjectDetails({ projectId, onBack }) {
         return false
       }
 
-      if (taskFilters.priority !== 'all' && task.priority !== taskFilters.priority.toLowerCase()) {
+      if (taskFilters.priority !== 'all' && Number(task.priority) !== Number(taskFilters.priority)) {
         return false
       }
 
@@ -562,7 +584,7 @@ export function ProjectDetails({ projectId, onBack }) {
       if (taskDate !== filterDate) return false
     }
 
-    if (taskFilters.priority !== 'all' && task.priority !== taskFilters.priority.toLowerCase()) {
+    if (taskFilters.priority !== 'all' && Number(task.priority) !== Number(taskFilters.priority)) {
       return false
     }
 
@@ -883,9 +905,11 @@ export function ProjectDetails({ projectId, onBack }) {
                     </SelectTrigger>
                     <SelectContent className="bg-[#2a2a2e] border-gray-600" style={{ color: 'white' }}>
                       <SelectItem value="all" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-cyan-200">Any priority</SelectItem>
-                      <SelectItem value="low" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-green-200">Low</SelectItem>
-                      <SelectItem value="medium" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-amber-200">Medium</SelectItem>
-                      <SelectItem value="high" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-red-200">High</SelectItem>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((p) => (
+                        <SelectItem key={p} value={p.toString()} style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700">
+                          Priority {p}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1354,25 +1378,19 @@ function EditProjectDialog({ project, open, onClose, onSave }) {
   )
 }
 
-const priorityChipClasses = {
-  Low: "bg-teal-200 text-teal-900",
-  Medium: "bg-amber-300 text-amber-950",
-  High: "bg-fuchsia-300 text-fuchsia-950",
-}
-
 function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
   const { user } = useAuth()
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
-  const [priority, setPriority] = useState("")
+  const [priority, setPriority] = useState(5) // Default to medium priority
   const [tags, setTags] = useState([])
   const [tagInput, setTagInput] = useState("")
   const [assignees, setAssignees] = useState([])
   const [assigneeQuery, setAssigneeQuery] = useState("")
   const [attachments, setAttachments] = useState([])
 
-  const PRIORITIES = ["Low", "Medium", "High"]
+  const PRIORITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
   const MAX_ASSIGNEES = 5
   const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
   const ALLOWED_FILE_TYPES = [
@@ -2174,19 +2192,15 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
           {/* Priority */}
           <div>
             <label className="block text-xs text-gray-400 mb-1">Priority</label>
-            <Select value={priority} onValueChange={setPriority} disabled={!canEditTask}>
+            <Select value={priority.toString()} onValueChange={(v) => setPriority(Number(v))} disabled={!canEditTask}>
               <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
                 <SelectValue placeholder="Select priority" />
               </SelectTrigger>
               <SelectContent className="bg-white">
-                {["low", "medium", "high"].map((p) => (
-                  <SelectItem key={p} value={p}>
-                    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${
-                      p === 'high' ? 'bg-fuchsia-300 text-fuchsia-950' :
-                      p === 'medium' ? 'bg-amber-300 text-amber-950' :
-                      'bg-teal-200 text-teal-900'
-                    }`}>
-                      {p.charAt(0).toUpperCase() + p.slice(1)}
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((p) => (
+                  <SelectItem key={p} value={p.toString()}>
+                    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>
+                      {p}
                     </span>
                   </SelectItem>
                 ))}
