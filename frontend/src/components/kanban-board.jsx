@@ -154,6 +154,9 @@ export function KanbanBoard({ projectId = null }) {
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectsError, setProjectsError] = useState(null);
   const [usersById, setUsersById] = useState({});
+  
+  // Tag filtering state
+  const [tagFilter, setTagFilter] = useState("")
 
   useEffect(() => {
     let mounted = true;
@@ -509,19 +512,39 @@ export function KanbanBoard({ projectId = null }) {
     });
   }, [rawTasks, currentUserId, normalizedRole, normalizedDepartment, usersById, hasUserDirectory, managerDivision, managerHierarchy, accessibleProjectIds]);
 
+  // Apply tag filtering to visible tasks
+  const filteredTasks = useMemo(() => {
+    if (!tagFilter.trim()) {
+      return visibleTasks;
+    }
+
+    const searchTerms = tagFilter.toLowerCase().trim().split(/\s+/);
+    
+    return visibleTasks.filter((task) => {
+      const taskTags = Array.isArray(task.tags) ? task.tags : [];
+      
+      // Check if any search term matches any tag (partial matching)
+      return searchTerms.some(searchTerm => 
+        taskTags.some(tag => 
+          String(tag).toLowerCase().includes(searchTerm)
+        )
+      );
+    });
+  }, [visibleTasks, tagFilter]);
+
   useEffect(() => {
     if (!panelTask) return;
-    const isVisible = visibleTasks.some((task) => task.id === panelTask.id);
+    const isVisible = filteredTasks.some((task) => task.id === panelTask.id);
     if (!isVisible) {
       setPanelTask(null);
     }
-  }, [panelTask, visibleTasks]);
+  }, [panelTask, filteredTasks]);
 
   const { isAdding, editorPosition, startAddTask, cancelAddTask, editorLane } = useKanban()
-  const todo = visibleTasks.filter(t => t.workflow === "pending")
-  const doing = visibleTasks.filter(t => t.workflow === "in_progress")
-  const done = visibleTasks.filter(t => t.workflow === "completed")
-  const blocked = visibleTasks.filter(t => t.workflow === "blocked")
+  const todo = filteredTasks.filter(t => t.workflow === "pending")
+  const doing = filteredTasks.filter(t => t.workflow === "in_progress")
+  const done = filteredTasks.filter(t => t.workflow === "completed")
+  const blocked = filteredTasks.filter(t => t.workflow === "blocked")
 
   return (
     <div className="flex-1 bg-[#1a1a1d] p-3 sm:p-6 overflow-hidden">
@@ -533,6 +556,24 @@ export function KanbanBoard({ projectId = null }) {
         </div>
       )}
       <div className="overflow-x-auto overflow-y-hidden h-full">
+        {/* Tag Filter Search */}
+        <div className="mb-4 flex justify-center">
+          <div className="w-full max-w-md">
+            <Input
+              type="text"
+              placeholder="Search tasks by tags (e.g., task1, backend, frontend)..."
+              value={tagFilter}
+              onChange={(e) => setTagFilter(e.target.value)}
+              className="bg-gray-800 border-gray-600 text-white placeholder-gray-400 focus:border-blue-500"
+            />
+            {tagFilter && (
+              <div className="mt-2 text-sm text-gray-400 text-center">
+                Showing {filteredTasks.length} of {visibleTasks.length} tasks
+              </div>
+            )}
+          </div>
+        </div>
+        
         <div className="flex gap-3 sm:gap-6 min-w-max h-full pb-4">
 
           {/* To do Column */}

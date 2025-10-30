@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useSession } from "@/components/session-provider"
 import { SidebarNavigation } from "@/components/sidebar-navigation"
 import { BoardHeader } from "@/components/board-header"
@@ -28,11 +29,12 @@ const ReportsPage = dynamic(() => import('./reports/page'), { ssr: false })
 }*/
 
 function ProtectedProjectTimelinePage() {
+  const router = useRouter()
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState(null)
   const [currentView, setCurrentView] = useState('home') // 'home', 'board', 'projects', etc.
-  const { user } = useSession()
+  const { user, loading } = useSession()
   const { projects, loading: projectsLoading } = useProjects()
   const [stats, setStats] = useState({
     totalProjects: 0,
@@ -41,6 +43,15 @@ function ProtectedProjectTimelinePage() {
     pendingTasks: 0,
     overdueTasks: 0
   })
+
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login')
+    }
+  }, [user, loading, router])
 
   useEffect(() => {
     if (projects && projects.length > 0) {
@@ -106,6 +117,23 @@ function ProtectedProjectTimelinePage() {
 
   const handleBackToBoard = () => {
     setSelectedProjectId(null)
+  }
+
+  // Show loading spinner while checking authentication
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-950 text-white">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mb-4"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Don't render if no user (will redirect)
+  if (!user) {
+    return null
   }
 
   return (
