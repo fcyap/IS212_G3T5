@@ -53,7 +53,13 @@ class NotificationRepository {
 
         const { data, error } = await supabase
             .from('notifications')
-            .insert([insertData])
+            .insert([{
+                message: notificationData.message,
+                creator_id: notificationData.creator_id || null,
+                recipient_emails: recipientEmails || '',
+                notif_types: notificationData.notif_types || 'general',
+                dismissed: false
+            }])
             .select('*')
             .single();
 

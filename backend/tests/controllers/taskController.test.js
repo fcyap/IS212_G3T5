@@ -11,13 +11,13 @@ describe('TaskController', () => {
       body: {},
       params: {},
       query: {},
-      user: { id: 1, role: 'admin', hierarchy: 1, division: 'Engineering' }
+      user: { id: 1, role: 'admin', hierarchy: 1, division: 'Engineering', department: 'Engineering' }
     };
     res = {
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
       locals: {
-        session: { user_id: 1, role: 'admin', hierarchy: 1, division: 'Engineering' }
+        session: { user_id: 1, role: 'admin', hierarchy: 1, division: 'Engineering', department: 'Engineering' }
       }
     };
     jest.clearAllMocks();
@@ -40,7 +40,8 @@ describe('TaskController', () => {
         userId: 1,
         userRole: 'admin',
         userHierarchy: 1,
-        userDivision: 'Engineering'
+        userDivision: 'Engineering',
+        userDepartment: 'Engineering'
       });
       expect(res.json).toHaveBeenCalledWith(mockTasks);
     });
@@ -61,7 +62,8 @@ describe('TaskController', () => {
         userId: 1,
         userRole: 'admin',
         userHierarchy: 1,
-        userDivision: 'Engineering'
+        userDivision: 'Engineering',
+        userDepartment: 'Engineering'
       });
       expect(res.json).toHaveBeenCalledWith(mockTasks);
     });
@@ -82,7 +84,8 @@ describe('TaskController', () => {
         userId: 1,
         userRole: 'admin',
         userHierarchy: 1,
-        userDivision: 'Engineering'
+        userDivision: 'Engineering',
+        userDepartment: 'Engineering'
       });
       expect(res.json).toHaveBeenCalledWith(mockTasks);
     });
@@ -262,6 +265,46 @@ describe('TaskController', () => {
       expect(res.json).toHaveBeenCalledWith({
         error: 'Database error'
       });
+    });
+  });
+
+  describe('getTaskById', () => {
+    beforeEach(() => {
+      req.params = { taskId: '7' };
+    });
+
+    test('should return task with time tracking from service', async () => {
+      const mockTask = {
+        id: 7,
+        title: 'Tracked task',
+        time_tracking: { total_hours: 4, per_assignee: [{ user_id: 1, hours: 4 }] }
+      };
+      taskService.getTaskById.mockResolvedValue(mockTask);
+
+      await taskController.getTaskById(req, res);
+
+      expect(taskService.getTaskById).toHaveBeenCalledWith(7);
+      expect(res.json).toHaveBeenCalledWith({ success: true, task: mockTask });
+    });
+
+    test('should reject invalid task id', async () => {
+      req.params.taskId = 'abc';
+
+      await taskController.getTaskById(req, res);
+
+      expect(taskService.getTaskById).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ success: false, message: 'Valid task ID is required' });
+    });
+
+    test('should propagate service errors', async () => {
+      const error = new Error('Task not found');
+      taskService.getTaskById.mockRejectedValue(error);
+
+      await taskController.getTaskById(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ success: false, message: error.message });
     });
   });
 });

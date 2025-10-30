@@ -1,6 +1,13 @@
+jest.mock('../../src/services/taskAssigneeHoursService', () => ({
+  recordHours: jest.fn(),
+  getTaskHoursSummary: jest.fn(),
+  normalizeHours: jest.fn()
+}));
+
 const projectTasksService = require('../../src/services/projectTasksService');
 const projectTasksRepository = require('../../src/repository/projectTasksRepository');
 const projectRepository = require('../../src/repository/projectRepository');
+const taskAssigneeHoursService = require('../../src/services/taskAssigneeHoursService');
 
 jest.mock('../../src/repository/projectTasksRepository');
 jest.mock('../../src/repository/projectRepository');
@@ -8,6 +15,14 @@ jest.mock('../../src/repository/projectRepository');
 describe('ProjectTasksService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    taskAssigneeHoursService.recordHours.mockReset();
+    taskAssigneeHoursService.getTaskHoursSummary.mockReset();
+    taskAssigneeHoursService.normalizeHours.mockReset();
+    taskAssigneeHoursService.getTaskHoursSummary.mockResolvedValue({
+      total_hours: 0,
+      per_assignee: []
+    });
+    taskAssigneeHoursService.normalizeHours.mockImplementation((value) => Number(value));
   });
 
   describe('validateProjectExists', () => {
@@ -199,6 +214,22 @@ describe('ProjectTasksService', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe('Project not found');
     });
+
+    test('should reject creation when more than 5 assignees provided', async () => {
+      const projectId = 3;
+      const taskData = {
+        title: 'Overloaded',
+        assigned_to: [1, 2, 3, 4, 5, 6]
+      };
+
+      projectRepository.exists.mockResolvedValue(true);
+
+      const result = await projectTasksService.createTask(projectId, taskData);
+
+      expect(projectTasksRepository.create).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('A task can have at most 5 assignees.');
+    });
   });
 
   describe('updateTask', () => {
@@ -214,13 +245,17 @@ describe('ProjectTasksService', () => {
         ...updateData
       };
 
+      const summary = { total_hours: 0, per_assignee: [] };
+
       projectTasksRepository.update.mockResolvedValue(mockUpdatedTask);
+      taskAssigneeHoursService.getTaskHoursSummary.mockResolvedValue(summary);
 
       const result = await projectTasksService.updateTask(taskId, updateData);
 
       expect(projectTasksRepository.update).toHaveBeenCalledWith(taskId, updateData);
       expect(result.success).toBe(true);
-      expect(result.task).toEqual(mockUpdatedTask);
+      expect(taskAssigneeHoursService.getTaskHoursSummary).toHaveBeenCalledWith(taskId, []);
+      expect(result.task).toEqual({ ...mockUpdatedTask, time_tracking: summary });
     });
 
     test('should handle task not found during update', async () => {
@@ -260,18 +295,23 @@ describe('ProjectTasksService', () => {
       const updateData = { status: 'completed' };
       const mockUpdatedTask = { id: taskId, ...updateData };
 
-      projectTasksRepository.findById.mockResolvedValue({
+      const existingTask = {
         id: taskId,
         assigned_to: [requestingUserId, 6]
-      });
+      };
+      const summary = { total_hours: 0, per_assignee: [] };
+
+      projectTasksRepository.findById.mockResolvedValue(existingTask);
       projectTasksRepository.update.mockResolvedValue(mockUpdatedTask);
+      taskAssigneeHoursService.getTaskHoursSummary.mockResolvedValue(summary);
 
       const result = await projectTasksService.updateTask(taskId, updateData, requestingUserId);
 
       expect(projectTasksRepository.findById).toHaveBeenCalledWith(taskId);
       expect(projectTasksRepository.update).toHaveBeenCalledWith(taskId, updateData);
       expect(result.success).toBe(true);
-      expect(result.task).toEqual(mockUpdatedTask);
+      expect(taskAssigneeHoursService.getTaskHoursSummary).toHaveBeenCalledWith(taskId, [requestingUserId, 6]);
+      expect(result.task).toEqual({ ...mockUpdatedTask, time_tracking: summary });
     });
 
     test('should return not found when validating a missing task before update', async () => {
@@ -288,6 +328,78 @@ describe('ProjectTasksService', () => {
       expect(result.success).toBe(false);
       expect(result.statusCode).toBe(404);
       expect(result.error).toBe('Task not found');
+    });
+
+    test('should reject updates that exceed the assignee limit', async () => {
+      const taskId = 21;
+      const updateData = {
+        assigned_to: [1, 2, 3, 4, 5, 6]
+      };
+
+      const result = await projectTasksService.updateTask(taskId, updateData);
+
+      expect(projectTasksRepository.update).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('A task can have at most 5 assignees.');
+    });
+
+    test('should record hours for assigned user and include summary', async () => {
+      const taskId = 31;
+      const requesterId = 99;
+      const updateData = { hours: 3.25 };
+      const existingTask = {
+        id: taskId,
+        assigned_to: [requesterId],
+        status: 'in_progress'
+      };
+      const updatedTask = {
+        ...existingTask,
+        updated_at: new Date().toISOString()
+      };
+      const summary = {
+        total_hours: 3.25,
+        per_assignee: [{ user_id: requesterId, hours: 3.25 }]
+      };
+
+      projectTasksRepository.findById.mockResolvedValue(existingTask);
+      projectTasksRepository.update.mockResolvedValue(updatedTask);
+      taskAssigneeHoursService.normalizeHours.mockReturnValue(3.25);
+      taskAssigneeHoursService.getTaskHoursSummary.mockResolvedValue(summary);
+
+      const result = await projectTasksService.updateTask(taskId, updateData, requesterId);
+
+      expect(projectTasksRepository.update).toHaveBeenCalledWith(taskId, {});
+      expect(taskAssigneeHoursService.normalizeHours).toHaveBeenCalledWith(3.25);
+      expect(taskAssigneeHoursService.recordHours).toHaveBeenCalledWith({
+        taskId,
+        userId: requesterId,
+        hours: 3.25
+      });
+      expect(result.success).toBe(true);
+      expect(result.task.time_tracking).toEqual(summary);
+    });
+
+    test('should reject negative hours input', async () => {
+      const taskId = 41;
+      const requesterId = 17;
+      const existingTask = {
+        id: taskId,
+        assigned_to: [requesterId],
+        status: 'pending'
+      };
+
+      projectTasksRepository.findById.mockResolvedValue(existingTask);
+      taskAssigneeHoursService.normalizeHours.mockImplementation(() => {
+        throw new Error('Hours spent must be a non-negative number');
+      });
+
+      const result = await projectTasksService.updateTask(taskId, { hours: -1 }, requesterId);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Hours spent must be a non-negative number');
+      expect(taskAssigneeHoursService.recordHours).not.toHaveBeenCalled();
+      expect(taskAssigneeHoursService.getTaskHoursSummary).not.toHaveBeenCalled();
+      expect(projectTasksRepository.update).not.toHaveBeenCalled();
     });
   });
 
@@ -327,14 +439,17 @@ describe('ProjectTasksService', () => {
         title: 'Test Task',
         project_id: projectId
       };
+      const summary = { total_hours: 5, per_assignee: [{ user_id: 2, hours: 5 }] };
 
       projectTasksRepository.findByIdAndProjectId.mockResolvedValue(mockTask);
+      taskAssigneeHoursService.getTaskHoursSummary.mockResolvedValue(summary);
 
       const result = await projectTasksService.getTaskById(projectId, taskId);
 
       expect(projectTasksRepository.findByIdAndProjectId).toHaveBeenCalledWith(taskId, projectId);
       expect(result.success).toBe(true);
-      expect(result.task).toEqual(mockTask);
+      expect(taskAssigneeHoursService.getTaskHoursSummary).toHaveBeenCalledWith(taskId, []);
+      expect(result.task).toEqual({ ...mockTask, time_tracking: summary });
     });
 
     test('should handle task not found', async () => {

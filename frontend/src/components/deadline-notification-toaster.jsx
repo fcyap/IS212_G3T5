@@ -15,6 +15,8 @@ import {
   UserMinus,
   RefreshCcw,
   Trash2
+  RefreshCcw,
+  Trash2
 } from "lucide-react"
 
 export function DeadlineNotificationToaster() {
@@ -22,10 +24,13 @@ export function DeadlineNotificationToaster() {
   const router = useRouter()
   const [lastChecked, setLastChecked] = useState(null)
   const [shownNotifications, setShownNotifications] = useState(new Set())
+  const [shownNotifications, setShownNotifications] = useState(new Set())
 
   useEffect(() => {
     if (!user?.email) return
 
+    // Check for new deadline notifications every 5 seconds (temporarily for testing)
+    const interval = setInterval(checkForNotifications, 5000)
     // Check for new deadline notifications every 5 seconds (temporarily for testing)
     const interval = setInterval(checkForNotifications, 5000)
 
@@ -42,10 +47,17 @@ export function DeadlineNotificationToaster() {
     }
 
     console.log('Checking for notifications for user:', user.email);
+    if (!user?.email) {
+      console.log('No user email, skipping notification check');
+      return;
+    }
+
+    console.log('Checking for notifications for user:', user.email);
 
     try {
       // Fetch only non-dismissed notifications for toaster display
       const data = await notificationService.getUserNotifications(10, 0, false)
+      console.log('Raw notifications data:', data.notifications.slice(0, 5)) // Log first 5 notifications
       console.log('Raw notifications data:', data.notifications.slice(0, 5)) // Log first 5 notifications
       const eligibleTypes = new Set([
         'deadline',
@@ -64,6 +76,10 @@ export function DeadlineNotificationToaster() {
           console.log('Notification missing recipient_emails:', notification.notif_id);
           return false;
         }
+        if (!notification.recipient_emails) {
+          console.log('Notification missing recipient_emails:', notification.notif_id);
+          return false;
+        }
         const recipients = notification.recipient_emails.split(',').map(email => email.trim())
         const isForUser = recipients.includes(user.email)
         const notifType = notification.notif_types || 'general'
@@ -74,9 +90,14 @@ export function DeadlineNotificationToaster() {
           type: notifType,
           recipient_emails: notification.recipient_emails,
           userEmail: user.email,
+          type: notifType,
+          recipient_emails: notification.recipient_emails,
+          userEmail: user.email,
           isForUser,
           isEligible,
           dismissed: notification.dismissed,
+          willShow: isForUser && isEligible,
+          message: notification.message?.substring(0, 50) + '...'
           willShow: isForUser && isEligible,
           message: notification.message?.substring(0, 50) + '...'
         })
@@ -87,11 +108,30 @@ export function DeadlineNotificationToaster() {
       })
 
       console.log('Total notifications from API:', data.notifications.length)
+      console.log('Total notifications from API:', data.notifications.length)
       console.log('Filtered notifications:', relevantNotifications.length)
+      console.log('Eligible types:', Array.from(eligibleTypes))
       console.log('Eligible types:', Array.from(eligibleTypes))
 
       // Show toast for each new notification that hasn't been shown yet
+      // Show toast for each new notification that hasn't been shown yet
       relevantNotifications.forEach(notification => {
+        const notificationId = notification.notif_id || notification.id
+        
+        // Only show if we haven't shown this notification before
+        if (!shownNotifications.has(notificationId)) {
+          console.log('Showing toast for notification:', {
+            id: notificationId,
+            type: notification.notif_types,
+            message: notification.message
+          })
+          showNotificationToast(notification)
+          
+          // Mark this notification as shown
+          setShownNotifications(prev => new Set([...prev, notificationId]))
+        } else {
+          console.log('Skipping already shown notification:', notificationId)
+        }
         const notificationId = notification.notif_id || notification.id
         
         // Only show if we haven't shown this notification before
@@ -128,6 +168,13 @@ export function DeadlineNotificationToaster() {
       // Call API to mark notification as dismissed
       await notificationService.dismissNotification(notificationId)
       console.log('Successfully dismissed notification:', notificationId)
+      
+      // Remove from shown notifications set so it doesn't stay in memory forever
+      setShownNotifications(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(notificationId)
+        return newSet
+      })
       
       // Remove from shown notifications set so it doesn't stay in memory forever
       setShownNotifications(prev => {
@@ -218,6 +265,7 @@ export function DeadlineNotificationToaster() {
     const theme = TOAST_THEME[notifType] || TOAST_THEME.general
     const messageLines = notification.message ? notification.message.split('\n').filter(Boolean) : []
     const notificationId = notification.notif_id || notification.id
+    const notificationId = notification.notif_id || notification.id
 
     // Determine urgency for deadlines
     const isDeadline = notifType === 'deadline'
@@ -282,6 +330,7 @@ export function DeadlineNotificationToaster() {
         </div>
       </div>
     ), {
+      id: `notification-${notificationId}`, // Use unique ID to prevent duplicates
       id: `notification-${notificationId}`, // Use unique ID to prevent duplicates
       duration: 5000, // Auto-dismiss after 5 seconds
       position: 'top-right',

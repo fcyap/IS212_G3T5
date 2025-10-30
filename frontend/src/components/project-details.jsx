@@ -20,6 +20,11 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ArrowLeft, Plus, Search, X, Check, Filter, ChevronDown, ChevronRight, Edit, Trash, Archive, Calendar, List } from "lucide-react"
 import { useProjects } from "@/contexts/project-context"
 import { useAuth } from "@/hooks/useAuth"
+import { TaskAttachmentsDisplay } from "./task-attachments-display"
+import { FileUploadInput } from "./file-upload-input"
+import { TaskTimeTracking } from "./task-time-tracking"
+import { CommentSection } from "./task-comment/task-comment-section"
+import { extractUserHours, normalizeTimeSummary } from "@/lib/time-tracking"
 import toast from "react-hot-toast"
 
 const API = process.env.NEXT_PUBLIC_API_URL ;
@@ -276,9 +281,11 @@ export function ProjectDetails({ projectId, onBack }) {
     }
   }
 
-  const handleCreateTask = async ({ title, description, dueDate, priority, tags, assignees = [] }) => {
+  const handleCreateTask = async ({ title, description, dueDate, priority, tags, assignees = [], attachments = [] }) => {
     try {
-      const response = await fetchWithCsrf(`${API}/api/tasks`, {
+      console.log('Creating task with projectId:', projectId, 'Type:', typeof projectId)
+      
+      const response = await fetchWithCsrf(`${API}/api/projects/${projectId}/tasks`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -302,7 +309,43 @@ export function ProjectDetails({ projectId, onBack }) {
         throw new Error(errorData.error || `Failed to create task: ${response.status}`)
       }
 
-      const newTask = await response.json()
+      const responseData = await response.json()
+      
+      if (!responseData.success) {
+        throw new Error(responseData.error || 'Failed to create task')
+      }
+      
+      const newTask = responseData.task
+      
+      // Upload attachments if any
+      if (attachments && attachments.length > 0) {
+        try {
+          const formData = new FormData()
+          attachments.forEach(file => {
+            formData.append('files', file)
+          })
+          
+          const uploadResponse = await fetchWithCsrf(`${API}/api/tasks/${newTask.id}/files`, {
+            method: 'POST',
+            body: formData
+          })
+          
+          if (!uploadResponse.ok) {
+            console.warn('Failed to upload some attachments')
+            toast.error('Task created but some attachments failed to upload')
+          } else {
+            const uploadResult = await uploadResponse.json()
+            if (uploadResult.data?.errors && uploadResult.data.errors.length > 0) {
+              console.warn('Some files failed:', uploadResult.data.errors)
+              toast.warning('Task created but some attachments failed to upload')
+            }
+          }
+        } catch (uploadError) {
+          console.error('Error uploading attachments:', uploadError)
+          toast.error('Task created but attachments failed to upload')
+        }
+      }
+      
       setTasks(prev => [...prev, newTask])
       setIsAddingTask(false)
       toast.success("Task created successfully!")
@@ -340,6 +383,11 @@ export function ProjectDetails({ projectId, onBack }) {
 
   const handleUpdateTask = async (taskData) => {
     try {
+      const taskId = taskData.id
+      if (!taskId) {
+        throw new Error('Task ID is required for update')
+      }
+
       const normalizedAssignees = Array.isArray(taskData.assignees)
         ? Array.from(
             new Set(
@@ -357,7 +405,7 @@ export function ProjectDetails({ projectId, onBack }) {
           )
         : undefined;
       const hasValidAssignees = Array.isArray(normalizedAssignees) && normalizedAssignees.length > 0;
-      const response = await fetchWithCsrf(`${API}/api/tasks/${editingTask.id}`, {
+      const response = await fetchWithCsrf(`${API}/api/tasks/${taskId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -370,6 +418,9 @@ export function ProjectDetails({ projectId, onBack }) {
           deadline: taskData.deadline || null,
           tags: taskData.tags || [],
           ...(hasValidAssignees ? { assigned_to: normalizedAssignees } : {}),
+          ...(typeof taskData.hours === 'number' && taskData.hours >= 0
+            ? { hours: taskData.hours }
+            : {}),
         })
       })
 
@@ -379,11 +430,30 @@ export function ProjectDetails({ projectId, onBack }) {
       }
 
       const updatedTask = await response.json()
-      setTasks(prev => prev.map(task => task.id === updatedTask.id ? updatedTask : task))
+      setTasks(prev => prev.map(task => {
+        // Update if this is the task itself
+        if (task.id === updatedTask.id) {
+          // Preserve existing subtasks if the updated task doesn't include them
+          return {
+            ...updatedTask,
+            subtasks: updatedTask.subtasks || task.subtasks || []
+          }
+        }
+        // Update if this is a parent task containing the updated subtask
+        if (task.subtasks && task.subtasks.some(st => st.id === updatedTask.id)) {
+          return {
+            ...task,
+            subtasks: task.subtasks.map(st => st.id === updatedTask.id ? updatedTask : st)
+          }
+        }
+        return task
+      }))
       setEditingTask(null)
+      return updatedTask
     } catch (error) {
       console.error('Error updating task:', error)
       alert(`Error updating task: ${error.message}`)
+      throw error
     }
   }
 
@@ -1006,6 +1076,9 @@ export function ProjectDetails({ projectId, onBack }) {
                                   </div>
                                 )}
 
+                                {/* Attachments */}
+                                <TaskAttachmentsDisplay taskId={task.id} />
+
                                 <div className="grid grid-cols-2 gap-4">
                                   <div>
                                     <label className="text-xs text-gray-400 block mb-1">Created</label>
@@ -1319,9 +1392,18 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
   const [tagInput, setTagInput] = useState("")
   const [assignees, setAssignees] = useState([])
   const [assigneeQuery, setAssigneeQuery] = useState("")
+  const [attachments, setAttachments] = useState([])
 
   const PRIORITIES = ["Low", "Medium", "High"]
   const MAX_ASSIGNEES = 5
+  const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
+  const ALLOWED_FILE_TYPES = [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'image/png',
+    'image/jpeg'
+  ]
   const canManageAssignees = () => true
   const canSave = title.trim().length > 0 && priority !== "" && assignees.length <= MAX_ASSIGNEES
 
@@ -1388,6 +1470,44 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
 
   const removeTag = (index) => {
     setTags((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleFileChange = (event) => {
+    const files = Array.from(event.target.files || [])
+    const validFiles = []
+    const errors = []
+
+    files.forEach(file => {
+      if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+        errors.push(`${file.name}: Invalid file type. Only PDF, DOCX, XLSX, PNG, and JPG are allowed.`)
+        return
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        errors.push(`${file.name}: File too large. Maximum size is 50MB.`)
+        return
+      }
+      validFiles.push(file)
+    })
+
+    if (errors.length > 0) {
+      alert(errors.join('\n'))
+    }
+
+    setAttachments(prev => [...prev, ...validFiles])
+    // Reset input so same file can be selected again
+    event.target.value = ''
+  }
+
+  const removeAttachment = (index) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
   }
 
   const handleAssigneeInputKeyDown = (event) => {
@@ -1570,6 +1690,57 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
         </div>
       </div>
 
+      {/* File Attachments */}
+      <div className="mb-4">
+        <label className="block text-xs text-gray-400 mb-1">Attachments</label>
+        <div className="border-2 border-dashed border-gray-700 rounded-md p-4 hover:border-gray-600 transition-colors">
+          <input
+            type="file"
+            id="task-file-input"
+            multiple
+            accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+          <label
+            htmlFor="task-file-input"
+            className="flex flex-col items-center cursor-pointer"
+          >
+            <svg className="w-8 h-8 text-gray-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <span className="text-sm text-gray-400">Click to upload files</span>
+            <span className="text-xs text-gray-500 mt-1">PDF, DOCX, XLSX, PNG, JPG (Max 50MB each)</span>
+          </label>
+        </div>
+        
+        {attachments.length > 0 && (
+          <div className="mt-2 space-y-2">
+            {attachments.map((file, index) => (
+              <div key={index} className="flex items-center justify-between bg-gray-800/50 rounded px-3 py-2">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-300 truncate">{file.name}</p>
+                    <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(index)}
+                  className="text-gray-400 hover:text-red-400 ml-2"
+                  aria-label={`Remove ${file.name}`}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Actions */}
       <div className="flex items-center gap-2">
         <Button
@@ -1581,6 +1752,7 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
               priority,
               tags,
               assignees,
+              attachments, // Pass attachments to parent
             })
           }
           disabled={!canSave}
@@ -1607,7 +1779,22 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   const [tags, setTags] = useState(Array.isArray(task.tags) ? task.tags : [])
   const [tagInput, setTagInput] = useState("")
   const [assignees, setAssignees] = useState([])
+  const [assigneeLookup, setAssigneeLookup] = useState(() => {
+    const lookup = {}
+    if (Array.isArray(task.assignees)) {
+      task.assignees.forEach((entry) => {
+        const rawId = entry?.id ?? entry?.user_id ?? entry?.userId
+        const numericId = Number(rawId)
+        if (Number.isFinite(numericId)) {
+          const truncated = Math.trunc(numericId)
+          lookup[truncated] = entry?.name ?? entry?.email ?? `User ${truncated}`
+        }
+      })
+    }
+    return lookup
+  })
   const [assigneeQuery, setAssigneeQuery] = useState("")
+  const [attachments, setAttachments] = useState([])
   const MAX_ASSIGNEES = 5
   const taskCreatorId = Number(task.creator_id ?? task.created_by ?? task.owner_id ?? null)
   const currentUserId = user?.id ?? null
@@ -1618,6 +1805,13 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
     (typeof currentUserProjectRole === 'string' && currentUserProjectRole.toLowerCase() === 'manager') ||
     isManagerRole
   const isCreator = currentUserId != null && currentUserId === taskCreatorId
+
+  const [timeTracking, setTimeTracking] = useState(() => normalizeTimeSummary(task.time_tracking))
+  const [hoursSpent, setHoursSpent] = useState(() =>
+    extractUserHours(normalizeTimeSummary(task.time_tracking), currentUserId)
+  )
+  const [saving, setSaving] = useState(false)
+  const isMountedRef = useRef(true)
 
   const userIsAssignee = useMemo(() => {
     if (currentUserId == null) return false
@@ -1647,7 +1841,15 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   const canAddAssignees = canEditTask
   const canRemoveAssignees = isProjectManager || (canEditTask && isCreator)
 
-  const canSave = (canEditTask || isProjectManager || isManagerRole) && assignees.length <= MAX_ASSIGNEES
+  const canUpdateHours = userIsAssignee
+  const numericHours = Number(hoursSpent)
+  const isHoursValid =
+    hoursSpent === "" ||
+    (Number.isFinite(numericHours) && numericHours >= 0)
+  const canSave =
+    (canEditTask || isProjectManager || isManagerRole) &&
+    assignees.length <= MAX_ASSIGNEES &&
+    isHoursValid
 
   const memberOptions = useMemo(() => {
     if (!Array.isArray(projectMembers)) return []
@@ -1708,7 +1910,103 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
 
   useEffect(() => {
     setAssignees(initialAssignees)
+    setAssigneeLookup((prev) => {
+      const next = { ...prev }
+      initialAssignees.forEach((entry) => {
+        const numericId = Number(entry?.id ?? entry?.user_id ?? entry?.userId)
+        if (Number.isFinite(numericId)) {
+          const truncated = Math.trunc(numericId)
+          if (next[truncated] == null) {
+            next[truncated] = entry?.name ?? entry?.email ?? `User ${truncated}`
+          }
+        }
+      })
+      return next
+    })
   }, [initialAssignees])
+
+  useEffect(() => {
+    if (!task.time_tracking) return
+    const summary = normalizeTimeSummary(task.time_tracking)
+    console.log('[TaskEditingSidePanel] normalised summary from task prop', summary)
+    setTimeTracking(summary)
+    const extracted = extractUserHours(summary, currentUserId)
+    console.log('[TaskEditingSidePanel] extracted hours from prop summary', { extracted, currentUserId })
+    if (extracted !== "") {
+      setHoursSpent(extracted)
+    }
+    setAssigneeLookup((prev) => {
+      const next = { ...prev }
+      summary.per_assignee.forEach(({ user_id }) => {
+        const numericId = Number(user_id)
+        if (Number.isFinite(numericId)) {
+          const truncated = Math.trunc(numericId)
+          if (next[truncated] == null) {
+            next[truncated] = `User ${truncated}`
+          }
+        }
+      })
+      return next
+    })
+  }, [task.time_tracking, currentUserId])
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const projectId = Number(task.project_id)
+    if (!Number.isFinite(projectId)) return
+    let active = true
+    ;(async () => {
+      try {
+        const res = await fetchWithCsrf(`${API}/api/projects/${projectId}/tasks/${task.id}`, {
+          method: "GET",
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache"
+          }
+        })
+        if (!res.ok) return
+        const payload = await res.json().catch(() => null)
+        const detail = payload?.task ?? payload
+        if (!detail || !active) return
+        const summary = normalizeTimeSummary(detail.time_tracking)
+        console.log('[TaskEditingSidePanel] fetched time summary', {
+          taskId: task.id,
+          raw: detail.time_tracking,
+          summary,
+          currentUserId
+        })
+        setTimeTracking(summary)
+        const extracted = extractUserHours(summary, currentUserId)
+        console.log('[TaskEditingSidePanel] extracted hours from fetched summary', { extracted, currentUserId })
+        if (extracted !== "") {
+          setHoursSpent(extracted)
+        }
+        setAssigneeLookup((prev) => {
+          const next = { ...prev }
+          summary.per_assignee.forEach(({ user_id }) => {
+            const numericId = Number(user_id)
+            if (Number.isFinite(numericId)) {
+              const truncated = Math.trunc(numericId)
+              if (next[truncated] == null) {
+                next[truncated] = `User ${truncated}`
+              }
+            }
+          })
+          return next
+        })
+      } catch (error) {
+        console.error('[TaskEditingSidePanel] Failed to fetch time tracking:', error)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [task.id, task.project_id, currentUserId])
 
   const availableAssigneeResults = useMemo(() => {
     if (!canAddAssignees) return []
@@ -1743,6 +2041,16 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
       if (prev.length >= MAX_ASSIGNEES || prev.some((assignee) => assignee.id === member.id)) return prev
       return [...prev, member]
     })
+    if (member?.id != null) {
+      const numericId = Number(member.id)
+      if (Number.isFinite(numericId)) {
+        const truncated = Math.trunc(numericId)
+        setAssigneeLookup((prev) => ({
+          ...prev,
+          [truncated]: member.name ?? member.email ?? `User ${truncated}`
+        }))
+      }
+    }
     setAssigneeQuery("")
   }
 
@@ -1753,6 +2061,18 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   const removeAssignee = (userId) => {
     if (!canRemoveAssignee(userId)) return
     setAssignees((prev) => prev.filter((assignee) => assignee.id !== userId))
+  }
+
+  const handleHoursInputChange = (value) => {
+    if (!canUpdateHours) return
+    if (value === "" || value === null) {
+      setHoursSpent("")
+      return
+    }
+    const parsed = Number(value)
+    if (!Number.isNaN(parsed) && parsed >= 0) {
+      setHoursSpent(value)
+    }
   }
 
   const handleAssigneeInputKeyDown = (event) => {
@@ -1769,9 +2089,63 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   const showNoAssigneeResults =
     canAddAssignees && assigneeQuery.trim().length > 0 && availableAssigneeResults.length === 0
 
+  const breakdownAssignees = useMemo(() => {
+    const ids = new Set()
+    if (Array.isArray(assignees)) {
+      assignees.forEach((entry) => {
+        const numericId = Number(entry?.id ?? entry?.user_id ?? entry?.userId)
+        if (Number.isFinite(numericId)) ids.add(Math.trunc(numericId))
+      })
+    }
+    if (Array.isArray(timeTracking?.per_assignee)) {
+      timeTracking.per_assignee.forEach((entry) => {
+        const numericId = Number(entry?.user_id ?? entry?.id)
+        if (Number.isFinite(numericId)) ids.add(Math.trunc(numericId))
+      })
+    }
+    return Array.from(ids).map((id) => ({
+      id,
+      name: assigneeLookup[id] ?? `User ${id}`
+    }))
+  }, [assignees, timeTracking?.per_assignee, assigneeLookup])
+
   const handleDelete = () => {
     if (window.confirm('Are you sure you want to delete this task?')) {
       onDelete()
+    }
+  }
+
+  const handleSave = async () => {
+    if (!canSave || saving) return
+    const payload = {
+      id: task.id,
+      title: title.trim(),
+      description: description.trim(),
+      priority,
+      status,
+      deadline,
+      tags,
+      assignees: assignees.map((assignee) => assignee.id)
+    }
+    if (canUpdateHours && hoursSpent !== "" && Number.isFinite(numericHours) && numericHours >= 0) {
+      payload.hours = numericHours
+    }
+    try {
+      if (isMountedRef.current) setSaving(true)
+      const updatedTask = await onSave?.(payload)
+      if (updatedTask?.time_tracking && isMountedRef.current) {
+        const summary = normalizeTimeSummary(updatedTask.time_tracking)
+        setTimeTracking(summary)
+        const extracted = extractUserHours(summary, currentUserId)
+        if (extracted !== "") {
+          setHoursSpent(extracted)
+        }
+      }
+    } catch (error) {
+      console.error('[TaskEditingSidePanel] Failed to update task:', error)
+      toast.error(error.message || 'Failed to update task')
+    } finally {
+      if (isMountedRef.current) setSaving(false)
     }
   }
 
@@ -1817,6 +2191,9 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
             />
           </div>
 
+          {/* Attachments */}
+          <TaskAttachmentsDisplay taskId={task.id} />
+
           {/* Priority */}
           <div>
             <label className="block text-xs text-gray-400 mb-1">Priority</label>
@@ -1855,6 +2232,18 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
               </SelectContent>
             </Select>
           </div>
+
+          <TaskTimeTracking
+            value={hoursSpent}
+            onChange={handleHoursInputChange}
+            canEdit={canUpdateHours && canEditTask}
+            totalHours={timeTracking.total_hours}
+            perAssignee={timeTracking.per_assignee}
+            assignees={breakdownAssignees}
+          />
+          {!isHoursValid && (
+            <p className="text-xs text-red-400">Please enter a non-negative number of hours.</p>
+          )}
 
           {/* Tags */}
           <div>
@@ -1988,34 +2377,89 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
               disabled={!canEditTask}
             />
           </div>
-        </div>
 
-        {/* Actions */}
-        <div className="mt-6 flex gap-2">
-          <Button
-            onClick={() => onSave({
-              title: title.trim(),
-              description: description.trim(),
-              priority,
-              status,
-              deadline,
-              tags,
-              assignees: assignees.map((assignee) => assignee.id)
-            })}
-            disabled={!canSave}
-            className="bg-white/90 text-black"
-          >
-            Save
-          </Button>
-          <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleDelete}
-            className="bg-red-400 hover:bg-red-700 text-white ml-auto"
-            type="button">
-            <Trash className="w-4 h-4 mr-1" /> Delete
-          </Button>
+          {/* Upload New Attachments */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-2">Upload New Attachments</label>
+            <FileUploadInput
+              onFilesChange={setAttachments}
+              disabled={!canEditTask}
+            />
+            {attachments.length > 0 && (
+              <Button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const formData = new FormData()
+                    attachments.forEach(file => {
+                      formData.append('files', file)
+                    })
+
+                    const response = await fetchWithCsrf(`${API}/api/tasks/${task.id}/files`, {
+                      method: 'POST',
+                      body: formData,
+                    })
+
+                    if (!response.ok) {
+                      const errorData = await response.json().catch(() => ({}))
+                      throw new Error(errorData.message || 'Failed to upload files')
+                    }
+
+                    const result = await response.json()
+                    
+                    // Check if there were any errors during upload
+                    if (result.data?.errors && result.data.errors.length > 0) {
+                      result.data.errors.forEach(error => {
+                        toast.error(error, { duration: 5000 })
+                      })
+                    }
+                    
+                    if (result.data?.uploaded && result.data.uploaded.length > 0) {
+                      toast.success(`${result.data.uploaded.length} file(s) uploaded successfully`)
+                    }
+
+                    setAttachments([])
+                    // Optionally refresh attachments display
+                    window.location.reload()
+                  } catch (error) {
+                    console.error('Error uploading files:', error)
+                    toast.error(error.message || 'Failed to upload files', { duration: 5000 })
+                  }
+                }}
+                className="mt-2 bg-blue-500 hover:bg-blue-600 text-white"
+                size="sm"
+                disabled={!canEditTask}
+              >
+                Upload {attachments.length} File{attachments.length > 1 ? 's' : ''}
+              </Button>
+            )}
+          </div>
+
+          {/* Actions & Comments */}
+          <div className="mt-8 space-y-6">
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSave}
+                disabled={!canSave || saving}
+                className="bg-white/90 text-black"
+              >
+                {saving ? "Saving…" : "Save"}
+              </Button>
+              <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleDelete}
+                className="bg-red-400 hover:bg-red-700 text-white ml-auto"
+                type="button">
+                <Trash className="w-4 h-4 mr-1" /> Delete
+              </Button>
+            </div>
+
+            <div className="pt-4 border-t border-gray-700">
+              <CommentSection taskId={task.id} />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -2820,30 +3264,92 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                           {task.subtasks.map((subtask) => {
                             const subtaskCreatedDate = new Date(subtask.created_at)
                             const subtaskDeadlineDate = subtask.deadline ? new Date(subtask.deadline) : null
+                            const subtaskUpdatedDate = subtask.updated_at ? new Date(subtask.updated_at) : null
                             const subtaskIsCompleted = subtask.status === 'completed'
                             const subtaskIsBlocked = subtask.status === 'blocked'
+                            const subtaskIsOverdue = subtaskDeadlineDate && !subtaskIsCompleted && subtaskDeadlineDate < today
 
                             const subtaskStartPos = getDatePosition(subtaskCreatedDate)
-                            const subtaskEndPos = subtaskDeadlineDate ? getDatePosition(subtaskDeadlineDate) : startPos + barWidth
+                            let subtaskEndPos
+                            let subtaskShowOverdueExtension = false
+                            let subtaskWasLateCompletion = false
+
+                            if (subtaskIsCompleted && subtaskUpdatedDate) {
+                              subtaskEndPos = getDatePosition(subtaskUpdatedDate)
+                              if (subtaskDeadlineDate && subtaskUpdatedDate > subtaskDeadlineDate) {
+                                subtaskWasLateCompletion = true
+                              }
+                            } else if (subtaskDeadlineDate) {
+                              subtaskEndPos = getDatePosition(subtaskDeadlineDate)
+                              if (subtaskIsOverdue) {
+                                subtaskShowOverdueExtension = true
+                              }
+                            } else {
+                              // No deadline - use parent task end
+                              subtaskEndPos = startPos + barWidth
+                            }
+
                             const subtaskBarWidth = subtaskEndPos - subtaskStartPos
+                            const subtaskOverdueExtensionWidth = subtaskShowOverdueExtension
+                              ? getDatePosition(today) - subtaskEndPos
+                              : 0
 
                             return (
                               <div key={`subtask-bar-${subtask.id}`} className="relative flex items-center" style={{ height: `${TIMELINE_HEIGHTS.SUBTASK_ITEM}px` }}>
                                 <div
-                                  className="absolute h-4 rounded cursor-pointer hover:shadow-lg transition-shadow"
+                                  className="absolute h-6 rounded cursor-pointer hover:shadow-lg transition-shadow"
                                   style={{
                                     left: `${subtaskStartPos}px`,
-                                    width: `${Math.max(subtaskBarWidth, 20)}px`,
+                                    width: `${subtaskBarWidth}px`,
+                                    pointerEvents: 'auto',
                                   }}
                                   onMouseMove={(e) => handleMouseMove(e, `subtask-${subtask.id}`)}
                                   onMouseLeave={handleMouseLeaveBar}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setEditingTask(subtask)
+                                  }}
                                 >
-                                  <div className={`h-full rounded ${
-                                    subtaskIsBlocked ? 'bg-red-400 border border-red-600' :
-                                    subtaskIsCompleted ? 'bg-green-400' :
-                                    subtask.status === 'in_progress' ? 'bg-blue-400' :
-                                    'bg-gray-400'
-                                  } opacity-80`} />
+                                  {subtaskWasLateCompletion && subtaskDeadlineDate ? (
+                                    <>
+                                      <div
+                                        className="absolute h-full bg-blue-500 rounded-l"
+                                        style={{
+                                          left: 0,
+                                          width: `${getDatePosition(subtaskDeadlineDate) - subtaskStartPos}px`,
+                                        }}
+                                      />
+                                      <div
+                                        className="absolute h-full bg-red-400 rounded-r"
+                                        style={{
+                                          left: `${getDatePosition(subtaskDeadlineDate) - subtaskStartPos}px`,
+                                          right: 0,
+                                        }}
+                                      />
+                                    </>
+                                  ) : (
+                                    <div
+                                      className={`h-full ${subtaskShowOverdueExtension ? 'rounded-l' : 'rounded'} ${
+                                        subtaskIsBlocked ? 'bg-red-900 border-2 border-red-600' :
+                                        subtaskIsCompleted ? 'bg-green-500' :
+                                        subtask.status === 'in_progress' ? 'bg-blue-500' :
+                                        'bg-gray-500'
+                                      } ${
+                                        !subtaskDeadlineDate && !subtaskIsCompleted && !subtaskIsBlocked ? 'bg-gradient-to-r from-gray-500 to-gray-500/20' : ''
+                                      }`}
+                                    />
+                                  )}
+
+                                  {/* Overdue extension for subtask */}
+                                  {subtaskShowOverdueExtension && (
+                                    <div
+                                      className="absolute top-0 h-full bg-red-500 rounded-r"
+                                      style={{
+                                        left: '100%',
+                                        width: `${subtaskOverdueExtensionWidth}px`,
+                                      }}
+                                    />
+                                  )}
                                 </div>
                               </div>
                             )

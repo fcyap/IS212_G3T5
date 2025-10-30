@@ -5,7 +5,9 @@ const router = express.Router();
 const {
   listForTask,
   createForTask,
+  canUserComment,
   updateComment,
+  deleteComment,
 } = require('../../controllers/tasks/taskCommentController');
 
 // inline validator middleware
@@ -22,8 +24,13 @@ const validate = (keys = []) => (req, res, next) => {
 // GET /api/tasks/:taskId/comments
 router.get('/:taskId/comments', async (req, res) => {
   try {
-    const data = await listForTask(req.params.taskId);
-    res.json(data);
+    const taskId = req.params.taskId;
+    const requester = req.user || res.locals?.session || {};
+    const [thread, ability] = await Promise.all([
+      listForTask(taskId),
+      canUserComment(taskId, requester)
+    ]);
+    res.json({ comments: thread, canComment: !!ability });
   } catch (e) {
     res.status(e.httpCode || 400).json({ error: e.message || 'Bad request' });
   }
@@ -59,6 +66,30 @@ router.patch(
         msg.includes('not found') ? 404 :
         (e.httpCode || 400);
       res.status(code).json({ error: msg });
+    }
+  }
+);
+
+// DELETE /api/comments/:commentId
+router.delete(
+  '/comments/:commentId',
+  async (req, res) => {
+    try {
+      const requester = req.user || res.locals?.session || {};
+      const result = await deleteComment(req.params.commentId, requester);
+      res.json({
+        success: true,
+        message: 'Comment deleted successfully',
+        ...(result || {}),
+      });
+    } catch (e) {
+      const msg = e.message || 'Server error';
+      const code =
+        msg.includes('Only admins') ? 403 :
+        msg.includes('not found') ? 404 :
+        msg.includes('comment id') ? 400 :
+        (e.httpCode || e.statusCode || 500);
+      res.status(code).json({ success: false, error: msg });
     }
   }
 );

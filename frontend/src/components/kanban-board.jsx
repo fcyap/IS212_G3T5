@@ -1,10 +1,10 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { TaskCard } from "./task-card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { fetchWithCsrf } from "@/lib/csrf"
+import { fetchWithCsrf, getCsrfToken } from "@/lib/csrf"
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select"
@@ -12,8 +12,15 @@ import { Trash, Check, X, Plus } from "lucide-react"
 import { useKanban } from "@/components/kanban-context"
 import { Badge } from "@/components/ui/badge"
 import { CommentSection } from "./task-comment/task-comment-section"
+import { TaskAttachmentsDisplay } from "./task-attachments-display"
+import { FileUploadInput } from "./file-upload-input"
 import { useUserSearch } from "@/hooks/useUserSearch"
 import { useAuth } from "@/hooks/useAuth"
+import { useSession } from "@/components/session-provider"
+import { TaskTimeTracking } from "./task-time-tracking"
+import { projectService, userService } from "@/lib/api"
+import { extractUserHours, normalizeTimeSummary } from "@/lib/time-tracking"
+import toast from "react-hot-toast"
 
 const priorityChipClasses = {
   Low: "bg-teal-200 text-teal-900",
@@ -35,6 +42,20 @@ const prettyStatus = (s) => {
 
 const API = process.env.NEXT_PUBLIC_API_URL
 const cap = (s) => (s ? s.toString().charAt(0).toUpperCase() + s.toString().slice(1).toLowerCase() : "")
+const resolveRoleLabel = (roleLike) => {
+  if (!roleLike) return ''
+  if (typeof roleLike === 'string') return roleLike.trim().toLowerCase()
+  if (typeof roleLike?.label === 'string') return roleLike.label.trim().toLowerCase()
+  if (typeof roleLike?.name === 'string') return roleLike.name.trim().toLowerCase()
+  if (typeof roleLike?.role === 'string') return roleLike.role.trim().toLowerCase()
+  return ''
+}
+const isManagerLike = (...roles) => {
+  return roles.some((role) => {
+    const label = resolveRoleLabel(role)
+    return label === 'manager' || label === 'admin'
+  })
+}
 
 function rowToCard(r) {
   const workflow = String(r.status || 'pending').toLowerCase();
@@ -47,6 +68,7 @@ function rowToCard(r) {
     r.recurrence_freq
       ? { freq: r.recurrence_freq, interval: r.recurrence_interval || 1 }
       : null;
+  const timeTracking = r.time_tracking ?? r.timeTracking ?? null;
 
   return {
     id: r.id,
@@ -58,6 +80,8 @@ function rowToCard(r) {
     assignees: normalizedAssignees,  // <-- use this
     tags: Array.isArray(r.tags) ? r.tags : [],
     recurrence,
+    projectId: r.project_id ?? null,
+    timeTracking,
   };
 }
 
@@ -121,50 +145,228 @@ function RecurrencePicker({ value, onChange, disabled = false }) {
 
 
 export function KanbanBoard({ projectId = null }) {
-  const { user: currentUser } = useAuth()
-  async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees, recurrence }) {
+  const boardProjectId = projectId != null ? Number(projectId) : null;
+  const session = useSession()
+  const sessionRole = resolveRoleLabel(session?.role)
+  const { user: currentUser, role: currentRole } = useAuth()
+  const [activeProjects, setActiveProjects] = useState([]);
+  const [projectLookup, setProjectLookup] = useState({});
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsError, setProjectsError] = useState(null);
+  const [usersById, setUsersById] = useState({});
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadProjects() {
+      setProjectsLoading(true);
+      setProjectsError(null);
+      try {
+        const allProjects = await projectService.getAllProjects();
+        if (!mounted) return;
+        const normalizedProjects = Array.isArray(allProjects) ? allProjects : [];
+        const active = normalizedProjects.filter((project) => String(project.status || '').toLowerCase() === 'active');
+        const lookupEntries = normalizedProjects
+          .map((project) => {
+            const id = Number(project.id);
+            return Number.isFinite(id) ? [id, project] : null;
+          })
+          .filter(Boolean);
+        const lookup = Object.fromEntries(lookupEntries);
+        setActiveProjects(active);
+        setProjectLookup(lookup);
+      } catch (err) {
+        if (!mounted) return;
+        console.error('[KanbanBoard] Failed to load projects:', err);
+        setProjectsError(err);
+        setActiveProjects([]);
+        setProjectLookup({});
+      } finally {
+        if (mounted) setProjectsLoading(false);
+      }
+    }
+    loadProjects();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const ensureProjectLookup = useCallback(async (projectId) => {
+    const numericId = Number(projectId);
+    if (!Number.isFinite(numericId)) {
+      return null;
+    }
+
+    if (projectLookup[numericId]) {
+      return projectLookup[numericId];
+    }
+
+    try {
+      const data = await projectService.getProjectById(numericId);
+
+      const projectPayload = data?.project ?? (data?.success === true ? data.project : null);
+      const project =
+        projectPayload && Number.isFinite(projectPayload?.id)
+          ? projectPayload
+          : (data && Number.isFinite(data?.id) ? data : null);
+
+      if (project && Number.isFinite(project.id)) {
+        setProjectLookup((prev) => ({
+          ...prev,
+          [project.id]: project
+        }));
+        return project;
+      }
+    } catch (err) {
+      console.error('[KanbanBoard] Failed to fetch project for lookup:', err);
+    }
+    return null;
+  }, [projectLookup]);
+  useEffect(() => {
+    if (!currentUser?.id) {
+      setUsersById({});
+      return;
+    }
+
+    const managerLike = isManagerLike(currentRole, currentUser?.role, sessionRole);
+
+    // Only managers need the user directory to evaluate subordinate access
+    if (!managerLike) {
+      setUsersById({});
+      return;
+    }
+
+    let active = true;
+    (async () => {
+      try {
+        const response = await userService.getAllUsers();
+        if (!active) return;
+        const list = Array.isArray(response)
+          ? response
+          : Array.isArray(response?.users)
+            ? response.users
+            : [];
+        const map = list.reduce((acc, user) => {
+          if (user?.id != null) {
+            acc[user.id] = user;
+          }
+          return acc;
+        }, {});
+        setUsersById(map);
+      } catch (err) {
+        if (!active) return;
+        console.error('[KanbanBoard] Failed to load users for RBAC filtering:', err);
+        setUsersById({});
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [currentUser?.id, currentRole, currentUser?.role, sessionRole]);
+  async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees, recurrence, projectId: selectedProjectId, attachments }) {
     if (!currentUser?.id) {
       console.error('[KanbanBoard] Cannot create task without an authenticated user')
       return
     }
+    console.log('[KanbanBoard] handleSaveNewTask called', {
+      title,
+      description,
+      dueDate,
+      priority,
+      tags,
+      assignees,
+      recurrence,
+      selectedProjectId,
+      boardProjectId,
+      lane: editorLane,
+      attachments: attachments?.length || 0
+    });
     try {
+      const resolvedProjectIdRaw =
+        selectedProjectId != null
+          ? selectedProjectId
+          : boardProjectId;
+      const resolvedProjectId =
+        resolvedProjectIdRaw != null && Number.isFinite(Number(resolvedProjectIdRaw))
+          ? Number(resolvedProjectIdRaw)
+          : null;
+      console.log('[KanbanBoard] Resolved project id:', { resolvedProjectIdRaw, resolvedProjectId });
+      if (resolvedProjectId == null) {
+        alert('Please select an active project before creating a task.');
+        return;
+      }
+      const payload = {
+        title,
+        description: description || null,
+        priority: (priority || "Low").toLowerCase(),
+        status: editorLane,
+        deadline: dueDate || null,
+        project_id: resolvedProjectId,
+        assigned_to: Array.isArray(assignees) && assignees.length > 0 ? assignees.map(a => a.id) : [currentUser.id],
+        tags,
+        recurrence: recurrence ?? null,
+      };
+      console.log('[KanbanBoard] POST /tasks payload:', payload);
       const res = await fetchWithCsrf(`${API}/tasks`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          title,
-          description: description || null,
-          priority: (priority || "Low").toLowerCase(),
-          status: editorLane,
-          deadline: dueDate || null,
-          project_id: projectId,
-          assigned_to: Array.isArray(assignees) && assignees.length > 0 ? assignees.map(a => a.id) : [currentUser.id],
-          tags,
-          recurrence: recurrence ?? null,
-        }),
+        body: JSON.stringify(payload),
       })
+      console.log('[KanbanBoard] POST /tasks status:', res.status);
+      if (res.status === 401) {
+        alert('Your session has expired. Please sign in again and retry.');
+        return;
+      }
       if (!res.ok) {
         const { error } = await res.json().catch(() => ({}))
         throw new Error(error || `POST /tasks ${res.status}`)
       }
       const row = await res.json()
+      console.log('[KanbanBoard] Created task response:', row);
+      
+      // Upload attachments if any
+      if (attachments && attachments.length > 0) {
+        try {
+          const formData = new FormData()
+          attachments.forEach(file => {
+            formData.append('files', file)
+          })
+          
+          const uploadResponse = await fetchWithCsrf(`${API}/api/tasks/${row.id}/files`, {
+            method: 'POST',
+            body: formData
+          })
+          
+          if (!uploadResponse.ok) {
+            console.warn('Failed to upload some attachments')
+          } else {
+            const uploadResult = await uploadResponse.json()
+            if (uploadResult.data?.errors && uploadResult.data.errors.length > 0) {
+              console.warn('Some files failed:', uploadResult.data.errors)
+            }
+          }
+        } catch (uploadError) {
+          console.error('Error uploading attachments:', uploadError)
+        }
+      }
+      
       const card = rowToCard(row)
 
-      setTasks(prev =>
+      setRawTasks(prev =>
         editorPosition === "top" ? [card, ...prev] : [...prev, card]
       )
       setBanner("Task Successfully Created")
       cancelAddTask()
     } catch (err) {
       console.error("[save task]", err)
+      alert(err.message || 'Failed to create task.');
     }
   }
   const [panelTask, setPanelTask] = useState(null)
   const openPanel = (task) => setPanelTask(task)
   const closePanel = () => setPanelTask(null)
-  const [tasks, setTasks] = useState([])
+  const [rawTasks, setRawTasks] = useState([])
   const [banner, setBanner] = useState("")
 
   useEffect(() => {
@@ -179,9 +381,11 @@ export function KanbanBoard({ projectId = null }) {
         const res = await fetch(`${API}/tasks?archived=false&parent_id=null`, {
           credentials: 'include',
         })
+        console.log('[KanbanBoard] GET /tasks status:', res.status);
         if (!res.ok) throw new Error(`GET /tasks ${res.status}`)
         const rows = await res.json()
-        setTasks(rows.map(rowToCard))
+        console.log('[KanbanBoard] Loaded tasks:', Array.isArray(rows) ? rows.length : 'unknown');
+        setRawTasks(rows.map(rowToCard))
       } catch (err) {
         console.error("[load tasks]", err)
       }
@@ -189,12 +393,135 @@ export function KanbanBoard({ projectId = null }) {
     load()
   }, [])
 
+  const currentUserId = currentUser?.id != null ? Number(currentUser.id) : null;
+  const normalizedRole = resolveRoleLabel(currentRole ?? currentUser?.role ?? sessionRole);
+  const normalizedDepartment = typeof currentUser?.department === 'string'
+    ? currentUser.department.trim().toLowerCase()
+    : '';
+  const managerDivision = currentUser?.division ? String(currentUser.division).toLowerCase() : null;
+  const managerHierarchySource =
+    currentUser?.hierarchy ??
+    currentUser?.level ??
+    currentUser?.hierarchy_level ??
+    currentUser?.role_level ??
+    null;
+  const hierarchyAsNumber = Number(managerHierarchySource);
+  const managerHierarchy = Number.isFinite(hierarchyAsNumber) ? hierarchyAsNumber : null;
+  const hasUserDirectory = usersById && Object.keys(usersById).length > 0;
+  const accessibleProjectIds = useMemo(
+    () =>
+      Object.keys(projectLookup || {})
+        .map((key) => Number(key))
+        .filter(Number.isFinite),
+    [projectLookup]
+  );
+
+  const visibleTasks = useMemo(() => {
+    if (!Array.isArray(rawTasks)) {
+      return [];
+    }
+    if (!currentUserId || !normalizedRole) {
+      return rawTasks;
+    }
+    if (normalizedDepartment === 'hr team') {
+      return rawTasks;
+    }
+
+    const extractAssigneeIds = (task) => {
+      if (Array.isArray(task?.assignees) && task.assignees.length) {
+        return task.assignees
+          .map((assignee) => Number(
+            typeof assignee === 'object' ? assignee?.id ?? assignee?.user_id : assignee
+          ))
+          .filter(Number.isFinite)
+          .map((value) => Math.trunc(value));
+      }
+
+      const raw = Array.isArray(task?.assigned_to)
+        ? task.assigned_to
+        : task?.assigned_to != null
+          ? [task.assigned_to]
+          : [];
+
+      return raw
+        .map((value) => Number(value))
+        .filter(Number.isFinite)
+        .map((value) => Math.trunc(value));
+    };
+
+    if (normalizedRole === 'manager') {
+      return rawTasks.filter((task) => {
+        const assigneeIds = extractAssigneeIds(task);
+        if (!assigneeIds.length) {
+          return false;
+        }
+
+        if (assigneeIds.includes(currentUserId)) {
+          return true;
+        }
+
+        if (!hasUserDirectory || !managerDivision) {
+          return false;
+        }
+
+        return assigneeIds.some((assigneeId) => {
+          const assignee = usersById[assigneeId];
+          if (!assignee) return false;
+
+          const subordinateDivision = assignee?.division ? String(assignee.division).toLowerCase() : null;
+          if (!subordinateDivision || subordinateDivision !== managerDivision) {
+            return false;
+          }
+
+          const subordinateHierarchySource =
+            assignee?.hierarchy ??
+            assignee?.level ??
+            assignee?.hierarchy_level ??
+            assignee?.role_level ??
+            null;
+          const subordinateHierarchy = Number(subordinateHierarchySource);
+          const comparable =
+            managerHierarchy != null &&
+            Number.isFinite(managerHierarchy) &&
+            Number.isFinite(subordinateHierarchy);
+
+          return comparable ? subordinateHierarchy < managerHierarchy : true;
+        });
+      });
+    }
+
+    // Staff: show tasks they are assigned to or within accessible projects
+    return rawTasks.filter((task) => {
+      const assigneeIds = extractAssigneeIds(task);
+      if (assigneeIds.includes(currentUserId)) {
+        return true;
+      }
+
+      const projectId = Number(task.projectId ?? task.project_id);
+      if (
+        Number.isFinite(projectId) &&
+        accessibleProjectIds.includes(projectId)
+      ) {
+        return true;
+      }
+
+      return false;
+    });
+  }, [rawTasks, currentUserId, normalizedRole, normalizedDepartment, usersById, hasUserDirectory, managerDivision, managerHierarchy, accessibleProjectIds]);
+
+  useEffect(() => {
+    if (!panelTask) return;
+    const isVisible = visibleTasks.some((task) => task.id === panelTask.id);
+    if (!isVisible) {
+      setPanelTask(null);
+    }
+  }, [panelTask, visibleTasks]);
 
   const { isAdding, editorPosition, startAddTask, cancelAddTask, editorLane } = useKanban()
-  const todo = tasks.filter(t => t.workflow === "pending")
-  const doing = tasks.filter(t => t.workflow === "in_progress")
-  const done = tasks.filter(t => t.workflow === "completed")
-  const blocked = tasks.filter(t => t.workflow === "blocked")
+  const todo = visibleTasks.filter(t => t.workflow === "pending")
+  const doing = visibleTasks.filter(t => t.workflow === "in_progress")
+  const done = visibleTasks.filter(t => t.workflow === "completed")
+  const blocked = visibleTasks.filter(t => t.workflow === "blocked")
 
   return (
     <div className="flex-1 bg-[#1a1a1d] p-3 sm:p-6 overflow-hidden">
@@ -222,12 +549,20 @@ export function KanbanBoard({ projectId = null }) {
 
             <div className="space-y-3 overflow-y-auto flex-1">
               {isAdding && editorLane === "pending" && editorPosition === "top" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
 
               {todo.map((t) => (
                 <TaskCard
                   key={t.id ?? `${t.title}-${t.deadline}`}
+                  taskId={t.id}
                   title={t.title}
                   description={t.description}
                   priority={t.priority}
@@ -240,7 +575,14 @@ export function KanbanBoard({ projectId = null }) {
               ))}
 
               {isAdding && editorLane === "pending" && editorPosition === "bottom" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
 
               {!isAdding && (
@@ -267,12 +609,20 @@ export function KanbanBoard({ projectId = null }) {
             </div>
             <div className="space-y-3 overflow-y-auto flex-1">
               {isAdding && editorLane === "in_progress" && editorPosition === "top" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
 
               {doing.map((t) => (
                 <TaskCard
                   key={t.id ?? `${t.title}-${t.deadline}`}
+                  taskId={t.id}
                   title={t.title}
                   description={t.description}
                   priority={t.priority}
@@ -285,7 +635,14 @@ export function KanbanBoard({ projectId = null }) {
               ))}
 
               {isAdding && editorLane === "in_progress" && editorPosition === "bottom" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
 
               {!isAdding && (
@@ -312,11 +669,19 @@ export function KanbanBoard({ projectId = null }) {
             </div>
             <div className="space-y-3 overflow-y-auto flex-1">
               {isAdding && editorLane === "completed" && editorPosition === "top" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
               {done.map((t) => (
                 <TaskCard
                   key={t.id ?? `${t.title}-${t.deadline}`}
+                  taskId={t.id}
                   title={t.title}
                   description={t.description}
                   priority={t.priority}
@@ -328,7 +693,14 @@ export function KanbanBoard({ projectId = null }) {
                 />
               ))}
               {isAdding && editorLane === "completed" && editorPosition === "bottom" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
 
               {!isAdding && (
@@ -355,12 +727,20 @@ export function KanbanBoard({ projectId = null }) {
 
             <div className="space-y-3 overflow-y-auto flex-1">
               {isAdding && editorLane === "blocked" && editorPosition === "top" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
 
               {blocked.map((t) => (
                 <TaskCard
                   key={t.id ?? `${t.title}-${t.deadline}`}
+                  taskId={t.id}
                   title={t.title}
                   description={t.description}
                   priority={t.priority}
@@ -373,7 +753,14 @@ export function KanbanBoard({ projectId = null }) {
               ))}
 
               {isAdding && editorLane === "blocked" && editorPosition === "bottom" && (
-                <EditableTaskCard onCancel={cancelAddTask} onSave={handleSaveNewTask} />
+                <EditableTaskCard
+                  onCancel={cancelAddTask}
+                  onSave={handleSaveNewTask}
+                  defaultProjectId={boardProjectId}
+                  projects={activeProjects}
+                  projectsLoading={projectsLoading}
+                  projectsError={projectsError}
+                />
               )}
 
               {/* {!isAdding && (
@@ -393,26 +780,35 @@ export function KanbanBoard({ projectId = null }) {
       {panelTask && (
         <TaskSidePanel
           task={panelTask}
+          projectLookup={projectLookup}
+          projectsLoading={projectsLoading}
+          projectsError={projectsError}
+          ensureProject={ensureProjectLookup}
           onClose={closePanel}
           onSave={async (patch) => {
             try {
-              // Convert assignees (array of user objects) to assigned_to (array of user IDs)
-              const assigned_to = Array.isArray(patch.assignees)
-                ? Array.from(
-                    new Set(
-                      patch.assignees
-                        .map((assignee) => {
-                          const raw =
-                            assignee && typeof assignee === 'object'
-                              ? assignee.id ?? assignee.user_id ?? assignee.userId ?? null
-                              : assignee;
-                          const numeric = Number(raw);
-                          return Number.isFinite(numeric) ? Math.trunc(numeric) : null;
-                        })
-                        .filter((value) => value !== null)
-                    )
-                  )
-                : [];
+              // Prefer the richer assignee payload when available, but fall back to assigned_to arrays
+              const rawAssigneeInputs =
+                Array.isArray(patch.assignees) && patch.assignees.length
+                  ? patch.assignees
+                  : Array.isArray(patch.assigned_to)
+                    ? patch.assigned_to
+                    : [];
+              const assigned_to = Array.from(
+                new Set(
+                  rawAssigneeInputs
+                    .map((entry) => {
+                      if (entry == null) return null;
+                      const raw =
+                        typeof entry === 'object'
+                          ? entry.id ?? entry.user_id ?? entry.userId ?? null
+                          : entry;
+                      const numeric = Number(raw);
+                      return Number.isFinite(numeric) ? Math.trunc(numeric) : null;
+                    })
+                    .filter((value) => value !== null)
+                )
+              );
               const payload = {
                 title: patch.title,
                 description: patch.description || null,
@@ -423,6 +819,9 @@ export function KanbanBoard({ projectId = null }) {
                 assigned_to,
                 recurrence: patch.recurrence ?? null,
               };
+              if (patch.hours !== undefined) {
+                payload.hours = patch.hours;
+              }
               console.log('[KanbanBoard] Sending payload to backend:', payload);
               const res = await fetchWithCsrf(`${API}/tasks/${panelTask.id}`, {
                 method: "PUT",
@@ -438,15 +837,16 @@ export function KanbanBoard({ projectId = null }) {
               const row = await res.json()
               console.log("[kanban board]", row);
               const updated = rowToCard(row)
-              setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+              setRawTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
               closePanel()
+              return row
             } catch (e) {
               console.error("[update task]", e)
               alert(e.message)
             }
           }}
           onDeleted={(id) => {
-            setTasks((prev) => prev.filter((t) => t.id !== id))
+            setRawTasks((prev) => prev.filter((t) => t.id !== id))
             closePanel()
           }}
         />
@@ -456,18 +856,24 @@ export function KanbanBoard({ projectId = null }) {
 }
 
 
-function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
+function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, projectsError = null, ensureProject = async () => null, onClose, onSave, onDeleted, nested = false }) {
   const [childPanelTask, setChildPanelTask] = useState(null);
-  const { user: currentUser } = useAuth()
+  const { user: currentUser, role: currentRole } = useAuth()
+  const session = useSession()
+  const sessionRole = resolveRoleLabel(session?.role)
   const currentUserId = currentUser?.id
-  const canEdit =
+  console.log('[TaskSidePanel] opened for task:', task);
+  console.log('[TaskSidePanel] initial task.timeTracking', task.timeTracking);
+  const normalizedRole = resolveRoleLabel(currentRole ?? currentUser?.role ?? sessionRole);
+  const isManager = isManagerLike(currentRole, currentUser?.role, sessionRole);
+  const isSelfAssignee =
     Array.isArray(task.assignees) &&
     currentUserId != null &&
     task.assignees.some((a) => a.id === currentUserId);
-  const isManager = currentUser?.role?.toLowerCase?.() === 'manager';
+  const canEdit = isManager || isSelfAssignee;
   const isCreator = task.creator_id != null && currentUserId === task.creator_id;
   const canAddAssignees = canEdit;
-  const canRemoveAssignees = isManager || (canEdit && isCreator);
+  const canRemoveAssignees = isManager;
   const MAX_ASSIGNEES = 5
   const [title, setTitle] = useState(task.title || "");
   const [description, setDescription] = useState(task.description || "");
@@ -477,11 +883,149 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
   const [tags, setTags] = useState(Array.isArray(task.tags) ? task.tags : []);
   const [tagInput, setTagInput] = useState("");
   const [assignees, setAssignees] = useState(Array.isArray(task.assignees) ? task.assignees : []);
+  const [assigneeLookup, setAssigneeLookup] = useState(() => {
+    const lookup = {};
+    if (Array.isArray(task.assignees)) {
+      task.assignees.forEach((entry) => {
+        const rawId = entry?.id ?? entry?.user_id ?? entry?.userId;
+        const numericId = Number(rawId);
+        if (Number.isFinite(numericId)) {
+          const truncated = Math.trunc(numericId);
+          lookup[truncated] = entry?.name ?? entry?.email ?? `User ${truncated}`;
+        }
+      });
+    }
+    return lookup;
+  });
   const [recurrence, setRecurrence] = useState(task.recurrence ?? null);
+  const [attachments, setAttachments] = useState([]);
+  const [timeTracking, setTimeTracking] = useState(() => normalizeTimeSummary(task.timeTracking));
+  const [hoursSpent, setHoursSpent] = useState(() =>
+    extractUserHours(normalizeTimeSummary(task.timeTracking), currentUserId)
+  );
+  const [saving, setSaving] = useState(false);
+  const isMountedRef = useRef(true);
+  const normalizedProjectId = Number.isFinite(Number(task.projectId)) ? Number(task.projectId) : null;
+  const projectEntry = normalizedProjectId != null ? projectLookup[normalizedProjectId] : null;
+  const [projectName, setProjectName] = useState(projectEntry?.name ?? null);
 
   // Subtasks
   const [subtasks, setSubtasks] = useState([]);
   const [isSubtaskOpen, setIsSubtaskOpen] = useState(false);
+
+  useEffect(() => {
+    if (projectEntry?.name) {
+      setProjectName(projectEntry.name);
+    }
+  }, [projectEntry?.name]);
+
+  useEffect(() => {
+    if (!task.timeTracking) return;
+    const summary = normalizeTimeSummary(task.timeTracking);
+    console.log('[TaskSidePanel] normalised summary from task prop', summary);
+    setTimeTracking(summary);
+    const extracted = extractUserHours(summary, currentUserId);
+    console.log('[TaskSidePanel] extracted hours from prop summary', { extracted, currentUserId });
+    if (extracted !== "") {
+      setHoursSpent(extracted);
+    }
+    setAssigneeLookup((prev) => {
+      const next = { ...prev };
+      summary.per_assignee.forEach(({ user_id }) => {
+        const numericId = Number(user_id);
+        if (Number.isFinite(numericId)) {
+          const truncated = Math.trunc(numericId);
+          if (next[truncated] == null) {
+            next[truncated] = `User ${truncated}`;
+          }
+        }
+      });
+      return next;
+    });
+  }, [task.timeTracking, currentUserId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function loadTimeSummary() {
+      try {
+        const detailUrl = normalizedProjectId
+          ? `${API}/api/projects/${normalizedProjectId}/tasks/${task.id}`
+          : `${API}/api/tasks/${task.id}`;
+        const res = await fetchWithCsrf(detailUrl, {
+          method: "GET",
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache"
+          }
+        });
+        if (!res.ok) return;
+        const payload = await res.json().catch(() => null);
+        const detail = payload?.task ?? payload;
+        if (!detail || !active) return;
+        const summary = normalizeTimeSummary(detail.time_tracking);
+        console.log('[TaskSidePanel] fetched time summary', {
+          taskId: task.id,
+          raw: detail.time_tracking,
+          summary,
+          currentUserId
+        });
+        setTimeTracking(summary);
+        const extracted = extractUserHours(summary, currentUserId);
+        console.log('[TaskSidePanel] extracted hours from fetched summary', { extracted, currentUserId });
+        if (extracted !== "") {
+          setHoursSpent(extracted);
+        }
+        setAssigneeLookup((prev) => {
+          const next = { ...prev };
+          summary.per_assignee.forEach(({ user_id }) => {
+            const numericId = Number(user_id);
+            if (Number.isFinite(numericId)) {
+              const truncated = Math.trunc(numericId);
+              if (next[truncated] == null) {
+                next[truncated] = `User ${truncated}`;
+              }
+            }
+          });
+          return next;
+        });
+      } catch (err) {
+        console.error('[TaskSidePanel] Failed to load task hours:', err);
+      }
+    }
+    loadTimeSummary();
+    return () => { active = false; };
+  }, [task.id, normalizedProjectId, currentUserId]);
+
+  useEffect(() => {
+    if (projectEntry?.name) {
+      return;
+    }
+    if (!normalizedProjectId) {
+      return;
+    }
+
+    let active = true;
+    ensureProject(normalizedProjectId)
+      .then((project) => {
+        if (!active) return;
+        if (project?.name) {
+          setProjectName(project.name);
+        }
+      })
+      .catch((err) => {
+        console.error('[TaskSidePanel] ensureProject failed:', err);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [ensureProject, normalizedProjectId, projectEntry?.name]);
 
   useEffect(() => {
     let mounted = true;
@@ -490,6 +1034,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
         const res = await fetchWithCsrf(`${API}/tasks?archived=false&parent_id=${task.id}`);
         if (!res.ok) throw new Error(`GET /tasks ${res.status}`);
         const rows = await res.json();
+        console.log('[TaskSidePanel] initial subtasks load status:', res.status, 'count:', Array.isArray(rows) ? rows.length : 'unknown');
         // rows already have assignees hydrated by backend; if you map, keep tags/assignees as you do elsewhere
         if (mounted) setSubtasks(rows.map(rowToCard));
       } catch (e) {
@@ -505,6 +1050,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
       const res = await fetchWithCsrf(`${API}/tasks?parent_id=${task.id}`);
       if (!res.ok) throw new Error(`GET /tasks?parent_id=${task.id} ${res.status}`);
       const rows = await res.json();
+      console.log('[TaskSidePanel] reload subtasks status:', res.status, 'count:', Array.isArray(rows) ? rows.length : 'unknown');
       setSubtasks(Array.isArray(rows) ? rows : []);
     } catch (err) {
       console.error("[load subtasks]", err);
@@ -535,7 +1081,38 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
     searchUsers(value);
   }
 
-  const canSave = (canEdit || isManager) && title.trim().length > 0 && priority && assignees.length <= MAX_ASSIGNEES;
+  const canUpdateHours = isSelfAssignee;
+  const numericHours = Number(hoursSpent);
+  const isHoursValid =
+    hoursSpent === "" ||
+    (Number.isFinite(numericHours) && numericHours >= 0);
+  const canSave =
+    (canEdit || isManager) &&
+    title.trim().length > 0 &&
+    priority &&
+    assignees.length <= MAX_ASSIGNEES &&
+    isHoursValid;
+
+  const breakdownAssignees = useMemo(() => {
+    const ids = new Set();
+    if (Array.isArray(assignees)) {
+      assignees.forEach((entry) => {
+        const raw = entry?.id ?? entry?.user_id ?? entry?.userId;
+        const numeric = Number(raw);
+        if (Number.isFinite(numeric)) ids.add(Math.trunc(numeric));
+      });
+    }
+    if (Array.isArray(timeTracking?.per_assignee)) {
+      timeTracking.per_assignee.forEach((entry) => {
+        const numeric = Number(entry?.user_id ?? entry?.id);
+        if (Number.isFinite(numeric)) ids.add(Math.trunc(numeric));
+      });
+    }
+    return Array.from(ids).map((id) => ({
+      id,
+      name: assigneeLookup[id] ?? `User ${id}`
+    }));
+  }, [assignees, timeTracking?.per_assignee, assigneeLookup]);
   function addTagFromInput() {
     if (!canEdit) return;
     const t = tagInput.trim();
@@ -555,6 +1132,16 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
       if (prev.length >= MAX_ASSIGNEES || prev.some((a) => a.id === user.id)) return prev;
       return [...prev, user];
     });
+    if (user?.id != null) {
+      const numericId = Number(user.id);
+      if (Number.isFinite(numericId)) {
+        const truncated = Math.trunc(numericId);
+        setAssigneeLookup((prev) => ({
+          ...prev,
+          [truncated]: user.name ?? user.email ?? `User ${truncated}`
+        }));
+      }
+    }
     clearUserSearch();
   }
 
@@ -564,6 +1151,18 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
       if (prev.length <= 1) return prev;
       return prev.filter((a) => a.id !== userId);
     });
+  }
+
+  function handleHoursInputChange(nextValue) {
+    if (!canUpdateHours) return;
+    if (nextValue === "" || nextValue === null) {
+      setHoursSpent("");
+      return;
+    }
+    const parsed = Number(nextValue);
+    if (!Number.isNaN(parsed) && parsed >= 0) {
+      setHoursSpent(nextValue);
+    }
   }
 
   async function handleDelete() {
@@ -586,16 +1185,85 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
     }
   }
 
+  async function handleSave() {
+    if (!canSave || saving) return;
+    const assigned_to = assignees.map((a) => Number(a.id)).filter(Number.isFinite);
+    const sanitizedAssignees = assignees
+      .map((assignee) => {
+        if (!assignee) return null;
+        const rawId = assignee.id ?? assignee.user_id ?? assignee.userId ?? null;
+        if (rawId == null) return null;
+        return {
+          id: rawId,
+          name: assignee.name ?? assignee.email ?? null,
+        };
+      })
+      .filter(Boolean);
+    const payload = {
+      title: title.trim(),
+      description: description.trim() || null,
+      priority,
+      status,
+      deadline: deadline || null,
+      tags,
+      assigned_to,
+      assignees: sanitizedAssignees,
+      recurrence: recurrence ?? null,
+    };
+    if (canUpdateHours && hoursSpent !== "" && Number.isFinite(numericHours) && numericHours >= 0) {
+      payload.hours = numericHours;
+    }
+    try {
+      if (isMountedRef.current) setSaving(true);
+      const updatedRow = await onSave?.(payload);
+      if (updatedRow?.time_tracking && isMountedRef.current) {
+        const summary = normalizeTimeSummary(updatedRow.time_tracking);
+        setTimeTracking(summary);
+        const extracted = extractUserHours(summary, currentUserId);
+        if (extracted !== "") {
+          setHoursSpent(extracted);
+        }
+      }
+    } catch (error) {
+      console.error('[TaskSidePanel] Failed to save task:', error);
+      toast.error(error.message || 'Failed to update task');
+    } finally {
+      if (isMountedRef.current) setSaving(false);
+    }
+  }
+
   return (
     <>
       {childPanelTask && (
         <TaskSidePanel
           task={childPanelTask}
+          projectLookup={projectLookup}
+          projectsLoading={projectsLoading}
+          projectsError={projectsError}
+          ensureProject={ensureProjectLookup}
           onClose={() => setChildPanelTask(null)}
           onSave={async (patch) => {
-            const assigned_to = Array.isArray(patch.assignees)
-              ? patch.assignees.map(a => a.id)
-              : [];
+            const rawAssigneeInputs =
+              Array.isArray(patch.assignees) && patch.assignees.length
+                ? patch.assignees
+                : Array.isArray(patch.assigned_to)
+                  ? patch.assigned_to
+                  : [];
+            const assigned_to = Array.from(
+              new Set(
+                rawAssigneeInputs
+                  .map((entry) => {
+                    if (entry == null) return null;
+                    const raw =
+                      typeof entry === 'object'
+                        ? entry.id ?? entry.user_id ?? entry.userId ?? null
+                        : entry;
+                    const numeric = Number(raw);
+                    return Number.isFinite(numeric) ? Math.trunc(numeric) : null;
+                  })
+                  .filter((value) => value !== null)
+              )
+            );
             const payload = {
               title: patch.title,
               description: patch.description || null,
@@ -606,6 +1274,9 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
               assigned_to,
               recurrence: patch.recurrence ?? null,
             };
+            if (patch.hours !== undefined) {
+              payload.hours = patch.hours;
+            }
             try {
               const res = await fetchWithCsrf(`${API}/tasks/${childPanelTask.id}`, {
                 method: "PUT",
@@ -619,6 +1290,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
               const row = await res.json();
               setSubtasks(prev => prev.map(s => (s.id === row.id ? rowToCard(row) : s)));
               setChildPanelTask(null);
+              return row;
             } catch (e) {
               console.error("[update subtask]", e);
               alert(e.message);
@@ -641,9 +1313,29 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
             <button onClick={onClose} className="text-gray-300 hover:text-white text-xl leading-none">×</button>
           </div>
 
+          <div className="mb-4">
+            <label className="block text-xs text-gray-400 mb-1">Project</label>
+            <div className="text-sm text-gray-100">
+              {projectsLoading && <span>Loading project…</span>}
+              {!projectsLoading && normalizedProjectId == null && (
+                <span className="text-xs text-gray-500">No project assigned.</span>
+              )}
+              {!projectsLoading && normalizedProjectId != null && projectName && (
+                <span className="font-medium">
+                  {projectName}
+                </span>
+              )}
+              {!projectsLoading && normalizedProjectId != null && !projectName && (
+                <span className="text-xs text-red-400">
+                  {projectsError ? 'Unable to load project details.' : 'Project not accessible.'}
+                </span>
+              )}
+            </div>
+          </div>
+
           {!canEdit && (
             <div className="mb-4 rounded-md border border-amber-600/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-              You are not assigned to this task, so the fields are read-only.
+              You can review this task but do not have edit permissions.
             </div>
           )}
 
@@ -670,6 +1362,9 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
                 disabled={!canEdit}
               />
             </div>
+
+            {/* Attachments */}
+            <TaskAttachmentsDisplay taskId={task.id} />
 
             {/* Priority */}
             <div>
@@ -747,6 +1442,20 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
                 </SelectContent>
               </Select>
             </div>
+
+            <TaskTimeTracking
+              value={hoursSpent}
+              onChange={handleHoursInputChange}
+              canEdit={canUpdateHours && canEdit}
+              totalHours={timeTracking.total_hours}
+              perAssignee={timeTracking.per_assignee}
+              assignees={breakdownAssignees}
+            />
+            {!isHoursValid && (
+              <p className="text-xs text-red-400">
+                Please enter a non-negative number of hours.
+              </p>
+            )}
             {/* Assignees */}
             <div>
               <label className="block text-xs text-gray-400 mb-1">Assignees</label>
@@ -803,7 +1512,7 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
                 <span className="text-xs text-gray-500">No assignees</span>
               )}
               {canAddAssignees && assignees.length >= MAX_ASSIGNEES && (
-                <p className="text-xs text-red-400 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
+                <p className="text-xs text-gray-500 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
               )}
               {canRemoveAssignees && assignees.length === 1 && (
                 <p className="text-xs text-amber-400 mt-2">At least one assignee is required. Add another member before removing the last one.</p>
@@ -883,31 +1592,83 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
               />
             </div>
 
-            <RecurrencePicker value={recurrence} onChange={setRecurrence} disabled={!canEdit} />
-
-
-            {/* Actions */}
-            <div className="mt-6 flex gap-2">
-              <Button
-                onClick={() => onSave({ title: title.trim(), description: description.trim(), priority, status, deadline, tags, assignees, recurrence })}
-                disabled={!canSave}
-                className="bg-white/90 text-black"
-              >
-                Save
-              </Button>
-              <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button
-                onClick={handleDelete}
-                className="bg-red-400 hover:bg-red-700 text-white ml-auto"
-                type="button" disabled={!canEdit}>
-                <Trash className="w-4 h-4 mr-1" /> Delete
-              </Button>
+            {/* File Attachments */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Attachments</label>
+              <FileUploadInput
+                onFilesChange={setAttachments}
+                disabled={!canEdit}
+              />
+              {attachments.length > 0 && (
+                <Button
+                  onClick={async () => {
+                    try {
+                      const formData = new FormData()
+                      attachments.forEach((file) => {
+                        formData.append('files', file)
+                      })
+                      
+                      const response = await fetchWithCsrf(`${API}/api/tasks/${task.id}/files`, {
+                        method: 'POST',
+                        body: formData,
+                      })
+                      
+                      if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}))
+                        throw new Error(errorData.message || 'Failed to upload files')
+                      }
+                      
+                      const result = await response.json()
+                      
+                      // Check if there were any errors during upload
+                      if (result.data?.errors && result.data.errors.length > 0) {
+                        result.data.errors.forEach(error => {
+                          toast.error(error, { duration: 5000 })
+                        })
+                      }
+                      
+                      if (result.data?.uploaded && result.data.uploaded.length > 0) {
+                        toast.success(`${result.data.uploaded.length} file(s) uploaded successfully`)
+                      }
+                      
+                      setAttachments([])
+                      window.location.reload()
+                    } catch (error) {
+                      console.error('Error uploading files:', error)
+                      toast.error(error.message || 'Failed to upload files', { duration: 5000 })
+                    }
+                  }}
+                  disabled={!canEdit || attachments.length === 0}
+                  className="mt-2 bg-white/90 text-black"
+                >
+                  Upload {attachments.length} File{attachments.length !== 1 ? 's' : ''}
+                </Button>
+              )}
             </div>
 
-            {/* Comment Section */}
-            <div className="mt-8">
+            <RecurrencePicker value={recurrence} onChange={setRecurrence} disabled={!canEdit} />
+
+            {/* Actions & Comments */}
+            <div className="mt-8 space-y-6">
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleSave}
+                  disabled={!canSave || saving}
+                  className="bg-white/90 text-black"
+                >
+                  {saving ? "Saving…" : "Save"}
+                </Button>
+                <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleDelete}
+                  className="bg-red-400 hover:bg-red-700 text-white ml-auto"
+                  type="button" disabled={!canEdit}>
+                  <Trash className="w-4 h-4 mr-1" /> Delete
+                </Button>
+              </div>
+
               <CommentSection taskId={task.id} />
             </div>
           </div>
@@ -916,18 +1677,52 @@ function TaskSidePanel({ task, onClose, onSave, onDeleted, nested = false }) {
     </>
   )
 }
-function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
+function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultProjectId = null, projects = [], projectsLoading = false, projectsError = null }) {
   const { user: currentUser } = useAuth()
+  const normalizedDefaultProjectId = defaultProjectId != null ? Number(defaultProjectId) : null
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
   const [priority, setPriority] = useState("")
+  const [status, setStatus] = useState("pending")
+  const [attachments, setAttachments] = useState([])
   const PRIORITIES = ["Low", "Medium", "High"]
+  const STATUSES = [
+    { value: "pending", label: "To do" },
+    { value: "in_progress", label: "Doing" },
+    { value: "completed", label: "Completed" },
+    { value: "blocked", label: "Blocked" },
+    { value: "cancelled", label: "Cancelled" }
+  ];
   const canEdit = true
   const MAX_ASSIGNEES = 5
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState([]);
   const [recurrence, setRecurrence] = useState(null);
+  const [selectedProjectId, setSelectedProjectId] = useState(normalizedDefaultProjectId);
+
+  const normalizedSelectedProjectId = Number.isFinite(Number(selectedProjectId))
+    ? Number(selectedProjectId)
+    : null;
+  const selectedProjectEntry = normalizedSelectedProjectId != null
+    ? projects.find((p) => Number(p.id) === normalizedSelectedProjectId)
+    : null;
+  const selectedProjectName = selectedProjectEntry?.name
+    ?? (normalizedSelectedProjectId != null ? `Project #${normalizedSelectedProjectId}` : null);
+
+  useEffect(() => {
+    setSelectedProjectId((prev) => {
+      if (normalizedDefaultProjectId != null && projects.some((p) => Number(p.id) === normalizedDefaultProjectId)) {
+        return normalizedDefaultProjectId;
+      }
+      if (prev != null) return prev;
+      if (projects.length === 1) {
+        const soleId = Number(projects[0].id);
+        return Number.isFinite(soleId) ? soleId : prev;
+      }
+      return prev;
+    });
+  }, [normalizedDefaultProjectId, projects]);
 
   // --- Assignees & user search (copied from TaskSidePanel, trimmed) ---
   const [assignees, setAssignees] = useState([]);
@@ -947,7 +1742,14 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
     })
   }, [currentUser])
 
-  const canSave = title.trim().length > 0 && priority !== "" && assignees.length <= MAX_ASSIGNEES
+  const hasTitle = title.trim().length > 0;
+  const hasDescription = description.trim().length > 0;
+  const hasPriority = !!priority;
+  const hasStatus = !!status;
+  const hasDueDate = !!dueDate;
+  const hasAssignees = assignees.length > 0;
+  const hasProject = selectedProjectId != null;
+  const canSave = hasTitle && hasDescription && hasPriority && hasStatus && hasDueDate && hasAssignees && hasProject;
 
   function addAssignee(user) {
     setAssignees((prev) => {
@@ -1123,8 +1925,49 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
         {assignees.length === 1 && (
           <p className="text-xs text-amber-400 mt-2">At least one assignee is required. Add another member before removing the last one.</p>
         )}
-        {assignees.length >= MAX_ASSIGNEES && (
+        {assignees.length > MAX_ASSIGNEES && (
           <p className="text-xs text-red-400 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
+        )}
+      </div>
+
+      <div className="mt-4">
+        <label className="block text-xs text-gray-400 mb-1">Project</label>
+        <Select
+          value={selectedProjectId != null ? String(selectedProjectId) : ""}
+          onValueChange={(value) => {
+            const num = Number(value);
+            const next = Number.isFinite(num) ? num : null;
+            console.log('[EditableTaskCard] project selection changed:', { value, next });
+            setSelectedProjectId(next);
+          }}
+          disabled={projectsLoading || projects.length === 0}
+        >
+          <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+            <SelectValue placeholder={projectsLoading ? "Loading projects..." : "Select project"} />
+          </SelectTrigger>
+          <SelectContent className="bg-white">
+            {projects.map((project) => (
+              <SelectItem key={project.id} value={String(project.id)}>
+                {project.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {projectsLoading && (
+          <p className="text-xs text-gray-500 mt-2">Loading active projects…</p>
+        )}
+        {!projectsLoading && projectsError && (
+          <p className="text-xs text-red-400 mt-2">Failed to load projects.</p>
+        )}
+        {!projectsLoading && projects.length === 0 && (
+          <p className="text-xs text-red-400 mt-2">
+            No active projects available. Create or reactivate a project before adding tasks.
+          </p>
+        )}
+        {!projectsLoading && projects.length > 0 && selectedProjectId == null && (
+          <p className="text-xs text-amber-400 mt-2">
+            Select a project to enable task creation.
+          </p>
         )}
       </div>
 
@@ -1158,9 +2001,35 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
             </SelectContent>
           </Select>
         </div>
+
+        {/* Status dropdown */}
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Status</label>
+          <Select value={status} onValueChange={(v) => setStatus(v)}>
+            <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+              <SelectValue placeholder="Select status" />
+            </SelectTrigger>
+            <SelectContent className="bg-white">
+              {STATUSES.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <div className="col-span-2 mt-1">
         <RecurrencePicker value={recurrence} onChange={setRecurrence} />
+      </div>
+
+      {/* File Attachments */}
+      <div className="mt-3">
+        <label className="block text-xs text-gray-400 mb-1">Attachments (optional)</label>
+        <FileUploadInput
+          onFilesChange={setAttachments}
+          disabled={false}
+        />
       </div>
 
       {/* Actions */}
@@ -1176,18 +2045,25 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted }) {
         )}
 
         <Button
-          onClick={() =>
-            onSave({
-              title: title.trim(),
-              description: description.trim() || undefined,
-              dueDate: dueDate || undefined,
-              priority,
-              tags,
-              assignees,
-              recurrence,
-            })
-          }
-          disabled={!canSave}
+        onClick={() =>
+            {
+              const payload = {
+                title: title.trim(),
+                description: description.trim() || undefined,
+                dueDate: dueDate || undefined,
+                priority,
+                status,
+                tags,
+                assignees,
+                recurrence,
+                projectId: selectedProjectId,
+                attachments,
+              };
+              console.log('[EditableTaskCard] invoking onSave with payload:', payload);
+              onSave(payload);
+            }
+        }
+        disabled={!canSave || projectsLoading}
           className="bg-white/90 text-black hover:bg-white"
         >
           <Check className="w-4 h-4 mr-1" /> Save
@@ -1214,8 +2090,17 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
   const [userSearchResults, setUserSearchResults] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [debounce, setDebounce] = useState(null);
+  const [attachments, setAttachments] = useState([]);
 
   const PRIORITIES = ["Low", "Medium", "High"];
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+  const ALLOWED_FILE_TYPES = [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'image/png',
+    'image/jpeg'
+  ];
 
   const parentMax = parentDeadline
     ? String(parentDeadline).slice(0, 10)
@@ -1248,6 +2133,43 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
   }
   function removeAssignee(id) {
     setAssignees((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  function handleFileChange(event) {
+    const files = Array.from(event.target.files || []);
+    const validFiles = [];
+    const errors = [];
+
+    files.forEach(file => {
+      if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+        errors.push(`${file.name}: Invalid file type. Only PDF, DOCX, XLSX, PNG, and JPG are allowed.`);
+        return;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        errors.push(`${file.name}: File too large. Maximum size is 50MB.`);
+        return;
+      }
+      validFiles.push(file);
+    });
+
+    if (errors.length > 0) {
+      alert(errors.join('\n'));
+    }
+
+    setAttachments(prev => [...prev, ...validFiles]);
+    event.target.value = '';
+  }
+
+  function removeAttachment(index) {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   }
 
   function handleUserSearchInput(e) {
@@ -1302,6 +2224,33 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
         throw new Error(error || `POST /tasks ${res.status}`);
       }
       const row = await res.json();
+      
+      // Upload attachments if any
+      if (attachments && attachments.length > 0) {
+        try {
+          const formData = new FormData();
+          attachments.forEach(file => {
+            formData.append('files', file);
+          });
+          
+          const uploadRes = await fetchWithCsrf(`${API}/tasks/${row.id}/files`, {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (!uploadRes.ok) {
+            console.warn('Failed to upload some attachments');
+          } else {
+            const uploadResult = await uploadRes.json();
+            if (uploadResult.data?.errors && uploadResult.data.errors.length > 0) {
+              console.warn('Some files failed:', uploadResult.data.errors);
+            }
+          }
+        } catch (uploadError) {
+          console.error('Error uploading attachments:', uploadError);
+        }
+      }
+      
       onCreated?.(row); // push into list in parent
     } catch (e) {
       console.error("[create subtask]", e);
@@ -1463,6 +2412,57 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
               </div>
             ) : (
               <span className="text-xs text-gray-500">No assignees</span>
+            )}
+          </div>
+
+          {/* File Attachments */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Attachments</label>
+            <div className="border-2 border-dashed border-gray-700 rounded-md p-3 hover:border-gray-600 transition-colors">
+              <input
+                type="file"
+                id="subtask-file-input"
+                multiple
+                accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <label
+                htmlFor="subtask-file-input"
+                className="flex flex-col items-center cursor-pointer"
+              >
+                <svg className="w-6 h-6 text-gray-500 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <span className="text-xs text-gray-400">Click to upload</span>
+                <span className="text-xs text-gray-500 mt-0.5">PDF, DOCX, XLSX, PNG, JPG (Max 50MB)</span>
+              </label>
+            </div>
+            
+            {attachments.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {attachments.map((file, index) => (
+                  <div key={index} className="flex items-center justify-between bg-gray-800/50 rounded px-2 py-1.5">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <svg className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                      </svg>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-gray-300 truncate">{file.name}</p>
+                        <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(index)}
+                      className="text-gray-400 hover:text-red-400 ml-2 text-sm"
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
