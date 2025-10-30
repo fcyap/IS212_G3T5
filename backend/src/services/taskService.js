@@ -274,7 +274,8 @@ class TaskService {
     }
 
     // Normalize priority and status
-    const normPriority = String(priority || "medium").toLowerCase();
+    const normPriority = Number(priority) || 5; // Default to medium priority (5)
+    const validPriority = (normPriority >= 1 && normPriority <= 10) ? normPriority : 5;
     const allowedStatuses = new Set(["pending", "in_progress", "completed", "blocked", "cancelled"]);
     const requested = String(status || "pending").toLowerCase();
     const normStatus = allowedStatuses.has(requested) ? requested : "pending";
@@ -336,7 +337,7 @@ class TaskService {
     const newTaskData = {
       title: title.trim(),
       description: description?.trim() || null,
-      priority: normPriority,
+      priority: validPriority,
       status: normStatus,
       deadline: deadline || null,
       project_id: effectiveProjectId,
@@ -486,7 +487,10 @@ class TaskService {
 
     if (input.title !== undefined) patch.title = input.title;
     if (input.description !== undefined) patch.description = input.description;
-    if (input.priority !== undefined) patch.priority = String(input.priority).toLowerCase();
+    if (input.priority !== undefined) {
+      const priorityNum = Number(input.priority);
+      patch.priority = (priorityNum >= 1 && priorityNum <= 10) ? priorityNum : 5;
+    }
     if (input.status !== undefined) patch.status = input.status;
     if (input.deadline !== undefined) patch.deadline = input.deadline || null;
     if (input.archived !== undefined) patch.archived = !!input.archived;
@@ -860,7 +864,9 @@ class TaskService {
         completedTasks: 0,
         cancelledTasks: 0,
         blockedTasks: 0,
-        tasksByPriority: { low: 0, medium: 0, high: 0 },
+        tasksByPriority: {
+          1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0
+        },
         overdueTasks: 0,
         completionRate: 0
       };
@@ -874,11 +880,13 @@ class TaskService {
       completedTasks: tasks.filter(t => t.status === 'completed').length,
       cancelledTasks: tasks.filter(t => t.status === 'cancelled').length,
       blockedTasks: tasks.filter(t => t.status === 'blocked').length,
-      tasksByPriority: {
-        low: tasks.filter(t => t.priority === 'low').length,
-        medium: tasks.filter(t => t.priority === 'medium').length,
-        high: tasks.filter(t => t.priority === 'high').length
-      },
+      tasksByPriority: tasks.reduce((acc, task) => {
+        const priority = task.priority;
+        if (priority >= 1 && priority <= 10) {
+          acc[priority] = (acc[priority] || 0) + 1;
+        }
+        return acc;
+      }, { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 }),
       overdueTasks: tasks.filter(t =>
         t.deadline &&
         new Date(t.deadline) < now &&

@@ -8,9 +8,15 @@ import { fetchWithCsrf, getCsrfToken } from "@/lib/csrf"
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select"
-import { Trash, Check, X, Plus } from "lucide-react"
+import { Trash, Check, X, Plus, HelpCircle } from "lucide-react"
 import { useKanban } from "@/components/kanban-context"
 import { Badge } from "@/components/ui/badge"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { CommentSection } from "./task-comment/task-comment-section"
 import { TaskAttachmentsDisplay } from "./task-attachments-display"
 import { FileUploadInput } from "./file-upload-input"
@@ -22,11 +28,27 @@ import { projectService, userService } from "@/lib/api"
 import { extractUserHours, normalizeTimeSummary } from "@/lib/time-tracking"
 import toast from "react-hot-toast"
 
+// Priority system: 1-10 integer scale with visual mapping
+const getPriorityLabel = (priority) => {
+  const p = Number(priority);
+  if (p >= 9) return "Critical";
+  if (p >= 7) return "High";
+  if (p >= 4) return "Medium";
+  return "Low";
+};
+
 const priorityChipClasses = {
-  Low: "bg-teal-200 text-teal-900",
-  Medium: "bg-amber-300 text-amber-950",
-  High: "bg-fuchsia-300 text-fuchsia-950",
-}
+  1: "bg-slate-200 text-slate-800",
+  2: "bg-slate-200 text-slate-800", 
+  3: "bg-teal-200 text-teal-900",
+  4: "bg-teal-200 text-teal-900",
+  5: "bg-amber-200 text-amber-900",
+  6: "bg-amber-300 text-amber-950",
+  7: "bg-orange-300 text-orange-950",
+  8: "bg-red-300 text-red-950",
+  9: "bg-fuchsia-400 text-fuchsia-950",
+  10: "bg-purple-500 text-white",
+};
 
 const prettyStatus = (s) => {
   const key = String(s || "").toLowerCase();
@@ -74,7 +96,7 @@ function rowToCard(r) {
     id: r.id,
     title: r.title ?? '',
     description: r.description || '',
-    priority: cap(r.priority) || 'Low',
+    priority: Number(r.priority) || 5, // Now using integer priority
     workflow,
     deadline: r.deadline || null,
     assignees: normalizedAssignees,  // <-- use this
@@ -154,6 +176,9 @@ export function KanbanBoard({ projectId = null }) {
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectsError, setProjectsError] = useState(null);
   const [usersById, setUsersById] = useState({});
+  
+  // Tag filtering state
+  const [tagFilter, setTagFilter] = useState("")
 
   useEffect(() => {
     let mounted = true;
@@ -297,7 +322,7 @@ export function KanbanBoard({ projectId = null }) {
       const payload = {
         title,
         description: description || null,
-        priority: (priority || "Low").toLowerCase(),
+        priority: Number(priority) || 5, // Send as integer
         status: editorLane,
         deadline: dueDate || null,
         project_id: resolvedProjectId,
@@ -509,19 +534,39 @@ export function KanbanBoard({ projectId = null }) {
     });
   }, [rawTasks, currentUserId, normalizedRole, normalizedDepartment, usersById, hasUserDirectory, managerDivision, managerHierarchy, accessibleProjectIds]);
 
+  // Apply tag filtering to visible tasks
+  const filteredTasks = useMemo(() => {
+    if (!tagFilter.trim()) {
+      return visibleTasks;
+    }
+
+    const searchTerms = tagFilter.toLowerCase().trim().split(/\s+/);
+    
+    return visibleTasks.filter((task) => {
+      const taskTags = Array.isArray(task.tags) ? task.tags : [];
+      
+      // Check if any search term matches any tag (partial matching)
+      return searchTerms.some(searchTerm => 
+        taskTags.some(tag => 
+          String(tag).toLowerCase().includes(searchTerm)
+        )
+      );
+    });
+  }, [visibleTasks, tagFilter]);
+
   useEffect(() => {
     if (!panelTask) return;
-    const isVisible = visibleTasks.some((task) => task.id === panelTask.id);
+    const isVisible = filteredTasks.some((task) => task.id === panelTask.id);
     if (!isVisible) {
       setPanelTask(null);
     }
-  }, [panelTask, visibleTasks]);
+  }, [panelTask, filteredTasks]);
 
   const { isAdding, editorPosition, startAddTask, cancelAddTask, editorLane } = useKanban()
-  const todo = visibleTasks.filter(t => t.workflow === "pending")
-  const doing = visibleTasks.filter(t => t.workflow === "in_progress")
-  const done = visibleTasks.filter(t => t.workflow === "completed")
-  const blocked = visibleTasks.filter(t => t.workflow === "blocked")
+  const todo = filteredTasks.filter(t => t.workflow === "pending")
+  const doing = filteredTasks.filter(t => t.workflow === "in_progress")
+  const done = filteredTasks.filter(t => t.workflow === "completed")
+  const blocked = filteredTasks.filter(t => t.workflow === "blocked")
 
   return (
     <div className="flex-1 bg-[#1a1a1d] p-3 sm:p-6 overflow-hidden">
@@ -533,6 +578,48 @@ export function KanbanBoard({ projectId = null }) {
         </div>
       )}
       <div className="overflow-x-auto overflow-y-hidden h-full">
+        {/* Priority Help */}
+        <div className="mb-2 flex justify-center">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 text-gray-400 text-sm cursor-help">
+                  <HelpCircle size={16} />
+                  <span>Priority Scale</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent className="bg-gray-800 border-gray-600 text-white">
+                <div className="text-sm">
+                  <p className="font-medium mb-2">Priority Scale (1-10):</p>
+                  <div className="space-y-1">
+                    <p>• 1-3: Low Priority</p>
+                    <p>• 4-6: Medium Priority</p> 
+                    <p>• 7-10: High Priority</p>
+                  </div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+        
+        {/* Tag Filter Search */}
+        <div className="mb-4 flex justify-center">
+          <div className="w-full max-w-md">
+            <Input
+              type="text"
+              placeholder="Search tasks by tags (e.g., task1, backend, frontend)..."
+              value={tagFilter}
+              onChange={(e) => setTagFilter(e.target.value)}
+              className="bg-gray-800 border-gray-600 text-white placeholder-gray-400 focus:border-blue-500"
+            />
+            {tagFilter && (
+              <div className="mt-2 text-sm text-gray-400 text-center">
+                Showing {filteredTasks.length} of {visibleTasks.length} tasks
+              </div>
+            )}
+          </div>
+        </div>
+        
         <div className="flex gap-3 sm:gap-6 min-w-max h-full pb-4">
 
           {/* To do Column */}
@@ -877,7 +964,7 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
   const MAX_ASSIGNEES = 5
   const [title, setTitle] = useState(task.title || "");
   const [description, setDescription] = useState(task.description || "");
-  const [priority, setPriority] = useState(task.priority || "Low");
+  const [priority, setPriority] = useState(Number(task.priority) || 5);
   const [status, setStatus] = useState(task.workflow || "pending");
   const [deadline, setDeadline] = useState(task.deadline || "");
   const [tags, setTags] = useState(Array.isArray(task.tags) ? task.tags : []);
@@ -1369,14 +1456,16 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
             {/* Priority */}
             <div>
               <label className="block text-xs text-gray-400 mb-1">Priority</label>
-              <Select value={priority} onValueChange={setPriority} disabled={!canEdit}>
+              <Select value={priority.toString()} onValueChange={(v) => setPriority(Number(v))} disabled={!canEdit}>
                 <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
                 <SelectContent className="bg-white">
-                  {["Low", "Medium", "High"].map((p) => (
-                    <SelectItem key={p} value={p}>
-                      <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>{p}</span>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((p) => (
+                    <SelectItem key={p} value={p.toString()}>
+                      <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p] || 'bg-gray-200 text-gray-800'}`}>
+                        {p}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1683,10 +1772,10 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultProjectI
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
-  const [priority, setPriority] = useState("")
+  const [priority, setPriority] = useState(5); // Default to medium priority
   const [status, setStatus] = useState("pending")
   const [attachments, setAttachments] = useState([])
-  const PRIORITIES = ["Low", "Medium", "High"]
+  const PRIORITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   const STATUSES = [
     { value: "pending", label: "To do" },
     { value: "in_progress", label: "Doing" },
@@ -1986,13 +2075,13 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultProjectI
         {/* Priority dropdown */}
         <div>
           <label className="block text-xs text-gray-400 mb-1">Priority</label>
-          <Select value={priority} onValueChange={(v) => setPriority(v)}>
+          <Select value={priority.toString()} onValueChange={(v) => setPriority(Number(v))}>
             <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
               <SelectValue placeholder="Select priority" />
             </SelectTrigger>
             <SelectContent className="bg-white">
               {PRIORITIES.map((p) => (
-                <SelectItem key={p} value={p}>
+                <SelectItem key={p} value={p.toString()}>
                   <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>
                     {p}
                   </span>
@@ -2080,7 +2169,7 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
   const { user: currentUser } = useAuth()
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState("Low");
+  const [priority, setPriority] = useState(5); // Default to medium priority
   const [status, setStatus] = useState("pending");
   const [deadline, setDeadline] = useState("");
   const [tags, setTags] = useState([]);
@@ -2092,7 +2181,7 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
   const [debounce, setDebounce] = useState(null);
   const [attachments, setAttachments] = useState([]);
 
-  const PRIORITIES = ["Low", "Medium", "High"];
+  const PRIORITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
   const ALLOWED_FILE_TYPES = [
     'application/pdf',
@@ -2206,7 +2295,7 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
       const payload = {
         title: title.trim(),
         description: description.trim() || null,
-        priority: priority.toLowerCase(),
+        priority: Number(priority) || 5, // Send as integer
         status,
         deadline: deadline || null,
         tags,
@@ -2294,13 +2383,17 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Priority</label>
-              <Select value={priority} onValueChange={setPriority}>
+              <Select value={priority.toString()} onValueChange={(v) => setPriority(Number(v))}>
                 <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
                 <SelectContent className="bg-white">
                   {PRIORITIES.map((p) => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                    <SelectItem key={p} value={p.toString()}>
+                      <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>
+                        {p}
+                      </span>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
