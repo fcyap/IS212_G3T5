@@ -58,6 +58,49 @@ export function ProjectDetails({ projectId, onBack }) {
 
   const { updateProject } = useProjects()
 
+  const isReadOnly = project?.status === 'archived'
+  const ensureWritable = useCallback(() => {
+    if (isReadOnly) {
+      toast.error('This project is archived and read-only.')
+      return false
+    }
+    return true
+  }, [isReadOnly])
+
+  useEffect(() => {
+    if (isReadOnly) {
+      setShowAddMember(false)
+      setIsAddingTask(false)
+      setEditingTask(null)
+      setShowEditProject(false)
+    }
+  }, [isReadOnly])
+
+  const getPriorityMeta = useCallback((priority) => {
+    if (typeof priority !== 'string') {
+      return { value: '', label: null, badgeClass: 'bg-gray-600 text-white', textClass: 'text-gray-400' };
+    }
+    const value = priority.trim().toLowerCase();
+    if (!value) {
+      return { value: '', label: null, badgeClass: 'bg-gray-600 text-white', textClass: 'text-gray-400' };
+    }
+    const badgeClass =
+      value === 'high'
+        ? 'bg-red-600 text-white'
+        : value === 'medium'
+          ? 'bg-yellow-600 text-white'
+          : 'bg-green-600 text-white';
+
+    const textClass =
+      value === 'high'
+        ? 'text-red-400'
+        : value === 'medium'
+          ? 'text-yellow-400'
+          : 'text-green-400';
+
+    return { value, label: value.toUpperCase(), badgeClass, textClass };
+  }, []);
+
   useEffect(() => {
     const fetchProjectData = async () => {
       try {
@@ -151,6 +194,7 @@ export function ProjectDetails({ projectId, onBack }) {
   console.log('Filtered users available to add:', filteredUsers.map(u => ({ id: u.id, name: u.name, email: u.email })));
 
   const handleAddMember = async (userId) => {
+    if (!ensureWritable()) return
     try {
       console.log(`Adding user ${userId} to project ${projectId} as collaborator`);
       const response = await fetchWithCsrf(`${API}/api/projects/${projectId}/members`, {
@@ -189,6 +233,7 @@ export function ProjectDetails({ projectId, onBack }) {
   }
 
   const handleBulkAddMembers = async () => {
+    if (!ensureWritable()) return
     if (selectedUsers.length === 0) {
       alert('Please select users to add first.');
       return;
@@ -243,6 +288,7 @@ export function ProjectDetails({ projectId, onBack }) {
   }
 
   const handleRemoveMember = async (userId) => {
+    if (!ensureWritable()) return
     try {
       const response = await fetchWithCsrf(`${API}/api/projects/${projectId}/members/${userId}`, {
         method: 'DELETE',
@@ -267,6 +313,7 @@ export function ProjectDetails({ projectId, onBack }) {
   }
 
   const handleCreateTask = async ({ title, description, dueDate, priority, tags, assignees = [], attachments = [] }) => {
+    if (!ensureWritable()) return
     try {
       console.log('Creating task with projectId:', projectId, 'Type:', typeof projectId)
       
@@ -367,6 +414,9 @@ export function ProjectDetails({ projectId, onBack }) {
   }
 
   const handleUpdateTask = async (taskData) => {
+    if (!ensureWritable()) {
+      throw new Error('Project is archived and read-only.')
+    }
     try {
       const normalizedAssignees = Array.isArray(taskData.assignees)
         ? Array.from(
@@ -421,6 +471,7 @@ export function ProjectDetails({ projectId, onBack }) {
   }
 
   const handleDeleteTask = async (taskId) => {
+    if (!ensureWritable()) return
     try {
       const response = await fetchWithCsrf(`${API}/api/tasks/${taskId}`, {
         method: 'PUT',
@@ -444,6 +495,7 @@ export function ProjectDetails({ projectId, onBack }) {
   }
 
   const handleArchiveProject = async () => {
+    if (!ensureWritable()) return
     setShowArchiveConfirm(false)
 
     try {
@@ -479,6 +531,7 @@ export function ProjectDetails({ projectId, onBack }) {
   }
 
   const handleEditProject = async (formData) => {
+    if (!ensureWritable()) return
     try {
       const updatedProject = await updateProject(projectId, {
         name: formData.name,
@@ -647,6 +700,11 @@ export function ProjectDetails({ projectId, onBack }) {
         {/* Conditional rendering based on view mode */}
         {viewMode === 'details' ? (
           <>
+        {isReadOnly && (
+          <div className="mb-6 rounded-lg border border-dashed border-gray-600 bg-[#2a2a2e] p-4 text-sm text-gray-300">
+            This project is archived.
+          </div>
+        )}
         {/* Project Info */}
         <div className="bg-[#2a2a2e] rounded-lg p-6 mb-6">
           <h2 className="text-lg font-semibold text-white mb-4">Project Details</h2>
@@ -657,7 +715,7 @@ export function ProjectDetails({ projectId, onBack }) {
         <div className="bg-[#2a2a2e] rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-white">Project Members</h2>
-            {userPermissions.canManageMembers && (
+            {userPermissions.canManageMembers && !isReadOnly && (
               <Button
                 onClick={() => setShowAddMember(!showAddMember)}
                 className="bg-blue-500 hover:bg-blue-600 text-white"
@@ -669,7 +727,7 @@ export function ProjectDetails({ projectId, onBack }) {
           </div>
 
           {/* Add Member Search */}
-          {showAddMember && (
+          {showAddMember && !isReadOnly && (
             <div className="mb-4 p-4 bg-[#1f1f23] rounded-lg">
               <div className="relative mb-2">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -781,7 +839,7 @@ export function ProjectDetails({ projectId, onBack }) {
                       <p className="text-gray-400 text-sm">{member.email}</p>
                     </div>
                   </div>
-                  {userPermissions.canManageMembers && userRole !== 'creator' && (
+                  {userPermissions.canManageMembers && !isReadOnly && userRole !== 'creator' && (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -825,9 +883,12 @@ export function ProjectDetails({ projectId, onBack }) {
                 Filter
               </Button>
               <Button
-                onClick={() => setIsAddingTask(true)}
+                onClick={() => {
+                  if (!ensureWritable()) return
+                  setIsAddingTask(true)
+                }}
                 className="bg-green-500 hover:bg-green-600 text-white"
-                disabled={isAddingTask}
+                disabled={isReadOnly || isAddingTask}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Task
@@ -963,6 +1024,7 @@ export function ProjectDetails({ projectId, onBack }) {
                         const user = (allUsers || []).find(u => u.id === userId)
                         return user ? (user.name || user.email) : 'Unknown User'
                       }).join(', ') || 'Unassigned'
+                      const priorityMeta = getPriorityMeta(task.priority);
 
                       return (
                         <div key={task.id} className="bg-[#1f1f23] rounded-lg overflow-hidden">
@@ -985,13 +1047,9 @@ export function ProjectDetails({ projectId, onBack }) {
                                     <span className="text-gray-400">Assigned to:
                                       <span className="text-blue-400 ml-1">{assigneeNames}</span>
                                     </span>
-                                    {task.priority && (
-                                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                        task.priority === 'high' ? 'bg-red-600 text-white' :
-                                        task.priority === 'medium' ? 'bg-yellow-600 text-white' :
-                                        'bg-green-600 text-white'
-                                      }`}>
-                                        {task.priority.toUpperCase()}
+                                    {priorityMeta.label && (
+                                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${priorityMeta.badgeClass}`}>
+                                        {priorityMeta.label}
                                       </span>
                                     )}
                                     {task.blocked && (
@@ -1058,19 +1116,21 @@ export function ProjectDetails({ projectId, onBack }) {
                                 </div>
 
                                 {/* Edit Task Button */}
-                                <div className="flex justify-end pt-2">
-                                  <Button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setEditingTask(task)
-                                    }}
-                                    size="sm"
-                                    className="bg-blue-500 hover:bg-blue-600 text-white"
-                                  >
-                                    <Edit className="w-4 h-4 mr-1" />
-                                    Edit Task
-                                  </Button>
-                                </div>
+                                {!isReadOnly && (
+                                  <div className="flex justify-end pt-2">
+                                    <Button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setEditingTask(task)
+                                      }}
+                                      size="sm"
+                                      className="bg-blue-500 hover:bg-blue-600 text-white"
+                                    >
+                                      <Edit className="w-4 h-4 mr-1" />
+                                      Edit Task
+                                    </Button>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           )}
@@ -1113,12 +1173,13 @@ export function ProjectDetails({ projectId, onBack }) {
           projectMembers={members}
           onUpdateTask={handleUpdateTask}
           onDeleteTask={handleDeleteTask}
+          readOnly={isReadOnly}
         />
       )}
       </div>
 
       {/* Task Editing Side Panel */}
-      {editingTask && (
+      {!isReadOnly && editingTask && (
         <TaskEditingSidePanel
           task={editingTask}
           onClose={() => setEditingTask(null)}
@@ -2427,7 +2488,7 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   )
 }
 
-function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDeleteTask }) {
+function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDeleteTask, readOnly = false }) {
   const scrollContainerRef = useRef(null)
   const headerScrollRef = useRef(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -2443,6 +2504,13 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [hasInitialized, setHasInitialized] = useState(false)
   const [showBlockedOnly, setShowBlockedOnly] = useState(false)
+  const readOnlyMode = Boolean(readOnly)
+
+  useEffect(() => {
+    if (readOnlyMode) {
+      setEditingTask(null)
+    }
+  }, [readOnlyMode])
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -2885,6 +2953,12 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
         </div>
       )}
 
+      {readOnlyMode && (
+        <div className="mb-4 rounded-lg border border-dashed border-gray-600 bg-[#1f1f23] p-3 text-sm text-gray-300">
+          Timeline interactions are disabled because this project is archived.
+        </div>
+      )}
+
       {/* Legend */}
       <div className="mb-4 p-3 bg-[#1f1f23] rounded-lg border border-gray-700">
         <div className="flex items-center gap-6 flex-wrap text-xs">
@@ -3013,11 +3087,17 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                         }}
                       >
                         <div className="pb-3 space-y-1 text-xs text-gray-400 pl-6">
-                          <div>Priority: <span className={`${
-                            task.priority === 'high' ? 'text-red-400' :
-                            task.priority === 'medium' ? 'text-yellow-400' :
-                            'text-green-400'
-                          }`}>{task.priority?.toUpperCase()}</span></div>
+                          {(() => {
+                            const priorityMeta = getPriorityMeta(task.priority);
+                            return (
+                              <div>
+                                Priority:{' '}
+                                <span className={priorityMeta.textClass}>
+                                  {priorityMeta.label ?? 'N/A'}
+                                </span>
+                              </div>
+                            );
+                          })()}
                           <div>Status: <span className="text-blue-400">{task.status}</span></div>
                           {task.blocked && (
                             <div className="text-red-400 font-semibold">🚫 BLOCKED</div>
@@ -3128,6 +3208,7 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                           onMouseLeave={handleMouseLeaveBar}
                           onClick={(e) => {
                             e.stopPropagation()
+                            if (readOnlyMode) return
                             setEditingTask(task)
                           }}
                         >
@@ -3219,7 +3300,7 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
     </div>
 
     {/* Task Editing Side Panel for Timeline */}
-    {editingTask && (
+    {!readOnlyMode && editingTask && (
       <TaskEditingSidePanel
         task={editingTask}
         onClose={() => setEditingTask(null)}
