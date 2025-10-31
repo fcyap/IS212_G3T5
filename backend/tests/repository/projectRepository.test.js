@@ -542,11 +542,8 @@ describe('ProjectRepository', () => {
         { project_id: 1, user_id: 3, member_role: 'collaborator' }
       ];
 
-      // Mock permission check
-      mockSingle.mockResolvedValueOnce({
-        data: { member_role: 'creator' },
-        error: null
-      });
+      // Mock canUserManageMembers to return true
+      jest.spyOn(projectRepository, 'canUserManageMembers').mockResolvedValue(true);
 
       // Mock user validation
       mockIn.mockResolvedValueOnce({
@@ -569,13 +566,12 @@ describe('ProjectRepository', () => {
       const result = await projectRepository.addUsersToProject(1, [2, 3], 1, 'collaborator');
 
       expect(result).toEqual({ success: true, data: mockMembersData });
+      expect(projectRepository.canUserManageMembers).toHaveBeenCalledWith(1, 1);
     });
 
     test('should handle permission denied', async () => {
-      mockSingle.mockResolvedValue({
-        data: { member_role: 'collaborator' },
-        error: null
-      });
+      // Mock canUserManageMembers to return false
+      jest.spyOn(projectRepository, 'canUserManageMembers').mockResolvedValue(false);
 
       await expect(
         projectRepository.addUsersToProject(1, [2, 3], 2, 'collaborator')
@@ -583,11 +579,8 @@ describe('ProjectRepository', () => {
     });
 
     test('should handle invalid users', async () => {
-      // Mock permission check
-      mockSingle.mockResolvedValueOnce({
-        data: { member_role: 'creator' },
-        error: null
-      });
+      // Mock canUserManageMembers to return true
+      jest.spyOn(projectRepository, 'canUserManageMembers').mockResolvedValue(true);
 
       // Mock user validation - only user 2 exists
       mockIn.mockResolvedValueOnce({
@@ -601,11 +594,8 @@ describe('ProjectRepository', () => {
     });
 
     test('should handle users already in project', async () => {
-      // Mock permission check
-      mockSingle.mockResolvedValueOnce({
-        data: { member_role: 'creator' },
-        error: null
-      });
+      // Mock canUserManageMembers to return true
+      jest.spyOn(projectRepository, 'canUserManageMembers').mockResolvedValue(true);
 
       // Mock user validation
       mockIn.mockResolvedValueOnce({
@@ -633,11 +623,8 @@ describe('ProjectRepository', () => {
         status: 'active'
       };
 
-      // Mock permission check (canUserManageMembers)
-      mockSingle.mockResolvedValueOnce({
-        data: { member_role: 'creator' },
-        error: null
-      });
+      // Mock canUserManageMembers to return true
+      jest.spyOn(projectRepository, 'canUserManageMembers').mockResolvedValue(true);
 
       // Mock getProjectById
       jest.spyOn(projectRepository, 'getProjectById').mockResolvedValueOnce(mockProject);
@@ -659,10 +646,8 @@ describe('ProjectRepository', () => {
     });
 
     test('should handle permission denied', async () => {
-      mockSingle.mockResolvedValue({
-        data: { member_role: 'collaborator' },
-        error: null
-      });
+      // Mock canUserManageMembers to return false
+      jest.spyOn(projectRepository, 'canUserManageMembers').mockResolvedValue(false);
 
       await expect(
         projectRepository.removeUserFromProject(1, 2, 3)
@@ -675,11 +660,8 @@ describe('ProjectRepository', () => {
         name: 'Test Project'
       };
 
-      // Mock permission check
-      mockSingle.mockResolvedValueOnce({
-        data: { member_role: 'creator' },
-        error: null
-      });
+      // Mock canUserManageMembers to return true
+      jest.spyOn(projectRepository, 'canUserManageMembers').mockResolvedValue(true);
 
       // Mock getProjectById
       jest.spyOn(projectRepository, 'getProjectById').mockResolvedValueOnce(mockProject);
@@ -753,16 +735,22 @@ describe('ProjectRepository', () => {
         status: 'archived'
       };
 
-      // First call: project update -> update().eq().select()
-      mockSelect.mockResolvedValueOnce({
-        data: [mockArchivedProject],
+      // Create separate mock chain for this test
+      const firstEqMock = jest.fn().mockReturnValue({
+        select: jest.fn().mockResolvedValue({
+          data: [mockArchivedProject],
+          error: null
+        })
+      });
+
+      const secondEqMock = jest.fn().mockResolvedValue({
         error: null
       });
 
-      // Second call: task archiving -> update().eq()
-      mockEq.mockResolvedValueOnce({
-        error: null
-      });
+      // Setup mock update to return different eq chains
+      mockUpdate
+        .mockReturnValueOnce({ eq: firstEqMock })  // First call: update().eq().select()
+        .mockReturnValueOnce({ eq: secondEqMock }); // Second call: update().eq()
 
       const result = await projectRepository.archiveProject(1);
 
@@ -780,16 +768,22 @@ describe('ProjectRepository', () => {
     });
 
     test('should handle error during task archiving', async () => {
-      // Mock successful project archiving
-      mockSelect.mockResolvedValueOnce({
-        data: [{ id: 1, status: 'archived' }],
-        error: null
+      // First call succeeds: project update -> update().eq().select()
+      const firstEqMock = jest.fn().mockReturnValue({
+        select: jest.fn().mockResolvedValue({
+          data: [{ id: 1, status: 'archived' }],
+          error: null
+        })
       });
 
-      // Mock failed task archiving
-      mockEq.mockResolvedValueOnce({
+      // Second call fails: task archiving -> update().eq()
+      const secondEqMock = jest.fn().mockResolvedValue({
         error: { message: 'Failed to archive tasks' }
       });
+
+      mockUpdate
+        .mockReturnValueOnce({ eq: firstEqMock })
+        .mockReturnValueOnce({ eq: secondEqMock });
 
       await expect(projectRepository.archiveProject(1)).rejects.toThrow('Failed to archive tasks');
     });
@@ -852,20 +846,24 @@ describe('ProjectRepository', () => {
     describe('findById', () => {
       test('should call getProjectById', async () => {
         const mockProject = { id: 1, name: 'Project 1' };
-        jest.spyOn(projectRepository, 'getProjectById').mockResolvedValue(mockProject);
+        const spy = jest.spyOn(projectRepository, 'getProjectById').mockResolvedValue(mockProject);
 
         const result = await projectRepository.findById(1);
 
         expect(projectRepository.getProjectById).toHaveBeenCalledWith(1);
         expect(result).toEqual(mockProject);
+
+        spy.mockRestore();
       });
 
       test('should handle project not found', async () => {
-        jest.spyOn(projectRepository, 'getProjectById').mockRejectedValue(new Error('Project not found'));
+        const spy = jest.spyOn(projectRepository, 'getProjectById').mockRejectedValue(new Error('Project not found'));
 
         const result = await projectRepository.findById(999);
 
         expect(result).toBeNull();
+
+        spy.mockRestore();
       });
     });
 
