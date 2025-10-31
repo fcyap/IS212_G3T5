@@ -25,6 +25,7 @@ import { FileUploadInput } from "./file-upload-input"
 import { TaskTimeTracking } from "./task-time-tracking"
 import { CommentSection } from "./task-comment/task-comment-section"
 import { extractUserHours, normalizeTimeSummary } from "@/lib/time-tracking"
+import { getPriorityMeta } from "@/lib/utils"
 import toast from "react-hot-toast"
 
 const API = process.env.NEXT_PUBLIC_API_URL ;
@@ -75,28 +76,6 @@ export function ProjectDetails({ projectId, onBack }) {
       setShowEditProject(false)
     }
   }, [isReadOnly])
-
-  const getPriorityMeta = useCallback((priority) => {
-    const p = Number(priority);
-    if (!Number.isInteger(p) || p < 1 || p > 10) {
-      return { value: 5, label: '5', badgeClass: 'bg-amber-200 text-amber-900', textClass: 'text-amber-400' };
-    }
-
-    // Color mapping for 1-10 scale: 1-3 low (green), 4-6 medium (yellow), 7-10 high (red)
-    const badgeClass =
-      p >= 9 ? 'bg-fuchsia-400 text-fuchsia-950' :
-      p >= 7 ? 'bg-red-300 text-red-950' :
-      p >= 4 ? 'bg-amber-300 text-amber-950' :
-      'bg-teal-200 text-teal-900';
-
-    const textClass =
-      p >= 9 ? 'text-fuchsia-400' :
-      p >= 7 ? 'text-red-400' :
-      p >= 4 ? 'text-yellow-400' :
-      'text-green-400';
-
-    return { value: p, label: p.toString(), badgeClass, textClass };
-  }, []);
 
   useEffect(() => {
     const fetchProjectData = async () => {
@@ -605,8 +584,12 @@ export function ProjectDetails({ projectId, onBack }) {
         return false
       }
 
-      if (taskFilters.priority !== 'all' && Number(task.priority) !== Number(taskFilters.priority)) {
-        return false
+      if (taskFilters.priority !== 'all') {
+        const taskPriority = Number(task.priority);
+        const filterPriority = Number(taskFilters.priority);
+        if (!isNaN(taskPriority) && !isNaN(filterPriority) && taskPriority !== filterPriority) {
+          return false;
+        }
       }
 
       if (taskFilters.dueDate && task.deadline) {
@@ -634,8 +617,12 @@ export function ProjectDetails({ projectId, onBack }) {
       if (taskDate !== filterDate) return false
     }
 
-    if (taskFilters.priority !== 'all' && Number(task.priority) !== Number(taskFilters.priority)) {
-      return false
+    if (taskFilters.priority !== 'all') {
+      const taskPriority = Number(task.priority);
+      const filterPriority = Number(taskFilters.priority);
+      if (!isNaN(taskPriority) && !isNaN(filterPriority) && taskPriority !== filterPriority) {
+        return false;
+      }
     }
 
     if (taskFilters.status !== 'all' && task.status !== taskFilters.status) {
@@ -2564,28 +2551,6 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
       setEditingTask(null)
     }
   }, [readOnlyMode])
-
-  const getPriorityMeta = useCallback((priority) => {
-    const p = Number(priority);
-    if (!Number.isInteger(p) || p < 1 || p > 10) {
-      return { value: 5, label: '5', badgeClass: 'bg-amber-200 text-amber-900', textClass: 'text-amber-400' };
-    }
-
-    // Color mapping for 1-10 scale: 1-3 low (green), 4-6 medium (yellow), 7-10 high (red)
-    const badgeClass =
-      p >= 9 ? 'bg-fuchsia-400 text-fuchsia-950' :
-      p >= 7 ? 'bg-red-300 text-red-950' :
-      p >= 4 ? 'bg-amber-300 text-amber-950' :
-      'bg-teal-200 text-teal-900';
-
-    const textClass =
-      p >= 9 ? 'text-fuchsia-400' :
-      p >= 7 ? 'text-red-400' :
-      p >= 4 ? 'text-yellow-400' :
-      'text-green-400';
-
-    return { value: p, label: p.toString(), badgeClass, textClass };
-  }, []);
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
