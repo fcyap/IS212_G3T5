@@ -70,7 +70,7 @@ export function TaskSidePanel({
   const MAX_ASSIGNEES = 5
   const [title, setTitle] = useState(task.title || "");
   const [description, setDescription] = useState(task.description || "");
-  const [priority, setPriority] = useState(task.priority || "Low");
+  const [priority, setPriority] = useState(Number(task.priority) || 5);
   const [status, setStatus] = useState(task.workflow || "pending");
   const [deadline, setDeadline] = useState(task.deadline || "");
   const [tags, setTags] = useState(Array.isArray(task.tags) ? task.tags : []);
@@ -374,7 +374,7 @@ export function TaskSidePanel({
       onDeleted?.(task.id);
     } catch (e) {
       console.error("[archive task]", e);
-      alert(e.message);
+      toast.error(e.message);
     }
   }
 
@@ -486,7 +486,7 @@ export function TaskSidePanel({
               return row;
             } catch (e) {
               console.error("[update subtask]", e);
-              alert(e.message);
+              toast.error(e.message);
             }
           }}
           onDeleted={(id) => {

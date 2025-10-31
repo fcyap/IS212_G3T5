@@ -11,11 +11,19 @@ import { FileUploadInput } from '../file-upload-input';
 import { RecurrencePicker } from './recurrence-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Trash, Check, X } from 'lucide-react';
+import toast from 'react-hot-toast';
 const API = process.env.NEXT_PUBLIC_API_URL;
 const priorityChipClasses = {
-  Low: 'bg-teal-200 text-teal-900',
-  Medium: 'bg-amber-300 text-amber-950',
-  High: 'bg-fuchsia-300 text-fuchsia-950',
+  1: "bg-slate-200 text-slate-800",
+  2: "bg-slate-200 text-slate-800",
+  3: "bg-teal-200 text-teal-900",
+  4: "bg-teal-200 text-teal-900",
+  5: "bg-amber-200 text-amber-900",
+  6: "bg-amber-300 text-amber-950",
+  7: "bg-orange-300 text-orange-950",
+  8: "bg-red-300 text-red-950",
+  9: "bg-fuchsia-400 text-fuchsia-950",
+  10: "bg-purple-500 text-white",
 };
 
 export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultProjectId = null, projects = [], projectsLoading = false, projectsError = null }) {
@@ -24,10 +32,10 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
-  const [priority, setPriority] = useState("")
+  const [priority, setPriority] = useState(5) // Default to medium priority
   const [status, setStatus] = useState("pending")
   const [attachments, setAttachments] = useState([])
-  const PRIORITIES = ["Low", "Medium", "High"]
+  const PRIORITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
   const STATUSES = [
     { value: "pending", label: "To do" },
     { value: "in_progress", label: "Doing" },
@@ -148,7 +156,7 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
       onCancel?.()
     } catch (e) {
       console.error("[archive task]", e)
-      alert(e.message)
+      toast.error(e.message)
     }
   }
 
@@ -327,13 +335,13 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
         {/* Priority dropdown */}
         <div>
           <label className="block text-xs text-gray-400 mb-1">Priority</label>
-          <Select value={priority} onValueChange={(v) => setPriority(v)}>
+          <Select value={priority.toString()} onValueChange={(v) => setPriority(Number(v))}>
             <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
               <SelectValue placeholder="Select priority" />
             </SelectTrigger>
             <SelectContent className="bg-white">
               {PRIORITIES.map((p) => (
-                <SelectItem key={p} value={p}>
+                <SelectItem key={p} value={p.toString()}>
                   <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>
                     {p}
                   </span>

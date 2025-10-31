@@ -46,7 +46,7 @@ function rowToCard(r) {
     id: r.id,
     title: r.title ?? '',
     description: r.description || '',
-    priority: cap(r.priority) || 'Low',
+    priority: Number(r.priority) || 5, // Now using integer priority
     workflow,
     deadline: r.deadline || null,
     assignees: normalizedAssignees,  // <-- use this
@@ -210,7 +210,7 @@ export function KanbanBoard({ projectId = null }) {
       const payload = {
         title,
         description: description || null,
-        priority: (priority || "Low").toLowerCase(),
+        priority: Number(priority) || 5, // Default to medium priority
         status: editorLane,
         deadline: dueDate || null,
         project_id: resolvedProjectId,

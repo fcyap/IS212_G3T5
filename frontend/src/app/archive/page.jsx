@@ -7,10 +7,11 @@ import Link from "next/link"
 import { fetchWithCsrf } from "@/lib/csrf";
 import { useAuth } from "@/hooks/useAuth";
 import { userService } from "@/lib/api";
+import toast from "react-hot-toast";
 const API = process.env.NEXT_PUBLIC_API_URL ;
 
 export default function ArchivePage() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, loading: authLoading } = useAuth();
   const [rawTasks, setRawTasks] = useState([]);
   const [usersById, setUsersById] = useState({});
 
@@ -174,11 +175,28 @@ export default function ArchivePage() {
     });
     if (!res.ok) {
       const { error } = await res.json().catch(() => ({}));
-      alert(error || "Failed to unarchive");
+      toast.error(error || "Failed to unarchive");
       return;
     }
 
     setRawTasks((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  // Show loading state while checking authentication (after all hooks)
+  if (authLoading) {
+    return (
+      <div className="flex h-screen bg-[#1a1a1d] items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Return null if not authenticated (will be redirected by SessionProvider)
+  if (!currentUser) {
+    return null
   }
 
   return (
