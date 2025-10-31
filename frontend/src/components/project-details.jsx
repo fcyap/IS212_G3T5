@@ -1028,7 +1028,7 @@ export function ProjectDetails({ projectId, onBack }) {
                                         task.priority === 'medium' ? 'bg-yellow-600 text-white' :
                                         'bg-green-600 text-white'
                                       }`}>
-                                        {task.priority.toUpperCase()}
+                                        {task.priority}
                                       </span>
                                     )}
                                     {task.blocked && (
@@ -3079,7 +3079,7 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                             task.priority === 'high' ? 'text-red-400' :
                             task.priority === 'medium' ? 'text-yellow-400' :
                             'text-green-400'
-                          }`}>{task.priority?.toUpperCase()}</span></div>
+                          }`}>{task.priority}</span></div>
                           <div>Status: <span className="text-blue-400">{task.status}</span></div>
                           {task.blocked && (
                             <div className="text-red-400 font-semibold">🚫 BLOCKED</div>

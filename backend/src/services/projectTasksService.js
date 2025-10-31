@@ -214,7 +214,7 @@ class ProjectTasksService {
 
       return {
         success: true,
-        tasks,
+        tasks: tasks,
         totalTasks: totalCount,
         pagination: {
           page: pagination.page,
@@ -340,6 +340,22 @@ class ProjectTasksService {
         throw new Error('Invalid deadline format. Use ISO 8601 format');
       }
 
+      // Disallow deadlines that are before today (past dates)
+      if (deadline) {
+        const parsedDeadline = new Date(deadline);
+        if (isNaN(parsedDeadline.getTime())) {
+          throw new Error('Invalid deadline format. Use ISO 8601 format');
+        }
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const deadlineDate = new Date(parsedDeadline.getFullYear(), parsedDeadline.getMonth(), parsedDeadline.getDate());
+        if (deadlineDate.getTime() < today.getTime()) {
+          const err = new Error('Deadline cannot be in the past');
+          err.statusCode = 400;
+          throw err;
+        }
+      }
+
       const cleanTaskData = {
         title: title.trim(),
         description: description?.trim() || '',
@@ -376,14 +392,16 @@ class ProjectTasksService {
           console.log(`Today: ${today.toISOString().split('T')[0]}, Tomorrow: ${tomorrow.toISOString().split('T')[0]}, Task deadline: ${deadlineDate.toISOString().split('T')[0]}`);
           console.log(`Today time: ${today.getTime()}, Tomorrow time: ${tomorrow.getTime()}, Deadline time: ${deadlineDate.getTime()}`);
 
-          // Check if deadline is today or tomorrow
+          // Check if deadline is today, tomorrow, or overdue
           const isToday = deadlineDate.getTime() === today.getTime();
           const isTomorrow = deadlineDate.getTime() === tomorrow.getTime();
+          const isOverdue = deadlineDate.getTime() < today.getTime();
           
-          console.log(`Is today: ${isToday}, Is tomorrow: ${isTomorrow}`);
+          console.log(`Is today: ${isToday}, Is tomorrow: ${isTomorrow}, Is overdue: ${isOverdue}`);
           
-          if (isToday || isTomorrow) {
-            console.log(`Task "${newTask.title}" has deadline ${deadlineDate.toDateString()}, sending immediate notifications`);
+          if (isToday || isTomorrow || isOverdue) {
+            const deadlineType = isOverdue ? 'overdue' : isToday ? 'today' : 'tomorrow';
+            console.log(`Task "${newTask.title}" has ${deadlineType} deadline ${deadlineDate.toDateString()}, sending immediate notifications`);
 
             // Hydrate task with assignee information
             const hydratedTask = { ...newTask };
@@ -407,7 +425,7 @@ class ProjectTasksService {
             }
 
             // Send deadline notifications using the unified method
-            await this.sendDeadlineNotifications(hydratedTask);
+            await this.sendDeadlineNotifications(hydratedTask, deadlineType);
           }
         } catch (notificationError) {
           console.error('Error sending immediate deadline notification:', notificationError);
@@ -480,15 +498,6 @@ class ProjectTasksService {
       delete filteredUpdateData.hours;
       delete filteredUpdateData.time_spent_hours;
 
-      // Validate fields if they're being updated
-      if (filteredUpdateData.status && !ProjectTasksService.VALID_TASK_STATUSES.includes(filteredUpdateData.status)) {
-        throw new Error(`Invalid status. Must be one of: ${ProjectTasksService.VALID_TASK_STATUSES.join(', ')}`);
-      }
-
-      if (filteredUpdateData.priority && !ProjectTasksService.VALID_TASK_PRIORITIES.includes(filteredUpdateData.priority)) {
-        throw new Error(`Invalid priority. Must be one of: ${ProjectTasksService.VALID_TASK_PRIORITIES.join(', ')}`);
-      }
-
       if (filteredUpdateData.assigned_to && (!Array.isArray(filteredUpdateData.assigned_to) ||
           filteredUpdateData.assigned_to.some(id => isNaN(parseInt(id)) || parseInt(id) <= 0))) {
         throw new Error('assigned_to must be an array of positive integers');
@@ -510,6 +519,22 @@ class ProjectTasksService {
 
       if (filteredUpdateData.deadline && isNaN(Date.parse(filteredUpdateData.deadline))) {
         throw new Error('Invalid deadline format. Use ISO 8601 format');
+      }
+
+      // When updating, disallow changing the deadline to a past date
+      if (filteredUpdateData.deadline) {
+        const parsedNewDeadline = new Date(filteredUpdateData.deadline);
+        if (isNaN(parsedNewDeadline.getTime())) {
+          throw new Error('Invalid deadline format. Use ISO 8601 format');
+        }
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const newDeadlineDate = new Date(parsedNewDeadline.getFullYear(), parsedNewDeadline.getMonth(), parsedNewDeadline.getDate());
+        if (newDeadlineDate.getTime() < today.getTime()) {
+          const err = new Error('Deadline cannot be in the past');
+          err.statusCode = 400;
+          throw err;
+        }
       }
 
       const updatedTask = await projectTasksRepository.update(validatedTaskId, filteredUpdateData);
@@ -691,7 +716,7 @@ class ProjectTasksService {
     try {
       if (!task.deadline) return;
 
-      // Check if deadline is today or tomorrow
+      // Check deadline status
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
@@ -702,14 +727,17 @@ class ProjectTasksService {
 
       const isToday = deadlineDate.getTime() === today.getTime();
       const isTomorrow = deadlineDate.getTime() === tomorrow.getTime();
+      const isOverdue = deadlineDate.getTime() < today.getTime();
 
-      if (!isToday && !isTomorrow) return;
+      // For impending deadlines, only send if today or tomorrow
+      // For overdue, always send (since we're calling this explicitly for overdue tasks)
+      if (deadlineType !== 'overdue' && !isToday && !isTomorrow) return;
 
       console.log('Sending deadline notifications for task:', {
         taskId: task.id,
         title: task.title,
         deadline: task.deadline,
-        deadlineType: isToday ? 'today' : 'tomorrow',
+        deadlineType: deadlineType,
         hasProject: !!task.project_id
       });
 
@@ -745,15 +773,30 @@ class ProjectTasksService {
         index === self.findIndex(u => u.id === user.id)
       );
 
-      console.log(`Sending ${isToday ? 'today' : 'tomorrow'} deadline notifications to ${uniqueRecipients.length} recipients:`, uniqueRecipients.map(u => u.id));
+      console.log(`Sending ${deadlineType} deadline notifications to ${uniqueRecipients.length} recipients:`, uniqueRecipients.map(u => u.id));
 
-      // Send notifications
-      for (const recipient of uniqueRecipients) {
-        try {
-          await notificationService.createDeadlineNotification(task, recipient);
-          await notificationService.sendDeadlineEmailNotification(task, recipient);
-        } catch (error) {
-          console.error(`Failed to send notification to user ${recipient.id}:`, error);
+      // Send notifications based on type
+      if (deadlineType === 'overdue') {
+        // For overdue notifications, create once for all recipients
+        await notificationService.createOverdueNotifications(task);
+        
+        // Then send individual emails
+        for (const recipient of uniqueRecipients) {
+          try {
+            await notificationService.sendOverdueEmailNotification(task, recipient);
+          } catch (error) {
+            console.error(`Failed to send ${deadlineType} email notification to user ${recipient.id}:`, error);
+          }
+        }
+      } else {
+        // For impending deadline notifications, create and send for each recipient
+        for (const recipient of uniqueRecipients) {
+          try {
+            await notificationService.createDeadlineNotification(task, recipient);
+            await notificationService.sendDeadlineEmailNotification(task, recipient);
+          } catch (error) {
+            console.error(`Failed to send ${deadlineType} notification to user ${recipient.id}:`, error);
+          }
         }
       }
 

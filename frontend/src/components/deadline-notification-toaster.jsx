@@ -15,8 +15,6 @@ import {
   UserMinus,
   RefreshCcw,
   Trash2
-  RefreshCcw,
-  Trash2
 } from "lucide-react"
 
 export function DeadlineNotificationToaster() {
@@ -24,13 +22,10 @@ export function DeadlineNotificationToaster() {
   const router = useRouter()
   const [lastChecked, setLastChecked] = useState(null)
   const [shownNotifications, setShownNotifications] = useState(new Set())
-  const [shownNotifications, setShownNotifications] = useState(new Set())
 
   useEffect(() => {
     if (!user?.email) return
 
-    // Check for new deadline notifications every 5 seconds (temporarily for testing)
-    const interval = setInterval(checkForNotifications, 5000)
     // Check for new deadline notifications every 5 seconds (temporarily for testing)
     const interval = setInterval(checkForNotifications, 5000)
 
@@ -98,8 +93,6 @@ export function DeadlineNotificationToaster() {
           dismissed: notification.dismissed,
           willShow: isForUser && isEligible,
           message: notification.message?.substring(0, 50) + '...'
-          willShow: isForUser && isEligible,
-          message: notification.message?.substring(0, 50) + '...'
         })
 
         // Only show notifications that are for this user and match eligible types
@@ -111,27 +104,9 @@ export function DeadlineNotificationToaster() {
       console.log('Total notifications from API:', data.notifications.length)
       console.log('Filtered notifications:', relevantNotifications.length)
       console.log('Eligible types:', Array.from(eligibleTypes))
-      console.log('Eligible types:', Array.from(eligibleTypes))
 
       // Show toast for each new notification that hasn't been shown yet
-      // Show toast for each new notification that hasn't been shown yet
       relevantNotifications.forEach(notification => {
-        const notificationId = notification.notif_id || notification.id
-        
-        // Only show if we haven't shown this notification before
-        if (!shownNotifications.has(notificationId)) {
-          console.log('Showing toast for notification:', {
-            id: notificationId,
-            type: notification.notif_types,
-            message: notification.message
-          })
-          showNotificationToast(notification)
-          
-          // Mark this notification as shown
-          setShownNotifications(prev => new Set([...prev, notificationId]))
-        } else {
-          console.log('Skipping already shown notification:', notificationId)
-        }
         const notificationId = notification.notif_id || notification.id
         
         // Only show if we haven't shown this notification before
@@ -264,7 +239,6 @@ export function DeadlineNotificationToaster() {
     const notifType = notification.notif_types || 'general'
     const theme = TOAST_THEME[notifType] || TOAST_THEME.general
     const messageLines = notification.message ? notification.message.split('\n').filter(Boolean) : []
-    const notificationId = notification.notif_id || notification.id
     const notificationId = notification.notif_id || notification.id
 
     // Determine urgency for deadlines
