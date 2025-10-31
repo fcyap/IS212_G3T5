@@ -448,8 +448,8 @@ const checkDepartmentAccess = () => {
       });
 
       if (!hasAccess) {
-        return res.status(403).json({ 
-          error: 'Forbidden: Access denied to requested departments' 
+        return res.status(403).json({
+          error: 'Forbidden: Cannot access data from other departments'
         });
       }
 

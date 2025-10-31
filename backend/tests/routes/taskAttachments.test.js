@@ -11,11 +11,15 @@ jest.mock('multer', () => {
   return multerMock;
 });
 
+// Mock auth middleware before requiring the router
+jest.mock('../../src/middleware/auth', () => ({
+  authMiddleware: jest.fn(() => (req, res, next) => next())
+}));
+
 const taskAttachmentsRouter = require('../../src/routes/taskAttachments');
 const taskAttachmentController = require('../../src/controllers/taskAttachmentController');
 
 jest.mock('../../src/controllers/taskAttachmentController');
-jest.mock('../../src/middleware/auth');
 
 describe('Task Attachments Routes', () => {
   let app;
