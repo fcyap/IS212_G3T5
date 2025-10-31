@@ -46,7 +46,7 @@ function rowToCard(r) {
     id: r.id,
     title: r.title ?? '',
     description: r.description || '',
-    priority: cap(r.priority) || 'Low',
+    priority: Number(r.priority) || 5, // Now using integer priority
     workflow,
     deadline: r.deadline || null,
     assignees: normalizedAssignees,  // <-- use this

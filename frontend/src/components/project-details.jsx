@@ -1851,7 +1851,7 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   const { user } = useAuth()
   const [title, setTitle] = useState(task.title || "")
   const [description, setDescription] = useState(task.description || "")
-  const [priority, setPriority] = useState(task.priority || "low")
+  const [priority, setPriority] = useState(Number(task.priority) || 5)
   const [status, setStatus] = useState(task.status || "pending")
   const [deadline, setDeadline] = useState(task.deadline || "")
   const [tags, setTags] = useState(Array.isArray(task.tags) ? task.tags : [])
@@ -2275,19 +2275,15 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
           {/* Priority */}
           <div>
             <label className="block text-xs text-gray-400 mb-1">Priority</label>
-            <Select value={priority} onValueChange={setPriority} disabled={!canEditTask}>
+            <Select value={priority.toString()} onValueChange={(v) => setPriority(Number(v))} disabled={!canEditTask}>
               <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
                 <SelectValue placeholder="Select priority" />
               </SelectTrigger>
               <SelectContent className="bg-white">
-                {["low", "medium", "high"].map((p) => (
-                  <SelectItem key={p} value={p}>
-                    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${
-                      p === 'high' ? 'bg-fuchsia-300 text-fuchsia-950' :
-                      p === 'medium' ? 'bg-amber-300 text-amber-950' :
-                      'bg-teal-200 text-teal-900'
-                    }`}>
-                      {p.charAt(0).toUpperCase() + p.slice(1)}
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((p) => (
+                  <SelectItem key={p} value={p.toString()}>
+                    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>
+                      {p}
                     </span>
                   </SelectItem>
                 ))}
