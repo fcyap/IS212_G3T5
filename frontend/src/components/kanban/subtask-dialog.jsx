@@ -14,7 +14,7 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
   const { user: currentUser } = useAuth()
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState("Low");
+  const [priority, setPriority] = useState(5); // Default to medium priority
   const [status, setStatus] = useState("pending");
   const [deadline, setDeadline] = useState("");
   const [tags, setTags] = useState([]);
@@ -26,7 +26,7 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
   const [debounce, setDebounce] = useState(null);
   const [attachments, setAttachments] = useState([]);
 
-  const PRIORITIES = ["Low", "Medium", "High"];
+  const PRIORITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
   const ALLOWED_FILE_TYPES = [
     'application/pdf',
@@ -228,13 +228,13 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Priority</label>
-              <Select value={priority} onValueChange={setPriority}>
+              <Select value={priority.toString()} onValueChange={(v) => setPriority(Number(v))}>
                 <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
                 <SelectContent className="bg-white">
                   {PRIORITIES.map((p) => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                    <SelectItem key={p} value={p.toString()}>{p}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

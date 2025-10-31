@@ -77,28 +77,25 @@ export function ProjectDetails({ projectId, onBack }) {
   }, [isReadOnly])
 
   const getPriorityMeta = useCallback((priority) => {
-    if (typeof priority !== 'string') {
-      return { value: '', label: null, badgeClass: 'bg-gray-600 text-white', textClass: 'text-gray-400' };
+    const p = Number(priority);
+    if (!Number.isInteger(p) || p < 1 || p > 10) {
+      return { value: 5, label: '5', badgeClass: 'bg-amber-200 text-amber-900', textClass: 'text-amber-400' };
     }
-    const value = priority.trim().toLowerCase();
-    if (!value) {
-      return { value: '', label: null, badgeClass: 'bg-gray-600 text-white', textClass: 'text-gray-400' };
-    }
+
+    // Color mapping for 1-10 scale: 1-3 low (green), 4-6 medium (yellow), 7-10 high (red)
     const badgeClass =
-      value === 'high'
-        ? 'bg-red-600 text-white'
-        : value === 'medium'
-          ? 'bg-yellow-600 text-white'
-          : 'bg-green-600 text-white';
+      p >= 9 ? 'bg-fuchsia-400 text-fuchsia-950' :
+      p >= 7 ? 'bg-red-300 text-red-950' :
+      p >= 4 ? 'bg-amber-300 text-amber-950' :
+      'bg-teal-200 text-teal-900';
 
     const textClass =
-      value === 'high'
-        ? 'text-red-400'
-        : value === 'medium'
-          ? 'text-yellow-400'
-          : 'text-green-400';
+      p >= 9 ? 'text-fuchsia-400' :
+      p >= 7 ? 'text-red-400' :
+      p >= 4 ? 'text-yellow-400' :
+      'text-green-400';
 
-    return { value, label: value.toUpperCase(), badgeClass, textClass };
+    return { value: p, label: p.toString(), badgeClass, textClass };
   }, []);
 
   useEffect(() => {
@@ -977,9 +974,11 @@ export function ProjectDetails({ projectId, onBack }) {
                     </SelectTrigger>
                     <SelectContent className="bg-[#2a2a2e] border-gray-600" style={{ color: 'white' }}>
                       <SelectItem value="all" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-cyan-200">Any priority</SelectItem>
-                      <SelectItem value="low" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-green-200">Low</SelectItem>
-                      <SelectItem value="medium" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-amber-200">Medium</SelectItem>
-                      <SelectItem value="high" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-red-200">High</SelectItem>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((p) => (
+                        <SelectItem key={p} value={p.toString()} style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700">
+                          Priority {p}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1449,9 +1448,16 @@ function EditProjectDialog({ project, open, onClose, onSave }) {
 }
 
 const priorityChipClasses = {
-  Low: "bg-teal-200 text-teal-900",
-  Medium: "bg-amber-300 text-amber-950",
-  High: "bg-fuchsia-300 text-fuchsia-950",
+  1: "bg-slate-200 text-slate-800",
+  2: "bg-slate-200 text-slate-800",
+  3: "bg-teal-200 text-teal-900",
+  4: "bg-teal-200 text-teal-900",
+  5: "bg-amber-200 text-amber-900",
+  6: "bg-amber-300 text-amber-950",
+  7: "bg-orange-300 text-orange-950",
+  8: "bg-red-300 text-red-950",
+  9: "bg-fuchsia-400 text-fuchsia-950",
+  10: "bg-purple-500 text-white",
 }
 
 function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
@@ -1459,14 +1465,14 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
-  const [priority, setPriority] = useState("")
+  const [priority, setPriority] = useState(5) // Default to medium priority
   const [tags, setTags] = useState([])
   const [tagInput, setTagInput] = useState("")
   const [assignees, setAssignees] = useState([])
   const [assigneeQuery, setAssigneeQuery] = useState("")
   const [attachments, setAttachments] = useState([])
 
-  const PRIORITIES = ["Low", "Medium", "High"]
+  const PRIORITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
   const MAX_ASSIGNEES = 5
   const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
   const ALLOWED_FILE_TYPES = [
@@ -1745,13 +1751,13 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
         {/* Priority dropdown */}
         <div>
           <label className="block text-xs text-gray-400 mb-1">Priority</label>
-          <Select value={priority} onValueChange={(value) => setPriority(value)}>
+          <Select value={priority.toString()} onValueChange={(value) => setPriority(Number(value))}>
             <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
               <SelectValue placeholder="Select priority" />
             </SelectTrigger>
             <SelectContent className="bg-white">
               {PRIORITIES.map((item) => (
-                <SelectItem key={item} value={item}>
+                <SelectItem key={item} value={item.toString()}>
                   <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[item]}`}>
                     {item}
                   </span>
@@ -2564,28 +2570,25 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
   }, [readOnlyMode])
 
   const getPriorityMeta = useCallback((priority) => {
-    if (typeof priority !== 'string') {
-      return { value: '', label: null, badgeClass: 'bg-gray-600 text-white', textClass: 'text-gray-400' };
+    const p = Number(priority);
+    if (!Number.isInteger(p) || p < 1 || p > 10) {
+      return { value: 5, label: '5', badgeClass: 'bg-amber-200 text-amber-900', textClass: 'text-amber-400' };
     }
-    const value = priority.trim().toLowerCase();
-    if (!value) {
-      return { value: '', label: null, badgeClass: 'bg-gray-600 text-white', textClass: 'text-gray-400' };
-    }
+
+    // Color mapping for 1-10 scale: 1-3 low (green), 4-6 medium (yellow), 7-10 high (red)
     const badgeClass =
-      value === 'high'
-        ? 'bg-red-600 text-white'
-        : value === 'medium'
-          ? 'bg-yellow-600 text-white'
-          : 'bg-green-600 text-white';
+      p >= 9 ? 'bg-fuchsia-400 text-fuchsia-950' :
+      p >= 7 ? 'bg-red-300 text-red-950' :
+      p >= 4 ? 'bg-amber-300 text-amber-950' :
+      'bg-teal-200 text-teal-900';
 
     const textClass =
-      value === 'high'
-        ? 'text-red-400'
-        : value === 'medium'
-          ? 'text-yellow-400'
-          : 'text-green-400';
+      p >= 9 ? 'text-fuchsia-400' :
+      p >= 7 ? 'text-red-400' :
+      p >= 4 ? 'text-yellow-400' :
+      'text-green-400';
 
-    return { value, label: value.toUpperCase(), badgeClass, textClass };
+    return { value: p, label: p.toString(), badgeClass, textClass };
   }, []);
 
   const today = new Date()

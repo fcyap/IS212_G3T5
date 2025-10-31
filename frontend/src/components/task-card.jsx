@@ -9,7 +9,7 @@ import { TaskAttachmentsDisplay } from "./task-attachments-display"
 export function TaskCard({ title, priority, status, assignees = [], dateRange, description, deadline, onClick, tags = [], onUnarchive, taskId, }) {
 
   const cap = (s) => (s ? s.toString().charAt(0).toUpperCase() + s.toString().slice(1).toLowerCase() : "")
-  const p = (priority || "").toLowerCase()
+  const p = Number(priority) || 5 // Priority is now 1-10
   const s = (status || "").toLowerCase()
 
 
@@ -23,12 +23,11 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
   const dueText = deadline || (dateRange ? dateRange.replace(/^Due\s*/i, "") : null)
 
   const getPriorityColor = () => {
-    switch (p) {
-      case "low": return "bg-teal-200 text-teal-900"
-      case "medium": return "bg-amber-300 text-amber-950"
-      case "high": return "bg-fuchsia-300 text-fuchsia-950"
-      default: return "bg-gray-600 text-white"
-    }
+    // Color mapping for 1-10 scale: 1-3 low (green), 4-6 medium (yellow), 7-10 high (red)
+    if (p >= 9) return "bg-fuchsia-400 text-fuchsia-950"
+    if (p >= 7) return "bg-red-300 text-red-950"
+    if (p >= 4) return "bg-amber-300 text-amber-950"
+    return "bg-teal-200 text-teal-900"
   }
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -74,7 +73,7 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
 
       {/* Badges */}
       <div className="mt-2 sm:mt-3 flex items-center gap-2 flex-wrap">
-        {priority ? <Badge className={`text-xs px-2 py-1 ${getPriorityColor()}`}>{cap(priority)}</Badge> : null}
+        {priority ? <Badge className={`text-xs px-2 py-1 ${getPriorityColor()}`}>{p}</Badge> : null}
       </div>
 
 
