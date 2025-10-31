@@ -8,8 +8,9 @@ describe('ReportRepository', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
-    // Create mock supabase with chaining
+
+    // Create mock supabase with chaining that implements thenable protocol
+    // The chain needs to return itself for chaining AND be awaitable
     mockSupabase = {
       from: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
@@ -20,7 +21,12 @@ describe('ReportRepository', () => {
       or: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
       not: jest.fn().mockReturnThis(),
-      then: jest.fn()
+      // Make the mock properly awaitable by implementing then()
+      then: jest.fn((resolve) => {
+        // When awaited, resolve with default empty result
+        // Tests will override this with mockSupabase.then.mockImplementation
+        return Promise.resolve({ data: null, error: null }).then(resolve);
+      })
     };
 
     supabase.from = jest.fn(() => mockSupabase);
@@ -53,7 +59,7 @@ describe('ReportRepository', () => {
         }
       ];
 
-      mockSupabase.then.mockResolvedValue({ data: mockTasks, error: null });
+      mockSupabase.then.mockImplementation((resolve) => Promise.resolve({ data: mockTasks, error: null }).then(resolve));
 
       const filters = {
         projectIds: [1],
@@ -73,7 +79,7 @@ describe('ReportRepository', () => {
         { id: 2, title: 'Task 2', status: 'completed' }
       ];
 
-      mockSupabase.then.mockResolvedValue({ data: mockTasks, error: null });
+      mockSupabase.then.mockImplementation((resolve) => Promise.resolve({ data: mockTasks, error: null }).then(resolve));
 
       const filters = {
         statuses: ['completed']
@@ -87,7 +93,7 @@ describe('ReportRepository', () => {
     test('should filter tasks by project IDs', async () => {
       const mockTasks = [{ id: 1, project_id: 1 }];
 
-      mockSupabase.then.mockResolvedValue({ data: mockTasks, error: null });
+      mockSupabase.then.mockImplementation((resolve) => Promise.resolve({ data: mockTasks, error: null }).then(resolve));
 
       const filters = {
         projectIds: [1, 2, 3]
@@ -101,7 +107,7 @@ describe('ReportRepository', () => {
     test('should filter tasks by date range', async () => {
       const mockTasks = [{ id: 1, created_at: '2025-10-15' }];
 
-      mockSupabase.then.mockResolvedValue({ data: mockTasks, error: null });
+      mockSupabase.then.mockImplementation((resolve) => Promise.resolve({ data: mockTasks, error: null }).then(resolve));
 
       const filters = {
         startDate: '2025-10-01',
@@ -111,13 +117,14 @@ describe('ReportRepository', () => {
       await reportRepository.getTasksForReport(filters);
 
       expect(mockSupabase.gte).toHaveBeenCalledWith('created_at', '2025-10-01');
-      expect(mockSupabase.lte).toHaveBeenCalledWith('created_at', '2025-10-31');
+      // Repository adds 1 day to endDate to be inclusive (2025-10-31 + 1 day = 2025-11-01)
+      expect(mockSupabase.lte).toHaveBeenCalledWith('created_at', '2025-11-01');
     });
 
     test('should filter tasks by assigned users', async () => {
       const mockTasks = [{ id: 1, assigned_to: [1] }];
 
-      mockSupabase.then.mockResolvedValue({ data: mockTasks, error: null });
+      mockSupabase.then.mockImplementation((resolve) => Promise.resolve({ data: mockTasks, error: null }).then(resolve));
 
       const filters = {
         userIds: [1, 2]
@@ -131,7 +138,7 @@ describe('ReportRepository', () => {
     test('should handle database errors', async () => {
       const mockError = new Error('Database connection failed');
 
-      mockSupabase.then.mockResolvedValue({ data: null, error: mockError });
+      mockSupabase.then.mockImplementation((resolve) => Promise.resolve({ data: null, error: mockError }).then(resolve));
 
       const result = await reportRepository.getTasksForReport({});
 
@@ -155,7 +162,7 @@ describe('ReportRepository', () => {
         tags: ['urgent']
       }];
 
-      mockSupabase.then.mockResolvedValue({ data: mockTasks, error: null });
+      mockSupabase.then.mockImplementation((resolve) => Promise.resolve({ data: mockTasks, error: null }).then(resolve));
 
       const result = await reportRepository.getTasksForReport({});
 
@@ -172,7 +179,7 @@ describe('ReportRepository', () => {
         { id: 2, name: 'Bob', email: 'bob@example.com', department: 'Engineering', role: 'staff' }
       ];
 
-      mockSupabase.then.mockResolvedValue({ data: mockUsers, error: null });
+      mockSupabase.then.mockImplementation((resolve) => Promise.resolve({ data: mockUsers, error: null }).then(resolve));
 
       const result = await reportRepository.getUsersByDepartment('Engineering');
 
@@ -188,7 +195,7 @@ describe('ReportRepository', () => {
         { id: 3, department: 'Engineering.Frontend' }
       ];
 
-      mockSupabase.then.mockResolvedValue({ data: mockUsers, error: null });
+      mockSupabase.then.mockImplementation((resolve) => Promise.resolve({ data: mockUsers, error: null }).then(resolve));
 
       const result = await reportRepository.getUsersByDepartmentHierarchy('Engineering');
 
@@ -204,7 +211,7 @@ describe('ReportRepository', () => {
         { id: 2, name: 'Project B', creator_id: 2 }
       ];
 
-      mockSupabase.then.mockResolvedValue({ data: mockProjects, error: null });
+      mockSupabase.then.mockImplementation((resolve) => Promise.resolve({ data: mockProjects, error: null }).then(resolve));
 
       const userIds = [1, 2];
       const result = await reportRepository.getProjectsByDepartment(userIds);
@@ -230,7 +237,7 @@ describe('ReportRepository', () => {
         { status: 'blocked', count: 2 }
       ];
 
-      mockSupabase.then.mockResolvedValue({ data: mockStats, error: null });
+      mockSupabase.then.mockImplementation((resolve) => Promise.resolve({ data: mockStats, error: null }).then(resolve));
 
       const result = await reportRepository.getTaskStatisticsByStatus([1, 2]);
 
@@ -241,18 +248,42 @@ describe('ReportRepository', () => {
 
   describe('getTaskStatisticsByPriority', () => {
     test('should aggregate tasks by priority', async () => {
-      const mockStats = [
+      // Mock raw tasks, not aggregated stats (repository does the aggregation)
+      const mockTasks = [
+        { priority: 'low' },
+        { priority: 'low' },
+        { priority: 'low' },
+        { priority: 'low' },
+        { priority: 'low' },
+        { priority: 'low' },
+        { priority: 'low' },
+        { priority: 'low' },
+        { priority: 'medium' },
+        { priority: 'medium' },
+        { priority: 'medium' },
+        { priority: 'medium' },
+        { priority: 'medium' },
+        { priority: 'medium' },
+        { priority: 'medium' },
+        { priority: 'high' },
+        { priority: 'high' },
+        { priority: 'high' },
+        { priority: 'high' },
+        { priority: 'high' }
+      ];
+
+      const expectedStats = [
         { priority: 'low', count: 8 },
         { priority: 'medium', count: 7 },
         { priority: 'high', count: 5 }
       ];
 
-      mockSupabase.then.mockResolvedValue({ data: mockStats, error: null });
+      mockSupabase.then.mockImplementation((resolve) => Promise.resolve({ data: mockTasks, error: null }).then(resolve));
 
       const result = await reportRepository.getTaskStatisticsByPriority([1]);
 
       expect(supabase.from).toHaveBeenCalledWith('tasks');
-      expect(result).toEqual({ data: mockStats, error: null });
+      expect(result).toEqual({ data: expectedStats, error: null });
     });
   });
 
@@ -264,7 +295,7 @@ describe('ReportRepository', () => {
         { id: 3, assigned_to: [2], status: 'completed' }
       ];
 
-      mockSupabase.then.mockResolvedValue({ data: mockTasks, error: null });
+      mockSupabase.then.mockImplementation((resolve) => Promise.resolve({ data: mockTasks, error: null }).then(resolve));
 
       const result = await reportRepository.getTaskStatisticsByUser([1, 2]);
 
@@ -281,7 +312,7 @@ describe('ReportRepository', () => {
         { department: 'Engineering' }
       ];
 
-      mockSupabase.then.mockResolvedValue({ data: mockUsers, error: null });
+      mockSupabase.then.mockImplementation((resolve) => Promise.resolve({ data: mockUsers, error: null }).then(resolve));
 
       const result = await reportRepository.getAllDepartments();
 
@@ -292,7 +323,7 @@ describe('ReportRepository', () => {
 
     test('should handle errors when fetching departments', async () => {
       const mockError = { message: 'Database error' };
-      mockSupabase.then.mockResolvedValue({ data: null, error: mockError });
+      mockSupabase.then.mockImplementation((resolve) => Promise.resolve({ data: null, error: mockError }).then(resolve));
 
       const result = await reportRepository.getAllDepartments();
 
