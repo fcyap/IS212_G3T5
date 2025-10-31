@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import { projectService, projectTasksService } from '@/lib/api';
+import { useSession } from '@/components/session-provider';
 
 // Project context for state management
 const ProjectContext = createContext();
@@ -97,25 +98,35 @@ const initialState = {
 // Project provider component
 export function ProjectProvider({ children }) {
   const [state, dispatch] = useReducer(projectReducer, initialState);
+  const { user } = useSession();
+
+  const loadProjects = useCallback(async () => {
+    try {
+      dispatch({ type: PROJECT_ACTIONS.SET_LOADING, payload: true });
+      const projects = await projectService.getAllProjects();
+      dispatch({ type: PROJECT_ACTIONS.SET_PROJECTS, payload: projects });
+    } catch (error) {
+      // Only show error if it's not an auth error (user just logged in)
+      if (!error.message.includes('Unauthorized') && !error.message.includes('401')) {
+        dispatch({ type: PROJECT_ACTIONS.SET_ERROR, payload: error.message });
+      } else {
+        // Silently fail for auth errors during initial load
+        dispatch({ type: PROJECT_ACTIONS.SET_LOADING, payload: false });
+      }
+    }
+  }, []);
 
   // Load all projects on mount
   useEffect(() => {
-    console.log('🚀 [ProjectProvider] useEffect triggered, calling loadProjects');
     loadProjects();
-  }, []);
+  }, [loadProjects]);
 
-  const loadProjects = async () => {
-    try {
-      console.log('🔄 [ProjectProvider] loadProjects called');
-      dispatch({ type: PROJECT_ACTIONS.SET_LOADING, payload: true });
-      const projects = await projectService.getAllProjects();
-      console.log('✅ [ProjectProvider] Received projects:', projects);
-      dispatch({ type: PROJECT_ACTIONS.SET_PROJECTS, payload: projects });
-    } catch (error) {
-      console.error('❌ [ProjectProvider] Error loading projects:', error);
-      dispatch({ type: PROJECT_ACTIONS.SET_ERROR, payload: error.message });
+  // Reload projects when user logs in
+  useEffect(() => {
+    if (user) {
+      loadProjects();
     }
-  };
+  }, [user, loadProjects]);
 
   const createProject = async (projectData) => {
     try {

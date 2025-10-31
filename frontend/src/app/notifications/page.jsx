@@ -96,33 +96,33 @@ const NotificationItem = ({ notification }) => {
   }
 
   return (
-    <div className="bg-[#232326] rounded-lg p-6 border border-white/10 hover:bg-[#2a2a2d] transition-colors">
-      <div className="flex items-start gap-4">
+    <div className="bg-[#1a1a1d] rounded-lg p-4 sm:p-6 border border-white/10 hover:bg-[#2a2a2d] transition-all duration-200">
+      <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
         {/* Sender Avatar */}
-        <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
-          {loading ? <User className="w-6 h-6" /> : senderInitials}
+        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
+          {loading ? <User className="w-5 h-5 sm:w-6 sm:h-6" /> : senderInitials}
         </div>
         
         {/* Notification Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <h3 className="font-semibold text-white">
+        <div className="flex-1 min-w-0 w-full">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 sm:mb-3 gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <h3 className="font-semibold text-white text-sm sm:text-base">
                 {loading ? 'Loading...' : senderName}
               </h3>
               {notification.notif_types && (
-                <span className={`px-3 py-1 text-xs text-white rounded-full ${getTypeColor(notification.notif_types)}`}>
+                <span className={`px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs text-white rounded-full ${getTypeColor(notification.notif_types)}`}>
                   {getTypeLabel(notification.notif_types)}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 text-sm text-gray-400">
-              <Clock className="w-4 h-4" />
-              {formatFullDateTime(notification.created_at)}
+            <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-400 flex-shrink-0">
+              <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="whitespace-nowrap">{formatFullDateTime(notification.created_at)}</span>
             </div>
           </div>
           
-          <p className="text-gray-300 leading-relaxed">
+          <p className="text-gray-300 text-sm sm:text-base leading-relaxed break-words">
             {notification.message}
           </p>
         </div>
@@ -179,25 +179,25 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1a1a1d] text-white">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-[#1a1a1d] text-white overflow-y-auto">
+      <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-8">
         {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
+        <div className="flex items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
           <Button
             variant="ghost"
             onClick={handleBack}
-            className="p-2 hover:bg-white/10 rounded-full text-gray-300 hover:text-white"
+            className="p-1.5 sm:p-2 hover:bg-white/10 rounded-full text-gray-300 hover:text-white"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
           </Button>
-          <div className="flex items-center gap-3">
-            <Bell className="w-8 h-8 text-white" />
-            <h1 className="text-3xl font-bold text-white">Notifications</h1>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Bell className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+            <h1 className="text-2xl sm:text-3xl font-bold text-white">Notifications</h1>
           </div>
         </div>
 
         {/* Content */}
-        <div className="max-w-4xl">
+        <div className="max-w-4xl mx-auto">
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <div className="text-center">
@@ -224,15 +224,15 @@ export default function NotificationsPage() {
               <p className="text-gray-400">You'll see notifications here when you receive them.</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between mb-6">
-                <p className="text-gray-300">
+            <div className="space-y-3 sm:space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-3">
+                <p className="text-sm sm:text-base text-gray-300">
                   {notifications.length} notification{notifications.length !== 1 ? 's' : ''}
                 </p>
                 <Button
                   onClick={fetchNotifications}
                   variant="outline"
-                  className="border-white/20 text-gray-300 hover:bg-white/10 hover:text-white"
+                  className="border-white/20 text-gray-300 hover:bg-white/10 hover:text-white w-full sm:w-auto"
                 >
                   Refresh
                 </Button>
