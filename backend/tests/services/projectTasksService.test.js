@@ -23,6 +23,8 @@ describe('ProjectTasksService', () => {
       per_assignee: []
     });
     taskAssigneeHoursService.normalizeHours.mockImplementation((value) => Number(value));
+    projectRepository.exists.mockResolvedValue(true);
+    projectRepository.getProjectById.mockResolvedValue({ id: 1, status: 'active' });
   });
 
   describe('validateProjectExists', () => {
@@ -166,11 +168,13 @@ describe('ProjectTasksService', () => {
       };
 
       projectRepository.exists.mockResolvedValue(true);
+      projectRepository.getProjectById.mockResolvedValue({ id: projectId, status: 'active' });
       projectTasksRepository.create.mockResolvedValue(mockCreatedTask);
 
       const result = await projectTasksService.createTask(projectId, taskData);
 
       expect(projectRepository.exists).toHaveBeenCalledWith(1);
+      expect(projectRepository.getProjectById).toHaveBeenCalledWith(1);
       expect(projectTasksRepository.create).toHaveBeenCalledWith(expect.objectContaining({
         assigned_to: []
       }));
@@ -193,6 +197,7 @@ describe('ProjectTasksService', () => {
       };
 
       projectRepository.exists.mockResolvedValue(true);
+      projectRepository.getProjectById.mockResolvedValue({ id: projectId, status: 'active' });
       projectTasksRepository.create.mockResolvedValue(mockCreatedTask);
 
       const result = await projectTasksService.createTask(projectId, taskData, 7);
@@ -208,6 +213,7 @@ describe('ProjectTasksService', () => {
       const taskData = { title: 'New Task' };
 
       projectRepository.exists.mockResolvedValue(false);
+      projectRepository.getProjectById.mockResolvedValue(null);
 
       const result = await projectTasksService.createTask(projectId, taskData);
 
@@ -223,12 +229,36 @@ describe('ProjectTasksService', () => {
       };
 
       projectRepository.exists.mockResolvedValue(true);
+      projectRepository.getProjectById.mockResolvedValue({ id: projectId, status: 'active' });
 
       const result = await projectTasksService.createTask(projectId, taskData);
 
       expect(projectTasksRepository.create).not.toHaveBeenCalled();
       expect(result.success).toBe(false);
       expect(result.error).toBe('A task can have at most 5 assignees.');
+    });
+
+    test('should prevent creation when project is archived', async () => {
+      const projectId = 4;
+      const taskData = { title: 'Archived task attempt' };
+
+      projectRepository.exists.mockResolvedValue(true);
+      projectRepository.getProjectById.mockResolvedValue({ id: projectId, status: 'archived' });
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const result = await projectTasksService.createTask(projectId, taskData);
+
+      expect(projectTasksRepository.create).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Cannot create tasks for archived projects');
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[ProjectTasksService] Attempted task creation on archived project',
+        expect.objectContaining({
+          projectId,
+          payload: expect.objectContaining({ title: 'Archived task attempt' }),
+        })
+      );
+      warnSpy.mockRestore();
     });
   });
 
