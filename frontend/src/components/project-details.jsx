@@ -634,7 +634,7 @@ export function ProjectDetails({ projectId, onBack }) {
       if (taskDate !== filterDate) return false
     }
 
-    if (taskFilters.priority !== 'all' && task.priority !== taskFilters.priority.toLowerCase()) {
+    if (taskFilters.priority !== 'all' && Number(task.priority) !== Number(taskFilters.priority)) {
       return false
     }
 
