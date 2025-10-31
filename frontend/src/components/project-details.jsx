@@ -2563,6 +2563,31 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
     }
   }, [readOnlyMode])
 
+  const getPriorityMeta = useCallback((priority) => {
+    if (typeof priority !== 'string') {
+      return { value: '', label: null, badgeClass: 'bg-gray-600 text-white', textClass: 'text-gray-400' };
+    }
+    const value = priority.trim().toLowerCase();
+    if (!value) {
+      return { value: '', label: null, badgeClass: 'bg-gray-600 text-white', textClass: 'text-gray-400' };
+    }
+    const badgeClass =
+      value === 'high'
+        ? 'bg-red-600 text-white'
+        : value === 'medium'
+          ? 'bg-yellow-600 text-white'
+          : 'bg-green-600 text-white';
+
+    const textClass =
+      value === 'high'
+        ? 'text-red-400'
+        : value === 'medium'
+          ? 'text-yellow-400'
+          : 'text-green-400';
+
+    return { value, label: value.toUpperCase(), badgeClass, textClass };
+  }, []);
+
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
