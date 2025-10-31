@@ -19,9 +19,10 @@ describe('ReportRepository', () => {
       lte: jest.fn().mockReturnThis(),
       or: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
+      not: jest.fn().mockReturnThis(),
       then: jest.fn()
     };
-    
+
     supabase.from = jest.fn(() => mockSupabase);
   });
 
@@ -314,12 +315,15 @@ describe('ReportRepository', () => {
         { id: 4, assigned_to: [3], status: 'pending', priority: 'high' }
       ];
 
-      // Mock users query
+      // Mock users query with proper promise chaining
       const mockUsersQuery = {
         from: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         or: jest.fn().mockReturnThis(),
-        then: jest.fn().mockResolvedValue({ data: mockUsers, error: null })
+        then: jest.fn((resolve) => {
+          resolve({ data: mockUsers, error: null });
+          return Promise.resolve({ data: mockUsers, error: null });
+        })
       };
 
       supabase.from = jest.fn((table) => {
@@ -343,7 +347,7 @@ describe('ReportRepository', () => {
 
       expect(result.error).toBeNull();
       expect(result.data).toHaveLength(2); // Engineering and HR
-      
+
       const engineeringDept = result.data.find(d => d.department === 'Engineering');
       expect(engineeringDept).toBeDefined();
       expect(engineeringDept.totalTasks).toBeGreaterThan(0);
@@ -362,7 +366,10 @@ describe('ReportRepository', () => {
         from: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         or: jest.fn().mockReturnThis(),
-        then: jest.fn().mockResolvedValue({ data: [], error: null })
+        then: jest.fn((resolve) => {
+          resolve({ data: [], error: null });
+          return Promise.resolve({ data: [], error: null });
+        })
       };
 
       supabase.from = jest.fn(() => mockUsersQuery);

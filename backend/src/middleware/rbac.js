@@ -461,6 +461,22 @@ const checkDepartmentAccess = () => {
   };
 };
 
+/**
+ * Filter departments by hierarchy - returns the parent department and all subdepartments
+ * @param {string} parentDept - Parent department name
+ * @param {Array<string>} departments - Array of all department names
+ * @returns {Array<string>} Filtered array of matching departments
+ */
+function filterByDepartmentHierarchy(parentDept, departments) {
+  return departments.filter(dept => {
+    // Exact match
+    if (dept === parentDept) return true;
+    // Subdepartment match (starts with parent + ".")
+    if (dept.startsWith(parentDept + '.')) return true;
+    return false;
+  });
+}
+
 module.exports = {
   requireProjectCreation,
   requireProjectEdit,
@@ -469,5 +485,6 @@ module.exports = {
   requireTaskCreation,
   requireTaskModification,
   requireRole,
-  checkDepartmentAccess
+  checkDepartmentAccess,
+  filterByDepartmentHierarchy
 };

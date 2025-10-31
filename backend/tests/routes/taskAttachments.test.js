@@ -2,14 +2,14 @@ const express = require('express');
 const request = require('supertest');
 
 // Mock multer before requiring the router
-jest.mock('multer');
-const multer = require('multer');
-
-// Mock multer
-multer.memoryStorage = jest.fn(() => ({}));
-multer.mockImplementation(() => ({
-  array: jest.fn(() => (req, res, next) => next())
-}));
+jest.mock('multer', () => {
+  const multerMock = jest.fn(() => ({
+    array: jest.fn((fieldName, maxCount) => (req, res, next) => next()),
+    single: jest.fn((fieldName) => (req, res, next) => next())
+  }));
+  multerMock.memoryStorage = jest.fn(() => ({}));
+  return multerMock;
+});
 
 const taskAttachmentsRouter = require('../../src/routes/taskAttachments');
 const taskAttachmentController = require('../../src/controllers/taskAttachmentController');
