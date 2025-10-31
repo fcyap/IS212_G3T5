@@ -8,6 +8,7 @@ const {
 } = require('../middleware/rbac');
 // Import authentication middleware
 const { authMiddleware } = require('../middleware/auth');
+const taskAssigneeHoursService = require('../services/taskAssigneeHoursService');
 const router = express.Router();
 
 // Constants for validation
@@ -297,13 +298,20 @@ router.post('/:projectId/tasks', authMiddleware(), requireTaskCreation(), async 
     const taskData = req.body;
     const creatorId = req.user?.id || req.body?.creator_id || req.body?.creatorId || null;
 
+    console.log('=== CREATE TASK DEBUG ===');
+    console.log('Raw projectId from params:', projectId, 'Type:', typeof projectId);
+    console.log('Task data:', JSON.stringify(taskData, null, 2));
+    console.log('Creator ID:', creatorId);
+
     // Validate project exists
     const validatedProjectId = validatePositiveInteger(projectId, 'projectId');
+    console.log('Validated projectId:', validatedProjectId);
 
     // Import the service
     const projectTasksService = require('../services/projectTasksService');
 
     const result = await projectTasksService.createTask(validatedProjectId, taskData, creatorId);
+    console.log('Service result:', result);
 
     if (result.success) {
       return res.status(201).json(result);
@@ -422,6 +430,16 @@ router.get('/:projectId/tasks/:taskId', authMiddleware(), async (req, res) => {
       }
 
       task = taskData;
+      try {
+        const summary = await taskAssigneeHoursService.getTaskHoursSummary(
+          validatedTaskId,
+          Array.isArray(task?.assigned_to) ? task.assigned_to : []
+        );
+        task = { ...task, time_tracking: summary };
+      } catch (summaryError) {
+        console.error('[projectTasks] Failed to load time tracking summary:', summaryError);
+        task = { ...task, time_tracking: { total_hours: 0, per_assignee: [] } };
+      }
     } else {
       // Use mock data
       const mockTasks = getMockTasks(validatedProjectId);
@@ -450,6 +468,7 @@ router.get('/:projectId/tasks/:taskId', authMiddleware(), async (req, res) => {
           }
         }
       ];
+      task.time_tracking = { total_hours: 0, per_assignee: [] };
     }
 
     res.json({

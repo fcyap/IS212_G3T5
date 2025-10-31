@@ -38,7 +38,8 @@ class NotificationRepository {
                 message: notificationData.message,
                 creator_id: notificationData.creator_id || null,
                 recipient_emails: recipientEmails || '',
-                notif_types: notificationData.notif_types || 'general'
+                notif_types: notificationData.notif_types || 'general',
+                dismissed: false
             }])
             .select('*')
             .single();

@@ -64,13 +64,62 @@ async function initializeApp() {
         resave: false,
         saveUninitialized: true
     }));
-  //app.use(csrf()); // CSRF protection for all state-changing requests
-    app.use(csrf({
-        csrf: true,              // Enable CSRF protection
-        csp: { policy: { "default-src": "'self'" } },
-        xframe: "SAMEORIGIN",
-        xssProtection: true
-    }));
+  
+  // Store CSRF tokens in memory (keyed by session ID or socket ID)
+  const csrfTokens = new Map();
+  
+  // Custom CSRF middleware that validates tokens from headers
+  const csrfMiddleware = (req, res, next) => {
+    const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
+    
+    // Get a unique identifier for this client (session ID, remote address, or generate one)
+    const clientId = req.sessionID || req.ip || `${req.socket.remoteAddress}-${Date.now()}`;
+    
+    // Store a token generation function on req for generating new tokens
+    req.csrfToken = () => {
+      if (!csrfTokens.has(clientId)) {
+        const crypto = require('crypto');
+        csrfTokens.set(clientId, crypto.randomBytes(32).toString('hex'));
+      }
+      return csrfTokens.get(clientId);
+    };
+    
+    // Ensure a CSRF token exists
+    const token = req.csrfToken();
+    console.log(`[CSRF] Client ID: ${clientId}, Token: ${token?.substring(0, 10)}..., Method: ${req.method}, Path: ${req.path}`);
+    
+    // Skip CSRF validation for safe methods
+    if (SAFE_METHODS.includes(req.method)) {
+      console.log(`[CSRF] Skipping validation for safe method: ${req.method}`);
+      return next();
+    }
+    
+    // Get submitted token from various possible locations
+    const submittedToken = req.headers['x-csrf-token'] || 
+                          req.headers['csrf-token'] ||
+                          req.body?._csrf ||
+                          req.query?._csrf;
+    
+    console.log(`[CSRF] Submitted token: ${submittedToken?.substring(0, 10) || 'NONE'}...`);
+    
+    // Validate token
+    if (!submittedToken) {
+      console.warn(`[CSRF] No token submitted for ${req.method} ${req.path}`);
+      return res.status(403).json({ error: 'CSRF token missing' });
+    }
+    
+    if (submittedToken !== token) {
+      console.warn(`[CSRF] Token mismatch for ${req.method} ${req.path}`);
+      console.warn(`[CSRF] Expected: ${token?.substring(0, 20)}...`);
+      console.warn(`[CSRF] Got: ${submittedToken?.substring(0, 20)}...`);
+      return res.status(403).json({ error: 'CSRF token invalid' });
+    }
+    
+    console.log(`[CSRF] Token validated successfully for ${req.method} ${req.path}`);
+    next();
+  };
+  
+  app.use(csrfMiddleware);
   app.use(
     cors({
       origin: process.env.FRONTEND_ORIGIN || true, // Allow all origins in development
@@ -140,10 +189,11 @@ async function initializeApp() {
   app.use('/api/notifications', authMw, notificationRoutes);
 
   // Data APIs using the bypass wrapper during dev
-  app.use('/api/tasks', authMw, taskCommentRoutes);
-  app.use('/api/projects', authMw, projectTasksRoutes);
   app.use('/api/projects', authMw, projectRoutes);
+  app.use('/api/projects', authMw, projectTasksRoutes);
+  app.use('/api/tasks', authMw, taskCommentRoutes);
   app.use('/api/notifications', authMw, notificationRoutes);
+  app.use('/api/reports', authMw, require('./routes/reports'));
   app.use('/tasks', authMw, tasksRouter);
 
   // UAA Protected route example

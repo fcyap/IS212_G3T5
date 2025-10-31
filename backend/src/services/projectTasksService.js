@@ -1,6 +1,9 @@
 const projectTasksRepository = require('../repository/projectTasksRepository');
 const projectRepository = require('../repository/projectRepository');
 const notificationService = require('./notificationService');
+const taskAssigneeHoursService = require('./taskAssigneeHoursService');
+
+const MAX_ASSIGNEES = 5;
 
 class ProjectTasksService {
   /**
@@ -17,11 +20,25 @@ class ProjectTasksService {
    * @returns {boolean} True if project exists
    */
   async validateProjectExists(projectId) {
+    console.log('Validating project exists:', projectId);
     const projectExists = await projectRepository.exists(projectId);
+    console.log('Project exists result:', projectExists);
     if (!projectExists) {
       throw new Error('Project not found');
     }
     return true;
+  }
+
+  async _fetchProjectDetails(projectId) {
+    if (typeof projectRepository.getProjectById !== 'function') {
+      return null;
+    }
+    try {
+      return await projectRepository.getProjectById(projectId);
+    } catch (error) {
+      console.error('[ProjectTasksService] Failed to fetch project details:', error);
+      return null;
+    }
   }
 
   /**
@@ -256,9 +273,14 @@ class ProjectTasksService {
         throw new Error('Task not found');
       }
 
+      const summary = await taskAssigneeHoursService.getTaskHoursSummary(
+        validatedTaskId,
+        this._normalizeAssigneeIds(task.assigned_to)
+      );
+
       return {
         success: true,
-        task,
+        task: { ...task, time_tracking: summary },
         message: 'Task retrieved successfully'
       };
 
@@ -283,6 +305,20 @@ class ProjectTasksService {
       // Validate project exists
       const validatedProjectId = this.validatePositiveInteger(projectId, 'projectId');
       await this.validateProjectExists(validatedProjectId);
+      const projectDetails = await this._fetchProjectDetails(validatedProjectId);
+      const projectStatus = String(projectDetails?.status || '').toLowerCase();
+      if (projectStatus === 'archived') {
+        console.warn('[ProjectTasksService] Attempted task creation on archived project', {
+          projectId: validatedProjectId,
+          requestedBy: creatorId,
+          payload: {
+            title: taskData?.title,
+            status: taskData?.status,
+            priority: taskData?.priority,
+          },
+        });
+        throw new Error('Cannot create tasks for archived projects');
+      }
 
       // Validate required fields
       const { title, description, assigned_to, priority = 'medium', deadline, status = 'pending' } = taskData;
@@ -320,6 +356,11 @@ class ProjectTasksService {
         assignees.push(validCreatorId);
       }
 
+      const uniqueAssignees = Array.from(new Set(assignees));
+      if (uniqueAssignees.length > MAX_ASSIGNEES) {
+        throw new Error(`A task can have at most ${MAX_ASSIGNEES} assignees.`);
+      }
+
       // Validate deadline format if provided
       if (deadline && isNaN(Date.parse(deadline))) {
         throw new Error('Invalid deadline format. Use ISO 8601 format');
@@ -331,7 +372,7 @@ class ProjectTasksService {
         status,
         priority,
         project_id: validatedProjectId,
-        assigned_to: assignees,
+        assigned_to: uniqueAssignees,
         deadline: deadline || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -451,6 +492,20 @@ class ProjectTasksService {
         Object.entries(updateData).filter(([_, value]) => value !== undefined)
       );
 
+      const rawHoursInput = filteredUpdateData.hours ?? filteredUpdateData.time_spent_hours;
+      const hasHoursUpdate = rawHoursInput !== undefined;
+      let normalizedHoursInput;
+      if (hasHoursUpdate) {
+        if (normalizedRequesterId === null) {
+          const hoursError = new Error('Hours spent can only be recorded by an assigned user.');
+          hoursError.statusCode = 403;
+          throw hoursError;
+        }
+        normalizedHoursInput = taskAssigneeHoursService.normalizeHours(rawHoursInput);
+      }
+      delete filteredUpdateData.hours;
+      delete filteredUpdateData.time_spent_hours;
+
       // Validate fields if they're being updated
       if (filteredUpdateData.status && !ProjectTasksService.VALID_TASK_STATUSES.includes(filteredUpdateData.status)) {
         throw new Error(`Invalid status. Must be one of: ${ProjectTasksService.VALID_TASK_STATUSES.join(', ')}`);
@@ -465,6 +520,20 @@ class ProjectTasksService {
         throw new Error('assigned_to must be an array of positive integers');
       }
 
+      if (Array.isArray(filteredUpdateData.assigned_to)) {
+        const normalizedAssignees = filteredUpdateData.assigned_to
+          .map((value) => (typeof value === 'string' ? value.trim() : value))
+          .filter((value) => value !== '' && value !== null && value !== undefined)
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value))
+          .map((value) => Math.trunc(value));
+        const uniqueAssignees = Array.from(new Set(normalizedAssignees));
+        if (uniqueAssignees.length > MAX_ASSIGNEES) {
+          throw new Error(`A task can have at most ${MAX_ASSIGNEES} assignees.`);
+        }
+        filteredUpdateData.assigned_to = uniqueAssignees;
+      }
+
       if (filteredUpdateData.deadline && isNaN(Date.parse(filteredUpdateData.deadline))) {
         throw new Error('Invalid deadline format. Use ISO 8601 format');
       }
@@ -476,6 +545,19 @@ class ProjectTasksService {
         notFoundError.statusCode = 404;
         throw notFoundError;
       }
+
+      if (hasHoursUpdate) {
+        await taskAssigneeHoursService.recordHours({
+          taskId: validatedTaskId,
+          userId: normalizedRequesterId,
+          hours: normalizedHoursInput
+        });
+      }
+
+      updatedTask.time_tracking = await taskAssigneeHoursService.getTaskHoursSummary(
+        validatedTaskId,
+        updatedTask.assigned_to || existingTask?.assigned_to || []
+      );
 
       // Send immediate deadline notifications if task deadline was updated to today/tomorrow
       if (filteredUpdateData.deadline && updatedTask.deadline) {

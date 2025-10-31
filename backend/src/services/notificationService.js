@@ -569,6 +569,226 @@ class NotificationService {
   }
 
   /**
+   * Create task deletion notification
+   * @param {Object} params - Task deletion notification parameters
+   * @param {Object} params.task - Task object that was deleted
+   * @param {number} params.deleterId - User ID of the person who deleted the task
+   * @param {string} params.deleterName - Name of the person who deleted the task
+   */
+  async createTaskDeletedNotification({ task, taskId, deleterId, deleterName }) {
+    try {
+      // If task not provided, fetch it
+      let taskDetails = task;
+      if (!taskDetails && taskId) {
+        taskDetails = await taskRepository.getTaskById(taskId);
+      }
+
+      if (!taskDetails) {
+        throw new Error('Task not found');
+      }
+
+      // Get task assignees (assigned_to is an array of user_ids)
+      const assignedUserIds = taskDetails.assigned_to || [];
+      console.log(`Task assignees:`, assignedUserIds);
+      if (assignedUserIds.length === 0) {
+        console.log('No users assigned to task, skipping deletion notification');
+        return { notificationsSent: 0, notificationIds: [] };
+      }
+
+      // Filter out the deleter from recipients (don't notify the person who deleted it)
+      // TODO: For testing purposes, allow deleter to receive notification too
+      // const recipientIds = assignedUserIds.filter(id => id !== deleterId);
+      const recipientIds = assignedUserIds; // Temporarily allow deleter to receive notification
+      console.log(`Deleter ID: ${deleterId}, Recipient IDs after filtering:`, recipientIds);
+      if (recipientIds.length === 0) {
+        console.log('No recipients to notify (deleter is the only/all assignees)');
+        return { notificationsSent: 0, notificationIds: [] };
+      }
+
+      // Get project details if available
+      let project = null;
+      if (taskDetails.project_id) {
+        try {
+          project = await projectRepository.getProjectById(taskDetails.project_id);
+          if (!project) {
+            throw new Error('Project not found');
+          }
+        } catch (err) {
+          console.error(`Failed to fetch project ${taskDetails.project_id}:`, err);
+          throw err;
+        }
+      }
+
+      // Get recipient user details with emails
+      const recipients = [];
+      for (const userId of recipientIds) {
+        try {
+          const user = await userRepository.getUserById(userId);
+          console.log(`User ${userId} lookup result:`, {
+            user: user ? { id: user.id, name: user.name, email: user.email } : null,
+            hasEmail: !!user?.email,
+            email: user?.email
+          });
+          if (user && user.email) {
+            recipients.push(user);
+          } else {
+            console.log(`Skipping user ${userId} - no email or user not found. User data:`, user);
+          }
+        } catch (err) {
+          console.error(`Failed to fetch user ${userId}:`, err);
+        }
+      }
+
+      console.log(`Final recipients list:`, recipients.map(r => ({ id: r.id, email: r.email })));
+
+      if (recipients.length === 0) {
+        console.log('No valid recipients found with emails');
+        return { notificationsSent: 0, notificationIds: [] };
+      }
+
+      // Create notification message
+      const message = `${deleterName} has deleted the task "${taskDetails.title}"${project ? ` from project "${project.name}"` : ''}.`;
+
+      // Insert notifications into database and send emails
+      const notifications = [];
+      const notificationIds = [];
+      for (const recipient of recipients) {
+        try {
+          const notificationData = {
+            notif_types: 'task_deletion',
+            message: message,
+            creator_id: deleterId,
+            recipient_emails: recipient.email,
+            created_at: new Date().toISOString()
+          };
+
+          const notification = await notificationRepository.create(notificationData);
+          notifications.push(notification);
+          notificationIds.push(notification.notif_id);
+
+          // Send email via SendGrid
+          await this.sendTaskDeletedEmail(recipient, taskDetails, project, deleterName);
+        } catch (err) {
+          console.error(`Failed to create notification for user ${recipient.id}:`, err);
+        }
+      }
+
+      console.log(`Created ${notifications.length} task deletion notifications for task ${taskDetails.id}`);
+      return {
+        notificationsSent: notifications.length,
+        notifications: notifications,
+        notificationIds: notificationIds
+      };
+    } catch (error) {
+      console.error('Error creating task deletion notification:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send task deleted email via SendGrid
+   * @param {Object} recipient - Recipient user object
+   * @param {Object} task - Task details that was deleted
+   * @param {Object} project - Project details (if task was in a project)
+   * @param {string} deleterName - Name of the person who deleted the task
+   */
+  async sendTaskDeletedEmail(recipient, task, project, deleterName) {
+    try {
+      if (!process.env.SENDGRID_API_KEY) {
+        console.warn('SendGrid API key not configured, skipping email notification');
+        return;
+      }
+
+      // Format task details for email
+      const taskDetails = {
+        title: task.title || 'Untitled Task',
+        description: task.description || 'No description provided',
+        status: task.status || 'N/A',
+        priority: task.priority || 'N/A',
+        dueDate: task.due_date || task.deadline || 'No due date',
+        tags: task.tags && Array.isArray(task.tags) ? task.tags.join(', ') : 'No tags',
+        projectName: project?.name || 'No project',
+        createdAt: task.created_at ? new Date(task.created_at).toLocaleString() : 'Unknown',
+        updatedAt: task.updated_at ? new Date(task.updated_at).toLocaleString() : 'Unknown'
+      };
+
+      const msg = {
+        to: recipient.email,
+        from: process.env.FROM_EMAIL || 'noreply@yourapp.com',
+        subject: `Task Deleted: "${taskDetails.title}"`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #dc3545;">⚠️ Task Deleted</h2>
+            <p>Hello ${recipient.name},</p>
+            <p><strong>${deleterName}</strong> has deleted a task that was assigned to you.</p>
+            
+            <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
+              <p style="margin: 0; color: #856404;">
+                <strong>Note:</strong> This task has been permanently removed from the system.
+              </p>
+            </div>
+
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="margin-top: 0; color: #333;">Task Details</h3>
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;"><strong>Title:</strong></td>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;">${taskDetails.title}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;"><strong>Description:</strong></td>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;">${taskDetails.description}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;"><strong>Project:</strong></td>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;">${taskDetails.projectName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;"><strong>Status:</strong></td>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;">${taskDetails.status}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;"><strong>Priority:</strong></td>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;">${taskDetails.priority}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;"><strong>Due Date:</strong></td>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;">${taskDetails.dueDate}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;"><strong>Tags:</strong></td>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;">${taskDetails.tags}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;"><strong>Created:</strong></td>
+                  <td style="padding: 8px 0; border-bottom: 1px solid #dee2e6;">${taskDetails.createdAt}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0;"><strong>Last Updated:</strong></td>
+                  <td style="padding: 8px 0;">${taskDetails.updatedAt}</td>
+                </tr>
+              </table>
+            </div>
+
+            <p>This notification is to help you understand changes in your team's workload. If you have any questions about this deletion, please contact ${deleterName}.</p>
+            
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+            <p style="color: #666; font-size: 12px;">
+              This is an automated message. Please do not reply to this email.
+            </p>
+          </div>
+        `
+      };
+
+      const result = await sgMail.send(msg);
+      console.log('Task deletion email sent via SendGrid:', result[0]?.headers?.['x-message-id']);
+    } catch (error) {
+      console.error('Error sending task deletion email via SendGrid:', error);
+      // Don't throw error for email failures - notification is still created
+    }
+  }
+
+  /**
    * Send comment notification email via SendGrid
    */
   async sendCommentEmail(recipient, task, commenterName, commentPreview, commentId) {

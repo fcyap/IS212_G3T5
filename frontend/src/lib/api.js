@@ -1,21 +1,27 @@
 // API service for communicating with the backend
 import { fetchWithCsrf } from './csrf';
+import { fetchWithRetry } from './retry';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 class ProjectService {
   async getAllProjects() {
-    const response = await fetch(`${API_BASE_URL}/api/projects`, {
-      credentials: 'include', // Include cookies for authentication
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch projects: ${response.statusText}`);
+    try {
+      const response = await fetchWithRetry(`${API_BASE_URL}/api/projects`, {
+        credentials: 'include',
+      }, {
+        maxRetries: 2, // Retry up to 2 times
+        baseDelay: 1000,
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to fetch projects');
+      }
+      return data.projects;
+    } catch (error) {
+      throw error;
     }
-    const data = await response.json();
-    if (!data.success) {
-      throw new Error(data.message || 'Failed to fetch projects');
-    }
-    return data.projects; // Return just the projects array
   }
 
   async getProjectById(id) {

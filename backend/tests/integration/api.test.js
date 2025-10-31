@@ -2,33 +2,61 @@ const request = require('supertest');
 const express = require('express');
 const cors = require('cors');
 
-const projectRoutes = require('../../src/routes/projects');
-const projectTasksRoutes = require('../../src/routes/projectTasks');
-const projectService = require('../../src/services/projectService');
+const supabaseMock = {
+  from: jest.fn(),
+  storage: {
+    from: jest.fn()
+  }
+};
+
+const createQueryMock = (rows = []) => {
+  const resultPromise = Promise.resolve({ data: rows, error: null });
+  const query = {
+    select: jest.fn(() => query),
+    eq: jest.fn(() => query),
+    in: jest.fn(() => resultPromise),
+    limit: jest.fn(() => resultPromise),
+    single: jest.fn(() =>
+      Promise.resolve({
+        data: rows[0] ?? null,
+        error: rows.length ? null : { code: 'PGRST116' }
+      })
+    )
+  };
+  return query;
+};
 
 jest.mock('../../src/middleware/logger', () => ({
   createLoggerMiddleware: jest.fn().mockResolvedValue((req, res, next) => next()),
   logError: jest.fn()
 }));
 
-jest.mock('../../src/utils/supabase');
+jest.mock('../../src/utils/supabase', () => supabaseMock);
+jest.mock('../../src/supabase-client', () => ({ supabase: supabaseMock }));
+jest.mock('../../src/middleware/rbac', () => ({
+  requireProjectCreation: () => (req, _res, next) => next(),
+  requireProjectEdit: () => (req, _res, next) => next(),
+  requireAddProjectMembers: () => (req, _res, next) => next(),
+  filterVisibleProjects: () => {
+    return (req, _res, next) => {
+      req.visibilityFilter = {};
+      next();
+    };
+  },
+  requireTaskCreation: () => (_req, _res, next) => next(),
+  requireTaskModification: () => (_req, _res, next) => next()
+}));
+
 jest.mock('../../src/services/projectService');
 
-// Mock postgres sql function for RBAC middleware
-jest.mock('../../src/db', () => {
-  const mockSql = jest.fn(() => Promise.resolve([]));
-  mockSql.unsafe = jest.fn(() => Promise.resolve([]));
-  return { sql: mockSql };
-});
+const projectRoutes = require('../../src/routes/projects');
+const projectTasksRoutes = require('../../src/routes/projectTasks');
+const projectService = require('../../src/services/projectService');
 
 describe('API Integration Tests', () => {
   let app;
-  let mockSql;
 
   beforeAll(() => {
-    // Get the mocked sql function
-    mockSql = require('../../src/db').sql;
-
     app = express();
     app.use(cors());
     app.use(express.json());
@@ -86,13 +114,9 @@ describe('API Integration Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Setup default mock responses for RBAC middleware database queries
-    // This mocks user info queries
-    mockSql.mockImplementation((strings, ...values) => {
-      // Check if it's a user query (from filterVisibleProjects or other RBAC middleware)
-      const query = strings.join('');
-      if (query.includes('from public.users')) {
-        return Promise.resolve([{
+    supabaseMock.from.mockImplementation((table) => {
+      if (table === 'users') {
+        return createQueryMock([{
           id: 1,
           name: 'Test User',
           email: 'test@example.com',
@@ -102,32 +126,39 @@ describe('API Integration Tests', () => {
           department: 'Backend'
         }]);
       }
-      // Check if it's a project query (from requireProjectEdit, requireTaskCreation, etc)
-      if (query.includes('from public.projects')) {
-        return Promise.resolve([{
-          id: 1,
-          creator_id: 1,
-          user_ids: [1],
-          role: 'admin',
-          hierarchy: 10,
-          division: 'Engineering'
-        }]);
+
+      if (table === 'projects') {
+        return {
+          ...createQueryMock([{
+            id: 1,
+            creator_id: 1,
+            users: {
+              role: 'admin',
+              hierarchy: 10,
+              division: 'Engineering'
+            }
+          }]]),
+          update: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({ data: [{ id: 1 }], error: null }))
+          }))
+        };
       }
-      // Check if it's a task query (from requireTaskModification)
-      if (query.includes('from public.tasks')) {
-        return Promise.resolve([{
+
+      if (table === 'project_members') {
+        return createQueryMock([{ project_id: 1, user_id: 1 }]);
+      }
+
+      if (table === 'tasks') {
+        return createQueryMock([{
           id: 1,
           project_id: 1,
           assigned_to: [1],
           project_creator_id: 1,
-          project_members: [1],
-          role: 'admin',
-          hierarchy: 10,
-          division: 'Engineering'
+          project_members: [1]
         }]);
       }
-      // Default: return empty array
-      return Promise.resolve([]);
+
+      return createQueryMock([]);
     });
   });
 

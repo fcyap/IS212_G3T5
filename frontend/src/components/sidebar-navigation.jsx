@@ -4,32 +4,29 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { CreateProjectDialog } from "@/components/create-project"
 import { useProjects } from "@/contexts/project-context"
+import { useNotifications } from "@/contexts/notification-context"
 import { useSession } from "@/components/session-provider"
+import { useRouter } from "next/navigation"
 import {
     Home,
-    CheckSquare,
-    Inbox,
     BarChart3,
-    Briefcase,
-    Target,
     FolderOpen,
-    Users,
     Plus,
     ChevronRight,
     ChevronDown,
     Menu,
-    Settings,
-    Mail,
+    Bell,
+    Inbox,
 } from "lucide-react"
 
 const NavItem = ({ icon: Icon, label, isActive, isCollapsed, onClick, hasChevron }) => {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors ${
+      className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors touch-manipulation min-h-[44px] ${
         isActive
           ? "bg-blue-500 text-white"
-          : "text-gray-300 hover:bg-gray-700 hover:text-white"
+          : "text-gray-300 hover:bg-gray-700 hover:text-white active:bg-gray-600"
       }`}
     >
       <Icon className="w-4 h-4" />
@@ -45,13 +42,20 @@ const NavItem = ({ icon: Icon, label, isActive, isCollapsed, onClick, hasChevron
 
 export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSelect, onViewSelect, selectedProjectId, currentView }) {
     const [isProjectsExpanded, setIsProjectsExpanded] = useState(true)
-    const [isTeamsExpanded, setIsTeamsExpanded] = useState(true)
     const { projects, loading, error, selectedProject, selectProject } = useProjects()
+    const { unreadCount } = useNotifications()
     const { user, role, loading: sessionLoading } = useSession()
+    const router = useRouter()
 
     // Check if user can create projects (only managers and admins)
     const canCreateProject = () => {
         return user?.role === 'manager' || user?.role === 'admin'
+    }
+
+    // Notification count is now provided by NotificationContext - no need to fetch separately
+
+    const handleNotificationClick = () => {
+        router.push('/notifications')
     }
 
     const displayName = user?.name || user?.email || 'Unknown User'
@@ -70,12 +74,12 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
 
     return (
         <div
-            className={`${isCollapsed ? "w-16" : "w-64"} bg-[#1f1f23] text-white flex flex-col h-screen transition-all duration-300`}
+            className={`${isCollapsed ? "w-16" : "w-64"} bg-[#1f1f23] text-white flex flex-col h-screen transition-all duration-300 flex-shrink-0 border-r border-gray-700 safe-area-inset-left`}
         >
             {/* Header */}
             <div className="p-4 border-b border-gray-700">
                 <div className="flex items-center gap-3 mb-4">
-                    <button onClick={onToggleCollapse} className="p-1 hover:bg-gray-700 rounded transition-colors">
+                    <button onClick={onToggleCollapse} className="p-2 hover:bg-gray-700 active:bg-gray-600 rounded transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Toggle sidebar">
                         <Menu className="w-5 h-5" />
                     </button>
                     {!isCollapsed && (
@@ -91,13 +95,13 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                 {canCreateProject() && (
                     isCollapsed ? (
                         <CreateProjectDialog isCollapsed={true}>
-                            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-lg p-2">
+                            <Button className="w-full bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white rounded-lg p-2 min-h-[44px] touch-manipulation">
                                 <Plus className="w-4 h-4" />
                             </Button>
                         </CreateProjectDialog>
                     ) : (
                         <CreateProjectDialog isCollapsed={false}>
-                            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-lg">
+                            <Button className="w-full bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white rounded-lg min-h-[44px] touch-manipulation">
                                 <Plus className="w-4 h-4 mr-2" />
                                 Create
                             </Button>
@@ -118,8 +122,6 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                           isCollapsed={isCollapsed} 
                           onClick={() => onViewSelect('home')}
                         />
-                        <NavItem icon={CheckSquare} label="My tasks" isCollapsed={isCollapsed} />
-                        <NavItem icon={Inbox} label="Inbox" isCollapsed={isCollapsed} />
                         <NavItem 
                           icon={BarChart3} 
                           label="Board" 
@@ -127,23 +129,46 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                           isCollapsed={isCollapsed} 
                           onClick={() => onViewSelect('board')}
                         />
+                        {!isCollapsed && (
+                            <button
+                                onClick={handleNotificationClick}
+                                className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-gray-300 hover:bg-gray-700 hover:text-white active:bg-gray-600 relative touch-manipulation min-h-[44px]"
+                            >
+                                <Bell className="w-4 h-4" />
+                                <span className="flex-1 text-left">Notifications</span>
+                                {unreadCount > 0 && (
+                                    <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                        {unreadCount > 99 ? '99+' : unreadCount}
+                                    </span>
+                                )}
+                            </button>
+                        )}
+                        {isCollapsed && (
+                            <button
+                                onClick={handleNotificationClick}
+                                className="w-full flex items-center justify-center px-3 py-2 text-sm rounded-lg transition-colors text-gray-300 hover:bg-gray-700 hover:text-white active:bg-gray-600 relative touch-manipulation min-h-[44px]"
+                            >
+                                <Bell className="w-4 h-4" />
+                                {unreadCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center text-[10px]">
+                                        {unreadCount > 9 ? '9+' : unreadCount}
+                                    </span>
+                                )}
+                            </button>
+                        )}
+                        {(user?.role === 'hr' || user?.role === 'admin') && (
+                          <NavItem 
+                            icon={BarChart3} 
+                            label="Reports" 
+                            isCollapsed={isCollapsed}
+                            isActive={currentView === 'reports'}
+                            onClick={() => onViewSelect('reports')}
+                          />
+                        )}
                     </nav>
 
                     {!isCollapsed && (
                         <>
-                            {/* Insights Section */}
-                            <div className="mb-6">
-                                <div className="flex items-center justify-between px-3 py-2 text-sm font-medium text-white">
-                                    <span>Insights</span>
-                                    <Plus className="w-4 h-4" />
-                                </div>
-                                <nav className="space-y-1">
-                                    <NavItem icon={BarChart3} label="Reporting" isCollapsed={isCollapsed} />
-                                    <NavItem icon={Briefcase} label="Portfolios" isCollapsed={isCollapsed} />
-                                    <NavItem icon={Target} label="Goals" isCollapsed={isCollapsed} />
-                                </nav>
-                            </div>
-
                             {/* Projects Section - Show for all users who have projects */}
                             {projects.length > 0 && (
                                 <div className="mb-6">
@@ -164,7 +189,7 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                                 className="cursor-pointer hover:text-gray-300"
                                                 onClick={() => onViewSelect('projects')}
                                             >
-                                                Projects
+                                                My Projects
                                             </span>
                                         </div>
                                         {canCreateProject() && (
@@ -177,7 +202,7 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                     </div>
                                 {isProjectsExpanded && (
                                     <nav className="space-y-1">
-                                        {error && (
+                                        {error && !error.includes('Unauthorized') && (
                                             <div className="px-3 py-2 text-xs text-red-400">
                                                 Error loading projects: {error}
                                             </div>
@@ -204,35 +229,20 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                 )}
                                 </div>
                             )}
-
-                            {/* Teams Section */}
-                            <div className="mb-6">
-                                <div className="flex items-center justify-between px-3 py-2 text-sm font-medium text-white">
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => setIsTeamsExpanded(!isTeamsExpanded)}
-                                            className="p-0 bg-[#1f1f23] text-white"
-                                        >
-                                            {isTeamsExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                                        </button>
-                                        <span>Teams</span>
-                                    </div>
-                                    <Plus className="w-4 h-4" />
-                                </div>
-                                {isTeamsExpanded && (
-                                    <nav className="space-y-1">
-                                        <NavItem icon={Users} label="YANG's first team" hasChevron isCollapsed={isCollapsed} />
-                                    </nav>
-                                )}
-                            </div>
                         </>
                     )}
 
                     {isCollapsed && (
                         <nav className="space-y-1">
-                            <NavItem icon={BarChart3} label="Reporting" isCollapsed={isCollapsed} />
-                            <NavItem icon={Briefcase} label="Portfolios" isCollapsed={isCollapsed} />
-                            <NavItem icon={Target} label="Goals" isCollapsed={isCollapsed} />
+                            {(user?.role === 'hr' || user?.role === 'admin') && (
+                              <NavItem 
+                                icon={BarChart3} 
+                                label="Reports" 
+                                isCollapsed={isCollapsed}
+                                isActive={currentView === 'reports'}
+                                onClick={() => onViewSelect('reports')}
+                              />
+                            )}
                             {projects.map((project) => (
                                 <NavItem
                                     key={project.id}
@@ -243,8 +253,6 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                     onClick={() => onProjectSelect(project.id)}
                                 />
                             ))}
-                            <NavItem icon={Users} label="YANG's first team" isCollapsed={isCollapsed} />
-                            <NavItem icon={Settings} label="Settings" isCollapsed={isCollapsed} />
                         </nav>
                     )}
                 </div>
@@ -278,25 +286,6 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                 </div>
             )}
 
-            {/* Bottom Section */}
-            <div className="p-4 border-t border-gray-700 space-y-3">
-                <div className="flex items-center justify-between">
-                    {isCollapsed ? (
-                        <>
-                            <Button variant="ghost" className="text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg p-2">
-                                <Users className="w-4 h-4" />
-                            </Button>
-                        </>
-                    ) : (
-                        <>
-                            <Button variant="ghost" className="flex-1 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg mr-2">
-                                <Users className="w-4 h-4 mr-2" />
-                                Invite teammates
-                            </Button>
-                        </>
-                    )}
-                </div>
-            </div>
         </div>
     )
 }

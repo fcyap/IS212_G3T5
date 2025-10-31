@@ -1,12 +1,26 @@
 // src/middleware/auth.js
 const { getSession, touchSession, deleteSession } = require('../auth/sessions');
+const supabase = require('../utils/supabase');
 
 const cookieName = process.env.SESSION_COOKIE_NAME || 'spm_session';
 
-const buildUserFromSession = (session) => ({
-  id: session.user_id,
-  email: session.email,
-});
+const buildUserFromSession = async (session) => {
+  // Fetch full user data from database to include role and other fields
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('id, email, name, role, hierarchy, division, department')
+    .eq('id', session.user_id)
+    .single();
+
+  if (error || !user) {
+    return {
+      id: session.user_id,
+      email: session.email,
+    };
+  }
+
+  return user;
+};
 
 const authMiddleware = () => async (req, res, next) => {
   const token = req.cookies?.[cookieName];
@@ -29,7 +43,7 @@ const authMiddleware = () => async (req, res, next) => {
   res.locals.sessionToken = token;
   res.locals.session = session;
   res.locals.newExpiry = newExpiry;
-  req.user = buildUserFromSession(session);
+  req.user = await buildUserFromSession(session);
   next();
 };
 
@@ -43,7 +57,7 @@ const optionalAuthMiddleware = () => async (req, res, next) => {
     res.locals.sessionToken = token;
     res.locals.session = session;
     res.locals.newExpiry = await touchSession(null, token);
-    req.user = buildUserFromSession(session);
+    req.user = await buildUserFromSession(session);
   } catch (err) {
     console.error('[optionalAuthMiddleware] error', err);
   }

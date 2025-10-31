@@ -20,9 +20,26 @@ const list = async (req, res) => {
     const user = res.locals.session || req.user;
     const userId = user ? (user.user_id || user.id) : null;
 
+    const userDepartment = user?.department;
     const tasks = taskService.listWithAssignees
-      ? await taskService.listWithAssignees({ archived, parentId, userId, userRole: user?.role, userHierarchy: user?.hierarchy, userDivision: user?.division })
-      : await taskService.getAllTasks({ archived, parentId, userId, userRole: user?.role, userHierarchy: user?.hierarchy, userDivision: user?.division });
+      ? await taskService.listWithAssignees({
+          archived,
+          parentId,
+          userId,
+          userRole: user?.role,
+          userHierarchy: user?.hierarchy,
+          userDivision: user?.division,
+          userDepartment,
+        })
+      : await taskService.getAllTasks({
+          archived,
+          parentId,
+          userId,
+          userRole: user?.role,
+          userHierarchy: user?.hierarchy,
+          userDivision: user?.division,
+          userDepartment,
+        });
 
     res.json(tasks);
   } catch (e) {
@@ -56,12 +73,16 @@ const update = async (req, res) => {
     if (!Number.isFinite(id)) {
       return res.status(400).json({ error: "Invalid id" });
     }
-    console.log("req.body:", req.body);
     const task = await taskService.updateTask(id, req.body, req.user?.id ?? null);
     res.json(task);
   } catch (e) {
     console.error("[PUT /tasks/:id]", e);
-    res.status(e.status || 500).json({ error: e.message || "Server error" });
+    const status = e.status || e.httpCode || 500;
+    if (status === 400 || status === 403) {
+      res.status(status).json({ message: e.message });
+    } else {
+      res.status(status).json({ error: e.message || "Server error" });
+    }
   }
 };
 
@@ -93,6 +114,7 @@ const getAllTasks = async (req, res) => {
       filters.userRole = user.role;
       filters.userHierarchy = user.hierarchy;
       filters.userDivision = user.division;
+      filters.userDepartment = user.department;
     }
 
     filters.offset = (filters.page - 1) * filters.limit;
@@ -282,11 +304,9 @@ const updateTask = async (req, res) => {
     console.log("[taskcontroller]:", res.json(updatedTask));
   } catch (err) {
     console.error('Error in updateTask:', err);
-    if (err.message.includes('permission')) {
-      res.status(403).json({ success: false, message: err.message });
-    } else {
-      res.status(500).json({ success: false, message: err.message });
-    }
+    const statusCode = err.status
+      || (err.message && err.message.includes('permission') ? 403 : 500);
+    res.status(statusCode).json({ success: false, message: err.message });
   }
 };
 
@@ -333,6 +353,26 @@ const getProjectTaskStats = async (req, res) => {
   }
 };
 
+const getSubtasks = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+
+    if (!taskId || isNaN(taskId)) {
+      return res.status(400).json({ success: false, message: 'Valid task ID is required' });
+    }
+
+    const subtasks = await taskService.getSubtasks(parseInt(taskId));
+
+    res.json({
+      success: true,
+      subtasks
+    });
+  } catch (err) {
+    console.error('Error in getSubtasks:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 module.exports = {
   list,
   create,
@@ -345,5 +385,6 @@ module.exports = {
   createTask,
   updateTask,
   deleteTask,
-  getProjectTaskStats
+  getProjectTaskStats,
+  getSubtasks
 };

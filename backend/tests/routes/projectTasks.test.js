@@ -1,27 +1,29 @@
 const request = require('supertest');
 const express = require('express');
-const projectTasksRoutes = require('../../src/routes/projectTasks');
 
-// Mock Supabase
 jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => ({
-    from: jest.fn(() => ({
-      select: jest.fn(() => ({
-        eq: jest.fn(() => ({
-          single: jest.fn().mockResolvedValue({
-            data: { id: 1 },
-            error: null
-          })
-        }))
-      }))
-    }))
-  }))
+  createClient: jest.fn(() => null),
 }));
+
+const mockTimeSummary = {
+  total_hours: 3.5,
+  per_assignee: [{ user_id: 1, hours: 3.5 }]
+};
+
+jest.mock('../../src/services/taskAssigneeHoursService', () => ({
+  getTaskHoursSummary: jest.fn().mockResolvedValue(mockTimeSummary)
+}));
+
+const taskAssigneeHoursService = require('../../src/services/taskAssigneeHoursService');
+const projectTasksService = require('../../src/services/projectTasksService');
+const projectTasksRoutes = require('../../src/routes/projectTasks');
 
 describe('ProjectTasks Routes', () => {
   let app;
 
   beforeEach(() => {
+    jest.clearAllMocks();
+    projectTasksService.createTask.mockReset();
     app = express();
     app.use(express.json());
     app.use('/projects', projectTasksRoutes);
@@ -29,6 +31,36 @@ describe('ProjectTasks Routes', () => {
     // Set environment variables for testing
     process.env.SUPABASE_URL_LT = 'http://localhost:54321';
     process.env.SUPABASE_SECRET_KEY_LT = 'test-key';
+  });
+
+  describe('POST /projects/:projectId/tasks', () => {
+    test('creates task successfully for active project', async () => {
+      const createdTask = { success: true, task: { id: 11, title: 'Task' } };
+      projectTasksService.createTask.mockResolvedValue(createdTask);
+
+      const response = await request(app)
+        .post('/projects/1/tasks')
+        .send({ title: 'Task' })
+        .expect(201);
+
+      expect(projectTasksService.createTask).toHaveBeenCalledWith(1, { title: 'Task' }, 1);
+      expect(response.body).toEqual(createdTask);
+    });
+
+    test('returns 400 when project is archived', async () => {
+      projectTasksService.createTask.mockResolvedValue({
+        success: false,
+        error: 'Cannot create tasks for archived projects',
+      });
+
+      const response = await request(app)
+        .post('/projects/1/tasks')
+        .send({ title: 'Archived attempt' })
+        .expect(400);
+
+      expect(projectTasksService.createTask).toHaveBeenCalledWith(1, { title: 'Archived attempt' }, 1);
+      expect(response.body.error).toBe('Cannot create tasks for archived projects');
+    });
   });
 
   describe('GET /projects/:projectId/tasks', () => {
@@ -194,6 +226,8 @@ describe('ProjectTasks Routes', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body).toHaveProperty('task');
+      expect(response.body.task.time_tracking).toEqual({ total_hours: 0, per_assignee: [] });
+      expect(taskAssigneeHoursService.getTaskHoursSummary).not.toHaveBeenCalled();
     });
 
     test('should handle invalid project ID for task retrieval', async () => {
@@ -368,3 +402,19 @@ describe('ProjectTasks Routes', () => {
     });
   });
 });
+jest.mock('../../src/middleware/auth', () => ({
+  authMiddleware: () => (req, _res, next) => {
+    req.user = req.user || { id: 1 };
+    next();
+  },
+}));
+
+jest.mock('../../src/middleware/rbac', () => ({
+  requireTaskCreation: () => (_req, _res, next) => next(),
+  requireTaskModification: () => (_req, _res, next) => next(),
+  requireProjectEdit: () => (_req, _res, next) => next(),
+}));
+
+jest.mock('../../src/services/projectTasksService', () => ({
+  createTask: jest.fn(),
+}));
