@@ -29,6 +29,18 @@ class ProjectTasksService {
     return true;
   }
 
+  async _fetchProjectDetails(projectId) {
+    if (typeof projectRepository.getProjectById !== 'function') {
+      return null;
+    }
+    try {
+      return await projectRepository.getProjectById(projectId);
+    } catch (error) {
+      console.error('[ProjectTasksService] Failed to fetch project details:', error);
+      return null;
+    }
+  }
+
   /**
    * Validate positive integer
    * @param {any} value - Value to validate
@@ -293,6 +305,20 @@ class ProjectTasksService {
       // Validate project exists
       const validatedProjectId = this.validatePositiveInteger(projectId, 'projectId');
       await this.validateProjectExists(validatedProjectId);
+      const projectDetails = await this._fetchProjectDetails(validatedProjectId);
+      const projectStatus = String(projectDetails?.status || '').toLowerCase();
+      if (projectStatus === 'archived') {
+        console.warn('[ProjectTasksService] Attempted task creation on archived project', {
+          projectId: validatedProjectId,
+          requestedBy: creatorId,
+          payload: {
+            title: taskData?.title,
+            status: taskData?.status,
+            priority: taskData?.priority,
+          },
+        });
+        throw new Error('Cannot create tasks for archived projects');
+      }
 
       // Validate required fields
       const { title, description, assigned_to, priority = 'medium', deadline, status = 'pending' } = taskData;

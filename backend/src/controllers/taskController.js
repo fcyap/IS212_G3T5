@@ -73,12 +73,16 @@ const update = async (req, res) => {
     if (!Number.isFinite(id)) {
       return res.status(400).json({ error: "Invalid id" });
     }
-    console.log("req.body:", req.body);
     const task = await taskService.updateTask(id, req.body, req.user?.id ?? null);
     res.json(task);
   } catch (e) {
     console.error("[PUT /tasks/:id]", e);
-    res.status(e.status || 500).json({ error: e.message || "Server error" });
+    const status = e.status || e.httpCode || 500;
+    if (status === 400 || status === 403) {
+      res.status(status).json({ message: e.message });
+    } else {
+      res.status(status).json({ error: e.message || "Server error" });
+    }
   }
 };
 
