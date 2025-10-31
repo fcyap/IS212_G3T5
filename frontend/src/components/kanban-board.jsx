@@ -210,7 +210,7 @@ export function KanbanBoard({ projectId = null }) {
       const payload = {
         title,
         description: description || null,
-        priority: (priority || "Low").toLowerCase(),
+        priority: Number(priority) || 5, // Default to medium priority
         status: editorLane,
         deadline: dueDate || null,
         project_id: resolvedProjectId,

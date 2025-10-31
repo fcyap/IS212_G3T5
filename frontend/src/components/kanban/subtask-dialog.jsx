@@ -140,7 +140,7 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
       const payload = {
         title: title.trim(),
         description: description.trim() || null,
-        priority: priority.toLowerCase(),
+        priority: Number(priority) || 5, // Send as integer
         status,
         deadline: deadline || null,
         tags,

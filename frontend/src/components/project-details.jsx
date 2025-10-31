@@ -337,7 +337,7 @@ export function ProjectDetails({ projectId, onBack }) {
         body: JSON.stringify({
           title,
           description: description || null,
-          priority: (priority || "Low").toLowerCase(),
+          priority: Number(priority) || 5, // Send as integer
           status: 'pending',
           deadline: dueDate || null,
           project_id: projectId,
@@ -460,7 +460,7 @@ export function ProjectDetails({ projectId, onBack }) {
         body: JSON.stringify({
           title: taskData.title,
           description: taskData.description || null,
-          priority: taskData.priority.toLowerCase(),
+          priority: Number(taskData.priority) || 5, // Send as integer
           status: taskData.status,
           deadline: taskData.deadline || null,
           tags: taskData.tags || [],
@@ -605,7 +605,7 @@ export function ProjectDetails({ projectId, onBack }) {
         return false
       }
 
-      if (taskFilters.priority !== 'all' && task.priority !== taskFilters.priority.toLowerCase()) {
+      if (taskFilters.priority !== 'all' && Number(task.priority) !== Number(taskFilters.priority)) {
         return false
       }
 
