@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
-import { useUserSearch } from '@/hooks/useUserSearch';
 import { fetchWithCsrf } from '@/lib/csrf';
 import { FileUploadInput } from '../file-upload-input';
 import { RecurrencePicker } from './recurrence-picker';
@@ -44,7 +43,6 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
     { value: "cancelled", label: "Cancelled" }
   ];
   const canEdit = true
-  const MAX_ASSIGNEES = 5
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState([]);
   const [recurrence, setRecurrence] = useState(null);
@@ -73,53 +71,13 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
     });
   }, [normalizedDefaultProjectId, projects]);
 
-  // --- Assignees & user search (copied from TaskSidePanel, trimmed) ---
-  const [assignees, setAssignees] = useState([]);
-  const {
-    query: userSearch,
-    results: userSearchResults,
-    loading: loadingUsers,
-    search: searchUsers,
-    clear: clearUserSearch,
-  } = useUserSearch({ canSearch: true, minQueryLength: 1 })
-
-  useEffect(() => {
-    if (!currentUser?.id) return
-    setAssignees(prev => {
-      if (prev.some(a => a.id === currentUser.id)) return prev
-      return [...prev, { id: currentUser.id, name: currentUser.name ?? 'You' }]
-    })
-  }, [currentUser])
-
   const hasTitle = title.trim().length > 0;
   const hasDescription = description.trim().length > 0;
   const hasPriority = !!priority;
   const hasStatus = !!status;
   const hasDueDate = !!dueDate;
-  const hasAssignees = assignees.length > 0;
   const hasProject = selectedProjectId != null;
-  const canSave = hasTitle && hasDescription && hasPriority && hasStatus && hasDueDate && hasAssignees && hasProject;
-
-  function addAssignee(user) {
-    setAssignees((prev) => {
-      if (prev.length >= MAX_ASSIGNEES || prev.some((a) => a.id === user.id)) return prev
-      return [...prev, user]
-    });
-    clearUserSearch();
-  }
-
-  function removeAssignee(userId) {
-    setAssignees((prev) => {
-      if (prev.length <= 1) return prev
-      return prev.filter((a) => a.id !== userId)
-    });
-  }
-
-  function handleUserSearchInput(e) {
-    const value = e.target.value;
-    if (assignees.length >= MAX_ASSIGNEES) return;
-    searchUsers(value);
-  }
+  const canSave = hasTitle && hasDescription && hasPriority && hasStatus && hasDueDate && hasProject;
 
   function addTagFromInput() {
     if (!canEdit) return;
@@ -220,64 +178,6 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
         placeholder="Type a tag and press Enter (or comma)"
         className="bg-transparent text-gray-100 border-gray-700"
       />
-      {/* Assignees */}
-      <div className="mt-3 relative">
-        <label className="block text-xs text-gray-400 mb-1">Assignees</label>
-        <input
-          type="text"
-          className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500 disabled:opacity-60"
-          placeholder="Search users by name or email..."
-          value={userSearch}
-          onChange={handleUserSearchInput}
-          aria-busy={loadingUsers ? 'true' : 'false'}
-          autoComplete="off"
-          disabled={assignees.length >= MAX_ASSIGNEES}
-        />
-        {assignees.length < MAX_ASSIGNEES && userSearchResults.length > 0 && (
-          <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
-            {userSearchResults.map((u) => (
-              <div
-                key={u.id}
-                className="px-3 py-2 hover:bg-gray-700 cursor-pointer text-gray-100"
-                onClick={() => addAssignee(u)}
-              >
-                <span className="font-medium">{u.name}</span>
-                <span className="ml-2 text-xs text-gray-400">{u.email}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {assignees.length > 0 ? (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {assignees.map((a) => (
-              <Badge
-                key={a.id}
-                className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200 flex items-center"
-                title={a.name}
-              >
-                {a.name}
-                <button
-                  type="button"
-                  className="ml-1 text-gray-300 hover:text-white"
-                  onClick={() => removeAssignee(a.id)}
-                  aria-label={`Remove ${a.name}`}
-                >
-                  ×
-                </button>
-              </Badge>
-            ))}
-          </div>
-        ) : (
-          <span className="mt-1 block text-xs text-gray-500">No assignees</span>
-        )}
-        {assignees.length === 1 && (
-          <p className="text-xs text-amber-400 mt-2">At least one assignee is required. Add another member before removing the last one.</p>
-        )}
-        {assignees.length > MAX_ASSIGNEES && (
-          <p className="text-xs text-red-400 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
-        )}
-      </div>
 
       <div className="mt-4">
         <label className="block text-xs text-gray-400 mb-1">Project</label>
@@ -396,6 +296,11 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
         <Button
         onClick={() =>
             {
+              // Automatically assign the current user as the creator/assignee
+              const assignees = currentUser?.id
+                ? [{ id: currentUser.id, name: currentUser.name ?? 'You' }]
+                : [];
+
               const payload = {
                 title: title.trim(),
                 description: description.trim() || undefined,
