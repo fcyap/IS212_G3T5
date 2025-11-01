@@ -10,9 +10,53 @@ class ProjectTasksService {
    * Validation constants
    */
   static VALID_TASK_STATUSES = ['pending', 'in_progress', 'completed', 'cancelled'];
-  static VALID_TASK_PRIORITIES = ['low', 'medium', 'high'];
+  static PRIORITY_MIN = 1;
+  static PRIORITY_MAX = 10;
+  static DEFAULT_PRIORITY = 5;
+  static LEGACY_PRIORITY_MAP = { low: 1, medium: 5, high: 10 };
   static VALID_SORT_FIELDS = ['id', 'title', 'status', 'priority', 'created_at', 'updated_at', 'deadline'];
   static VALID_SORT_ORDERS = ['asc', 'desc'];
+
+  static get PRIORITY_ERROR_MESSAGE() {
+    return `Priority must be an integer between ${ProjectTasksService.PRIORITY_MIN} and ${ProjectTasksService.PRIORITY_MAX}`;
+  }
+
+  static normalizePriority(priority) {
+    if (priority === undefined || priority === null || priority === '') {
+      return null;
+    }
+
+    const toProcess = typeof priority === 'string' ? priority.trim().toLowerCase() : priority;
+
+    if (typeof toProcess === 'string') {
+      if (toProcess in ProjectTasksService.LEGACY_PRIORITY_MAP) {
+        return ProjectTasksService.LEGACY_PRIORITY_MAP[toProcess];
+      }
+      if (toProcess === '') {
+        return null;
+      }
+      const parsed = Number(toProcess);
+      if (!Number.isFinite(parsed)) {
+        throw new Error(ProjectTasksService.PRIORITY_ERROR_MESSAGE);
+      }
+      return ProjectTasksService.normalizePriority(parsed);
+    }
+
+    const numericPriority = Number(toProcess);
+    if (!Number.isFinite(numericPriority)) {
+      throw new Error(ProjectTasksService.PRIORITY_ERROR_MESSAGE);
+    }
+
+    const intPriority = Math.trunc(numericPriority);
+    if (
+      intPriority < ProjectTasksService.PRIORITY_MIN ||
+      intPriority > ProjectTasksService.PRIORITY_MAX
+    ) {
+      throw new Error(ProjectTasksService.PRIORITY_ERROR_MESSAGE);
+    }
+
+    return intPriority;
+  }
 
   /**
    * Validate project exists
@@ -95,11 +139,12 @@ class ProjectTasksService {
       cleanFilters.status = filters.status;
     }
 
-    if (filters.priority) {
-      if (!ProjectTasksService.VALID_TASK_PRIORITIES.includes(filters.priority)) {
-        throw new Error(`Invalid priority. Must be one of: ${ProjectTasksService.VALID_TASK_PRIORITIES.join(', ')}`);
+    if (filters.priority !== undefined && filters.priority !== null && filters.priority !== '') {
+      if (filters.priority === 'all') {
+        // No-op for legacy UI filters
+      } else {
+        cleanFilters.priority = ProjectTasksService.normalizePriority(filters.priority);
       }
-      cleanFilters.priority = filters.priority;
     }
 
     if (filters.assigned_to) {
@@ -321,7 +366,14 @@ class ProjectTasksService {
       }
 
       // Validate required fields
-      const { title, description, assigned_to, priority = 'medium', deadline, status = 'pending' } = taskData;
+      const {
+        title,
+        description,
+        assigned_to,
+        priority = ProjectTasksService.DEFAULT_PRIORITY,
+        deadline,
+        status = 'pending'
+      } = taskData;
 
       if (!title || title.trim() === '') {
         throw new Error('Title is required');
@@ -332,9 +384,8 @@ class ProjectTasksService {
         throw new Error(`Invalid status. Must be one of: ${ProjectTasksService.VALID_TASK_STATUSES.join(', ')}`);
       }
 
-      if (priority && !ProjectTasksService.VALID_TASK_PRIORITIES.includes(priority)) {
-        throw new Error(`Invalid priority. Must be one of: ${ProjectTasksService.VALID_TASK_PRIORITIES.join(', ')}`);
-      }
+      const normalizedPriority = ProjectTasksService.normalizePriority(priority ?? ProjectTasksService.DEFAULT_PRIORITY)
+        ?? ProjectTasksService.DEFAULT_PRIORITY;
 
       // Validate assigned_to array if provided
       if (assigned_to && (!Array.isArray(assigned_to) || assigned_to.some(id => isNaN(parseInt(id)) || parseInt(id) <= 0))) {
@@ -370,7 +421,7 @@ class ProjectTasksService {
         title: title.trim(),
         description: description?.trim() || '',
         status,
-        priority,
+        priority: normalizedPriority,
         project_id: validatedProjectId,
         assigned_to: uniqueAssignees,
         deadline: deadline || null,
@@ -511,8 +562,12 @@ class ProjectTasksService {
         throw new Error(`Invalid status. Must be one of: ${ProjectTasksService.VALID_TASK_STATUSES.join(', ')}`);
       }
 
-      if (filteredUpdateData.priority && !ProjectTasksService.VALID_TASK_PRIORITIES.includes(filteredUpdateData.priority)) {
-        throw new Error(`Invalid priority. Must be one of: ${ProjectTasksService.VALID_TASK_PRIORITIES.join(', ')}`);
+      if (Object.prototype.hasOwnProperty.call(filteredUpdateData, 'priority')) {
+        const normalizedPriorityUpdate = ProjectTasksService.normalizePriority(filteredUpdateData.priority);
+        if (normalizedPriorityUpdate === null) {
+          throw new Error(ProjectTasksService.PRIORITY_ERROR_MESSAGE);
+        }
+        filteredUpdateData.priority = normalizedPriorityUpdate;
       }
 
       if (filteredUpdateData.assigned_to && (!Array.isArray(filteredUpdateData.assigned_to) ||

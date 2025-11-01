@@ -647,8 +647,6 @@ export function ProjectDetails({ projectId, onBack }) {
         if (!isNaN(taskPriority) && !isNaN(filterPriority) && taskPriority !== filterPriority) {
           return false;
         }
-      if (!matchesPriority) {
-        return false
       }
 
       if (taskFilters.dueDate && task.deadline) {
@@ -677,10 +675,15 @@ export function ProjectDetails({ projectId, onBack }) {
     }
 
     if (taskFilters.priority !== 'all') {
-      const taskPriority = Number(task.priority);
-      const filterPriority = Number(taskFilters.priority);
-      if (!isNaN(taskPriority) && !isNaN(filterPriority) && taskPriority !== filterPriority) {
-        return false;
+      const taskPriority = Number(task.priority)
+      const filterPriority = Number(taskFilters.priority)
+      const bothNumeric = !Number.isNaN(taskPriority) && !Number.isNaN(filterPriority)
+      if (bothNumeric) {
+        if (taskPriority !== filterPriority) {
+          return false
+        }
+      } else if (!matchesPriority) {
+        return false
       }
     }
 
