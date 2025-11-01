@@ -1081,7 +1081,8 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
     searchUsers(value);
   }
 
-  const canUpdateHours = isSelfAssignee;
+  const isPendingStatus = status === "pending";
+  const canUpdateHours = isSelfAssignee && !isPendingStatus;
   const numericHours = Number(hoursSpent);
   const isHoursValid =
     hoursSpent === "" ||
@@ -1443,18 +1444,26 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
               </Select>
             </div>
 
-            <TaskTimeTracking
-              value={hoursSpent}
-              onChange={handleHoursInputChange}
-              canEdit={canUpdateHours && canEdit}
-              totalHours={timeTracking.total_hours}
-              perAssignee={timeTracking.per_assignee}
-              assignees={breakdownAssignees}
-            />
-            {!isHoursValid && (
-              <p className="text-xs text-red-400">
-                Please enter a non-negative number of hours.
-              </p>
+            {!isPendingStatus ? (
+              <>
+                <TaskTimeTracking
+                  value={hoursSpent}
+                  onChange={handleHoursInputChange}
+                  canEdit={canUpdateHours && canEdit}
+                  totalHours={timeTracking.total_hours}
+                  perAssignee={timeTracking.per_assignee}
+                  assignees={breakdownAssignees}
+                />
+                {!isHoursValid && (
+                  <p className="text-xs text-red-400">
+                    Please enter a non-negative number of hours.
+                  </p>
+                )}
+              </>
+            ) : (
+              <div className="rounded-md border border-gray-700 bg-[#202126] p-3 text-xs text-gray-400">
+                Time tracking becomes available once the task is in progress.
+              </div>
             )}
             {/* Assignees */}
             <div>
