@@ -941,7 +941,7 @@ export default function ReportsPage() {
                   </div>
                   <h3 className="text-2xl font-bold text-white mb-3">No Report Generated Yet</h3>
                   <p className="text-gray-400 mb-6 leading-relaxed">
-                    Configure your filters and click the "Generate Report" button to view comprehensive task analytics and insights.
+                    Configure your filters and click the &ldquo;Generate Report&rdquo; button to view comprehensive task analytics and insights.
                   </p>
                   <div className="inline-flex items-center gap-2 text-sm text-blue-400 bg-blue-500/10 px-4 py-2 rounded-lg border border-blue-500/20">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
