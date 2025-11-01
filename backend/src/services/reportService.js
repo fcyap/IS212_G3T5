@@ -958,43 +958,103 @@ class ReportService {
 
       if (isDepartmentalReport) {
         // Export Departmental Report
-        // Sheet 1: Summary
-        if (reportData.summary) {
-          const summaryData = [
-            ['Metric', 'Value'],
-            ['Total Departments', Number(reportData.summary.totalDepartments || 0)],
-            ['Total Members', Number(reportData.summary.totalMembers || 0)],
-            ['Total Tasks', Number(reportData.summary.totalTasks || 0)],
-            ['Average Completion Rate', `${Number(reportData.summary.averageCompletionRate || 0).toFixed(1)}%`]
-          ];
+        if (format === 'csv') {
+          // For CSV, combine all data into a single sheet
+          const combinedRows = [];
 
-          if (reportData.insights) {
-            summaryData.push([]);
-            summaryData.push(['Insights', '']);
-            summaryData.push(['Most Productive Department', String(reportData.insights.mostProductiveDepartment || 'N/A')]);
-            summaryData.push(['Highest Workload Department', String(reportData.insights.highestWorkloadDepartment || 'N/A')]);
-            summaryData.push(['Needs Attention', String(reportData.insights.leastProductiveDepartment || 'N/A')]);
+          // Summary section
+          if (reportData.summary) {
+            combinedRows.push(['Summary']);
+            combinedRows.push(['Metric', 'Value']);
+            combinedRows.push(['Total Departments', Number(reportData.summary.totalDepartments || 0)]);
+            combinedRows.push(['Total Members', Number(reportData.summary.totalMembers || 0)]);
+            combinedRows.push(['Total Tasks', Number(reportData.summary.totalTasks || 0)]);
+            combinedRows.push(['Average Completion Rate', `${Number(reportData.summary.averageCompletionRate || 0).toFixed(1)}%`]);
+
+            if (reportData.insights) {
+              combinedRows.push([]);
+              combinedRows.push(['Insights', '']);
+              combinedRows.push(['Most Productive Department', String(reportData.insights.mostProductiveDepartment || 'N/A')]);
+              combinedRows.push(['Highest Workload Department', String(reportData.insights.highestWorkloadDepartment || 'N/A')]);
+              combinedRows.push(['Needs Attention', String(reportData.insights.leastProductiveDepartment || 'N/A')]);
+            }
+            combinedRows.push([]);
           }
 
-          const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-          XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
-        }
+          // Department Comparison section
+          if (reportData.departments && reportData.departments.length > 0) {
+            combinedRows.push(['Department Comparison']);
+            combinedRows.push(['Department', 'Members', 'Tasks', 'Done', 'Progress', 'Rate', 'Avg/M']);
+            reportData.departments.forEach(dept => {
+              combinedRows.push([
+                String(dept.department || 'N/A'),
+                Number(dept.memberCount || 0),
+                Number(dept.totalTasks || 0),
+                Number(dept.statusCounts?.completed || 0),
+                Number(dept.statusCounts?.in_progress || 0),
+                `${Number(dept.completionRate || 0).toFixed(1)}%`,
+                Number(dept.averageTasksPerMember || 0).toFixed(2)
+              ]);
+            });
+            combinedRows.push([]);
+          }
+
+          // Time Series section (if available)
+          if (reportData.timeSeries && reportData.timeSeries.length > 0) {
+            combinedRows.push(['Trends']);
+            combinedRows.push(['Period', 'Total Tasks', 'Completed', 'In Progress', 'Pending', 'Cancelled', 'Completion Rate', 'Low Priority', 'Medium Priority', 'High Priority']);
+            reportData.timeSeries.forEach(period => {
+              combinedRows.push([
+                String(period.period || 'N/A'),
+                Number(period.totalTasks || 0),
+                Number(period.statusCounts?.completed || 0),
+                Number(period.statusCounts?.in_progress || 0),
+                Number(period.statusCounts?.pending || 0),
+                Number(period.statusCounts?.cancelled || 0),
+                `${Number(period.completionRate || 0).toFixed(1)}%`,
+                Number(period.priorityCounts?.low || 0),
+                Number(period.priorityCounts?.medium || 0),
+                Number(period.priorityCounts?.high || 0)
+              ]);
+            });
+          }
+
+          const csvSheet = XLSX.utils.aoa_to_sheet(combinedRows);
+          XLSX.utils.book_append_sheet(workbook, csvSheet, 'Report');
+        } else {
+          // For XLSX, create separate sheets
+          // Sheet 1: Summary
+          if (reportData.summary) {
+            const summaryData = [
+              ['Metric', 'Value'],
+              ['Total Departments', Number(reportData.summary.totalDepartments || 0)],
+              ['Total Members', Number(reportData.summary.totalMembers || 0)],
+              ['Total Tasks', Number(reportData.summary.totalTasks || 0)],
+              ['Average Completion Rate', `${Number(reportData.summary.averageCompletionRate || 0).toFixed(1)}%`]
+            ];
+
+            if (reportData.insights) {
+              summaryData.push([]);
+              summaryData.push(['Insights', '']);
+              summaryData.push(['Most Productive Department', String(reportData.insights.mostProductiveDepartment || 'N/A')]);
+              summaryData.push(['Highest Workload Department', String(reportData.insights.highestWorkloadDepartment || 'N/A')]);
+              summaryData.push(['Needs Attention', String(reportData.insights.leastProductiveDepartment || 'N/A')]);
+            }
+
+            const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+            XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+          }
 
         // Sheet 2: Department Comparison
         if (reportData.departments && reportData.departments.length > 0) {
           const deptData = reportData.departments.map(dept => ({
             'Department': String(dept.department || 'N/A'),
             'Members': Number(dept.memberCount || 0),
-            'Total Tasks': Number(dept.totalTasks || 0),
-            'Completed': Number(dept.statusCounts?.completed || 0),
-            'In Progress': Number(dept.statusCounts?.in_progress || 0),
-            'Pending': Number(dept.statusCounts?.pending || 0),
-            'Cancelled': Number(dept.statusCounts?.cancelled || 0),
-            'Completion Rate': `${Number(dept.completionRate || 0).toFixed(1)}%`,
-            'Avg Tasks Per Member': Number(dept.averageTasksPerMember || 0).toFixed(2),
-            'Low Priority': Number(dept.priorityCounts?.low || 0),
-            'Medium Priority': Number(dept.priorityCounts?.medium || 0),
-            'High Priority': Number(dept.priorityCounts?.high || 0)
+            'Tasks': Number(dept.totalTasks || 0),
+            'Done': Number(dept.statusCounts?.completed || 0),
+            'Progress': Number(dept.statusCounts?.in_progress || 0),
+            'Rate': `${Number(dept.completionRate || 0).toFixed(1)}%`,
+            'Avg/M': Number(dept.averageTasksPerMember || 0).toFixed(2)
           }));
 
           const deptSheet = XLSX.utils.json_to_sheet(deptData);
@@ -1018,6 +1078,7 @@ class ReportService {
 
           const timeSeriesSheet = XLSX.utils.json_to_sheet(timeSeriesData);
           XLSX.utils.book_append_sheet(workbook, timeSeriesSheet, 'Trends');
+        }
         }
       } else if (isManualTimeReport) {
         const summary = reportData.summary || {};
