@@ -35,11 +35,28 @@ export const CommentItem = ({
   console.log('Current User:', effectiveUser);
   const canEdit = comment.user?.id && effectiveUser?.id && comment.user.id === effectiveUser.id;
   const hasReplies = comment.replies && comment.replies.length > 0;
+  const resolveRole = (roleLike) => {
+    if (!roleLike) return '';
+    if (typeof roleLike === 'string') return roleLike;
+    if (typeof roleLike === 'object') {
+      return (
+        roleLike.label ??
+        roleLike.name ??
+        roleLike.role ??
+        roleLike.roleName ??
+        roleLike.role_label ??
+        roleLike.value ??
+        ''
+      );
+    }
+    return String(roleLike);
+  };
+
   const normalizedRole = String(
-    authRole ??
-    effectiveUser?.role ??
-    effectiveUser?.roleName ??
-    effectiveUser?.role_label ??
+    resolveRole(authRole) ||
+    resolveRole(effectiveUser?.role) ||
+    effectiveUser?.roleName ||
+    effectiveUser?.role_label ||
     ''
   ).toLowerCase();
   const normalizedDepartment = String(effectiveUser?.department ?? authUser?.department ?? '').trim().toLowerCase();

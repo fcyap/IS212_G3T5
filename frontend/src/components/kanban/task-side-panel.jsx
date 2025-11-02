@@ -457,34 +457,78 @@ export function TaskSidePanel({
 
   async function handleSave() {
     if (!canSave || saving) return;
-    const assigned_to = assignees.map((a) => Number(a.id)).filter(Number.isFinite);
-    const sanitizedAssignees = assignees
-      .map((assignee) => {
-        if (!assignee) return null;
-        const rawId = assignee.id ?? assignee.user_id ?? assignee.userId ?? null;
-        if (rawId == null) return null;
-        return {
-          id: rawId,
-          name: assignee.name ?? assignee.email ?? null,
-        };
-      })
-      .filter(Boolean);
-    const payload = {
-      title: title.trim(),
-      description: description.trim() || null,
-      priority,
-      status,
-      deadline: deadline || null,
-      tags,
-      assigned_to,
-      assignees: sanitizedAssignees,
-      recurrence: recurrence ?? null,
-    };
-    if (canUpdateHours && hoursSpent !== "" && Number.isFinite(numericHours) && numericHours >= 0) {
-      payload.hours = numericHours;
-    }
+    
     try {
       if (isMountedRef.current) setSaving(true);
+      
+      // Upload attachments first if there are any
+      if (attachments.length > 0) {
+        try {
+          const formData = new FormData()
+          attachments.forEach((file) => {
+            formData.append('files', file)
+          })
+          
+          const response = await fetchWithCsrf(`${API}/api/tasks/${task.id}/files`, {
+            method: 'POST',
+            body: formData,
+          })
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            throw new Error(errorData.message || 'Failed to upload files')
+          }
+          
+          const result = await response.json()
+          
+          // Check if there were any errors during upload
+          if (result.data?.errors && result.data.errors.length > 0) {
+            result.data.errors.forEach(error => {
+              toast.error(error, { duration: 5000 })
+            })
+          }
+          
+          if (result.data?.uploaded && result.data.uploaded.length > 0) {
+            toast.success(`${result.data.uploaded.length} file(s) uploaded successfully`)
+          }
+          
+          setAttachments([])
+        } catch (error) {
+          console.error('Error uploading files:', error)
+          toast.error(error.message || 'Failed to upload files', { duration: 5000 })
+          // Don't proceed with save if file upload fails
+          return
+        }
+      }
+      
+      // Now save the task
+      const assigned_to = assignees.map((a) => Number(a.id)).filter(Number.isFinite);
+      const sanitizedAssignees = assignees
+        .map((assignee) => {
+          if (!assignee) return null;
+          const rawId = assignee.id ?? assignee.user_id ?? assignee.userId ?? null;
+          if (rawId == null) return null;
+          return {
+            id: rawId,
+            name: assignee.name ?? assignee.email ?? null,
+          };
+        })
+        .filter(Boolean);
+      const payload = {
+        title: title.trim(),
+        description: description.trim() || null,
+        priority,
+        status,
+        deadline: deadline || null,
+        tags,
+        assigned_to,
+        assignees: sanitizedAssignees,
+        recurrence: recurrence ?? null,
+      };
+      if (canUpdateHours && hoursSpent !== "" && Number.isFinite(numericHours) && numericHours >= 0) {
+        payload.hours = numericHours;
+      }
+      
       const updatedRow = await onSave?.(payload);
       if (updatedRow?.time_tracking && isMountedRef.current) {
         const summary = normalizeTimeSummary(updatedRow.time_tracking);
@@ -510,7 +554,7 @@ export function TaskSidePanel({
           projectLookup={projectLookup}
           projectsLoading={projectsLoading}
           projectsError={projectsError}
-          ensureProject={ensureProjectLookup}
+          ensureProject={ensureProject}
           onClose={() => setChildPanelTask(null)}
           onSave={async (patch) => {
             const rawAssigneeInputs =
@@ -870,49 +914,9 @@ export function TaskSidePanel({
                 disabled={!canEdit}
               />
               {attachments.length > 0 && (
-                <Button
-                  onClick={async () => {
-                    try {
-                      const formData = new FormData()
-                      attachments.forEach((file) => {
-                        formData.append('files', file)
-                      })
-                      
-                      const response = await fetchWithCsrf(`${API}/api/tasks/${task.id}/files`, {
-                        method: 'POST',
-                        body: formData,
-                      })
-                      
-                      if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({}))
-                        throw new Error(errorData.message || 'Failed to upload files')
-                      }
-                      
-                      const result = await response.json()
-                      
-                      // Check if there were any errors during upload
-                      if (result.data?.errors && result.data.errors.length > 0) {
-                        result.data.errors.forEach(error => {
-                          toast.error(error, { duration: 5000 })
-                        })
-                      }
-                      
-                      if (result.data?.uploaded && result.data.uploaded.length > 0) {
-                        toast.success(`${result.data.uploaded.length} file(s) uploaded successfully`)
-                      }
-                      
-                      setAttachments([])
-                      window.location.reload()
-                    } catch (error) {
-                      console.error('Error uploading files:', error)
-                      toast.error(error.message || 'Failed to upload files', { duration: 5000 })
-                    }
-                  }}
-                  disabled={!canEdit || attachments.length === 0}
-                  className="mt-2 bg-white/90 text-black"
-                >
-                  Upload {attachments.length} File{attachments.length !== 1 ? 's' : ''}
-                </Button>
+                <p className="text-xs text-gray-400 mt-2">
+                  {attachments.length} file{attachments.length !== 1 ? 's' : ''} selected. Click &quot;Save&quot; to upload and save changes.
+                </p>
               )}
             </div>
 
@@ -949,4 +953,3 @@ export function TaskSidePanel({
     </>
   )
 }
-
