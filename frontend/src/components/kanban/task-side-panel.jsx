@@ -554,7 +554,7 @@ export function TaskSidePanel({
           projectLookup={projectLookup}
           projectsLoading={projectsLoading}
           projectsError={projectsError}
-          ensureProject={ensureProjectLookup}
+          ensureProject={ensureProject}
           onClose={() => setChildPanelTask(null)}
           onSave={async (patch) => {
             const rawAssigneeInputs =
@@ -953,4 +953,3 @@ export function TaskSidePanel({
     </>
   )
 }
-
