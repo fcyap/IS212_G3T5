@@ -61,8 +61,13 @@ describe('ProjectRepository', () => {
 
     // Make all methods return the mockChain for chaining
     Object.keys(mockChain).forEach(key => {
-      mockChain[key].mockReturnValue(mockChain);
+      if (key !== 'from') {  // Don't chain 'from' to itself
+        mockChain[key].mockReturnValue(mockChain);
+      }
     });
+
+    // Make 'from' return the mockChain
+    mockChain.from.mockReturnValue(mockChain);
 
     // Assign mockChain methods to supabase object
     Object.assign(supabase, mockChain);
@@ -680,24 +685,35 @@ describe('ProjectRepository', () => {
 
   describe('canUserManageMembers', () => {
     test('should return true for creator', async () => {
-      mockSingle.mockResolvedValue({
-        data: { member_role: 'creator' },
-        error: null
-      });
+      // Mock project data - user IS the creator
+      mockSingle
+        .mockResolvedValueOnce({
+          data: { id: 1, creator_id: 1 },
+          error: null
+        });
 
       const result = await projectRepository.canUserManageMembers(1, 1);
 
-      expect(supabase.from).toHaveBeenCalledWith('project_members');
-      expect(mockEq).toHaveBeenCalledWith('project_id', 1);
-      expect(mockEq).toHaveBeenCalledWith('user_id', 1);
       expect(result).toBe(true);
     });
 
     test('should return true for manager', async () => {
-      mockSingle.mockResolvedValue({
-        data: { member_role: 'manager' },
-        error: null
-      });
+      // Mock project data - user is NOT the creator
+      mockSingle
+        .mockResolvedValueOnce({
+          data: { id: 1, creator_id: 2 },
+          error: null
+        })
+        // Mock user data - user is a system manager
+        .mockResolvedValueOnce({
+          data: { role: 'manager', hierarchy: 2, division: 'Engineering' },
+          error: null
+        })
+        // Mock project creator data
+        .mockResolvedValueOnce({
+          data: { role: 'staff', hierarchy: 1, division: 'Engineering' },
+          error: null
+        });
 
       const result = await projectRepository.canUserManageMembers(1, 1);
 
@@ -705,10 +721,31 @@ describe('ProjectRepository', () => {
     });
 
     test('should return false for collaborator', async () => {
-      mockSingle.mockResolvedValue({
-        data: { member_role: 'collaborator' },
-        error: null
-      });
+      // Reset all mocks to ensure clean state
+      jest.clearAllMocks();
+      mockSingle.mockReset();
+
+      // Mock project data - user 2 is NOT the creator (creator is user 3)
+      mockSingle
+        .mockResolvedValueOnce({
+          data: { id: 1, creator_id: 3 },  // Different creator
+          error: null
+        })
+        // Mock user data - user 2 is NOT a system manager
+        .mockResolvedValueOnce({
+          data: { role: 'staff', hierarchy: 1, division: 'Engineering' },
+          error: null
+        })
+        // Mock creator data (for hierarchy check)
+        .mockResolvedValueOnce({
+          data: { role: 'staff', hierarchy: 2, division: 'Sales' },  // Different division, so hierarchy check fails
+          error: null
+        })
+        // Mock member data - user 2 is a collaborator
+        .mockResolvedValueOnce({
+          data: { member_role: 'collaborator' },
+          error: null
+        });
 
       const result = await projectRepository.canUserManageMembers(1, 2);
 
@@ -716,10 +753,31 @@ describe('ProjectRepository', () => {
     });
 
     test('should return false when user not in project', async () => {
-      mockSingle.mockResolvedValue({
-        data: null,
-        error: { code: 'PGRST116' }
-      });
+      // Reset all mocks to ensure clean state
+      jest.clearAllMocks();
+      mockSingle.mockReset();
+
+      // Mock project data - user 999 is NOT the creator
+      mockSingle
+        .mockResolvedValueOnce({
+          data: { id: 1, creator_id: 1 },
+          error: null
+        })
+        // Mock user data - user 999 is NOT a manager
+        .mockResolvedValueOnce({
+          data: { role: 'staff', hierarchy: 1, division: 'Engineering' },
+          error: null
+        })
+        // Mock creator data (for hierarchy check)
+        .mockResolvedValueOnce({
+          data: { role: 'staff', hierarchy: 2, division: 'Sales' },  // Different division
+          error: null
+        })
+        // Mock member data - user NOT found
+        .mockResolvedValueOnce({
+          data: null,
+          error: { code: 'PGRST116' }
+        });
 
       const result = await projectRepository.canUserManageMembers(1, 999);
 
