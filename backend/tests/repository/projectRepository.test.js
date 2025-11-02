@@ -37,6 +37,7 @@ let mockSelect, mockInsert, mockUpdate, mockDelete, mockEq, mockNeq, mockIn, moc
 describe('ProjectRepository', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
 
     // Create a mock chain that returns itself for all methods
     const mockChain = {
@@ -550,16 +551,30 @@ describe('ProjectRepository', () => {
       // Mock canUserManageMembers to return true
       jest.spyOn(projectRepository, 'canUserManageMembers').mockResolvedValue(true);
 
-      // Mock user validation
-      mockIn.mockResolvedValueOnce({
+      // Mock user validation - first .in() call
+      const inMock = jest.fn().mockResolvedValueOnce({
         data: [{ id: 2 }, { id: 3 }],
         error: null
       });
 
-      // Mock existing members check
-      mockIn.mockResolvedValueOnce({
+      // Setup select to return an object with .in() method
+      mockSelect.mockReturnValueOnce({
+        in: inMock
+      });
+
+      // Mock existing members check - .select().eq().in() chain
+      const inMock2 = jest.fn().mockResolvedValueOnce({
         data: [],
         error: null
+      });
+
+      const eqMock = jest.fn().mockReturnValue({
+        in: inMock2
+      });
+
+      // Setup the chain for existing members check
+      mockSelect.mockReturnValueOnce({
+        eq: eqMock
       });
 
       // Mock member insertion with select
@@ -634,15 +649,33 @@ describe('ProjectRepository', () => {
       // Mock getProjectById
       jest.spyOn(projectRepository, 'getProjectById').mockResolvedValueOnce(mockProject);
 
-      // Mock check user to remove role
-      mockSingle.mockResolvedValueOnce({
-        data: { member_role: 'collaborator' },
+      // Mock check user to remove role - need to handle .eq().eq().single() chain
+      const eqMock2 = jest.fn().mockReturnValue({
+        single: jest.fn().mockResolvedValue({
+          data: { member_role: 'collaborator' },
+          error: null
+        })
+      });
+
+      const eqMock1 = jest.fn().mockReturnValue({
+        eq: eqMock2
+      });
+
+      mockSelect.mockReturnValueOnce({
+        eq: eqMock1
+      });
+
+      // Mock deletion - need to handle .delete().eq().eq() chain
+      const deleteEqMock2 = jest.fn().mockResolvedValue({
         error: null
       });
 
-      // Mock deletion (the final .eq() call in the delete chain)
-      mockEq.mockResolvedValue({
-        error: null
+      const deleteEqMock1 = jest.fn().mockReturnValue({
+        eq: deleteEqMock2
+      });
+
+      mockDelete.mockReturnValueOnce({
+        eq: deleteEqMock1
       });
 
       const result = await projectRepository.removeUserFromProject(1, 2, 1);
@@ -724,28 +757,49 @@ describe('ProjectRepository', () => {
       // Reset all mocks to ensure clean state
       jest.clearAllMocks();
       mockSingle.mockReset();
+      mockSelect.mockReset();
 
       // Mock project data - user 2 is NOT the creator (creator is user 3)
-      mockSingle
-        .mockResolvedValueOnce({
-          data: { id: 1, creator_id: 3 },  // Different creator
+      const projectEqMock = jest.fn().mockReturnValue({
+        single: jest.fn().mockResolvedValue({
+          data: { id: 1, creator_id: 3 },
           error: null
         })
-        // Mock user data - user 2 is NOT a system manager
-        .mockResolvedValueOnce({
+      });
+
+      // Mock user data - user 2 is NOT a system manager (is staff)
+      const userEqMock = jest.fn().mockReturnValue({
+        single: jest.fn().mockResolvedValue({
           data: { role: 'staff', hierarchy: 1, division: 'Engineering' },
           error: null
         })
-        // Mock creator data (for hierarchy check)
-        .mockResolvedValueOnce({
-          data: { role: 'staff', hierarchy: 2, division: 'Sales' },  // Different division, so hierarchy check fails
-          error: null
-        })
-        // Mock member data - user 2 is a collaborator
-        .mockResolvedValueOnce({
+      });
+
+      // Mock member data - user 2 is a collaborator
+      // This needs to handle .eq().eq().single() chain
+      const memberEqMock2 = jest.fn().mockReturnValue({
+        single: jest.fn().mockResolvedValue({
           data: { member_role: 'collaborator' },
           error: null
-        });
+        })
+      });
+
+      const memberEqMock1 = jest.fn().mockReturnValue({
+        eq: memberEqMock2
+      });
+
+      // Setup the mock chain to return the appropriate eq mock for each call
+      let callCount = 0;
+      mockSelect.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) { // First call: project data - .eq().single()
+          return { eq: projectEqMock };
+        } else if (callCount === 2) { // Second call: user data - .eq().single()
+          return { eq: userEqMock };
+        } else { // Third call: member data - .eq().eq().single()
+          return { eq: memberEqMock1 };
+        }
+      });
 
       const result = await projectRepository.canUserManageMembers(1, 2);
 
@@ -756,28 +810,49 @@ describe('ProjectRepository', () => {
       // Reset all mocks to ensure clean state
       jest.clearAllMocks();
       mockSingle.mockReset();
+      mockSelect.mockReset();
 
       // Mock project data - user 999 is NOT the creator
-      mockSingle
-        .mockResolvedValueOnce({
+      const projectEqMock = jest.fn().mockReturnValue({
+        single: jest.fn().mockResolvedValue({
           data: { id: 1, creator_id: 1 },
           error: null
         })
-        // Mock user data - user 999 is NOT a manager
-        .mockResolvedValueOnce({
+      });
+
+      // Mock user data - user 999 is NOT a manager (is staff)
+      const userEqMock = jest.fn().mockReturnValue({
+        single: jest.fn().mockResolvedValue({
           data: { role: 'staff', hierarchy: 1, division: 'Engineering' },
           error: null
         })
-        // Mock creator data (for hierarchy check)
-        .mockResolvedValueOnce({
-          data: { role: 'staff', hierarchy: 2, division: 'Sales' },  // Different division
-          error: null
-        })
-        // Mock member data - user NOT found
-        .mockResolvedValueOnce({
+      });
+
+      // Mock member data - user NOT found
+      // This needs to handle .eq().eq().single() chain
+      const memberEqMock2 = jest.fn().mockReturnValue({
+        single: jest.fn().mockResolvedValue({
           data: null,
           error: { code: 'PGRST116' }
-        });
+        })
+      });
+
+      const memberEqMock1 = jest.fn().mockReturnValue({
+        eq: memberEqMock2
+      });
+
+      // Setup the mock chain to return the appropriate eq mock for each call
+      let callCount = 0;
+      mockSelect.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) { // First call: project data - .eq().single()
+          return { eq: projectEqMock };
+        } else if (callCount === 2) { // Second call: user data - .eq().single()
+          return { eq: userEqMock };
+        } else { // Third call: member data - .eq().eq().single()
+          return { eq: memberEqMock1 };
+        }
+      });
 
       const result = await projectRepository.canUserManageMembers(1, 999);
 

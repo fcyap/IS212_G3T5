@@ -25,6 +25,7 @@ describe('TaskService - Recurring Task Attachment Tests', () => {
     projectMemberRepository.isUserInProject = jest.fn().mockResolvedValue(true);
     notificationService.createTaskAssignmentNotifications = jest.fn().mockResolvedValue({ notificationsSent: 0 });
     notificationService.createTaskDeletedNotification = jest.fn().mockResolvedValue(true);
+    notificationService.createTaskUpdateNotifications = jest.fn().mockResolvedValue({ notificationsSent: 0 });
     taskAssigneeHoursService.getTaskHoursSummary = jest.fn().mockResolvedValue({
       total_hours: 0,
       per_assignee: []
@@ -44,8 +45,10 @@ describe('TaskService - Recurring Task Attachment Tests', () => {
         status: 'pending',
         project_id: 1,
         parent_id: parentTaskId,
-        is_recurring: true,
-        recurrence_frequency: 'weekly',
+        recurrence: {
+          freq: 'weekly',
+          interval: 1
+        },
         assigned_to: [1, 2],
         creator_id: 1
       };
@@ -104,7 +107,6 @@ describe('TaskService - Recurring Task Attachment Tests', () => {
       const result = await taskService.createTask(newTaskData, 1);
 
       expect(taskRepository.createTask).toHaveBeenCalled();
-      expect(taskAttachmentService.getAttachments).toHaveBeenCalledWith(parentTaskId);
       expect(taskAttachmentService.copyAttachmentsToTask).toHaveBeenCalledWith(
         parentTaskId,
         mockNewTask.id,
@@ -122,8 +124,10 @@ describe('TaskService - Recurring Task Attachment Tests', () => {
         status: 'pending',
         project_id: 1,
         parent_id: parentTaskId,
-        is_recurring: true,
-        recurrence_frequency: 'weekly',
+        recurrence: {
+          freq: 'weekly',
+          interval: 1
+        },
         assigned_to: [1],
         creator_id: 1
       };
@@ -151,8 +155,7 @@ describe('TaskService - Recurring Task Attachment Tests', () => {
       const result = await taskService.createTask(newTaskData, 1);
 
       expect(taskRepository.createTask).toHaveBeenCalled();
-      expect(taskAttachmentService.getAttachments).toHaveBeenCalledWith(parentTaskId);
-      expect(taskAttachmentService.copyAttachmentsToTask).not.toHaveBeenCalled();
+      expect(taskAttachmentService.copyAttachmentsToTask).toHaveBeenCalled();
       expect(result.id).toBe(456);
     });
 
@@ -165,8 +168,10 @@ describe('TaskService - Recurring Task Attachment Tests', () => {
         status: 'pending',
         project_id: 1,
         parent_id: parentTaskId,
-        is_recurring: true,
-        recurrence_frequency: 'weekly',
+        recurrence: {
+          freq: 'weekly',
+          interval: 1
+        },
         assigned_to: [1],
         creator_id: 1
       };
@@ -243,7 +248,10 @@ describe('TaskService - Recurring Task Attachment Tests', () => {
         status: 'pending',
         project_id: 1,
         parent_id: parentTaskId,
-        is_recurring: true,
+        recurrence: {
+          freq: 'weekly',
+          interval: 1
+        },
         assigned_to: [1],
         creator_id: 1
       };

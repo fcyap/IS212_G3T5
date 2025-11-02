@@ -44,13 +44,18 @@ jest.mock('@sendgrid/mail', () => ({
 }));
 
 const request = require('supertest');
-const app = require('../../src/index');
+const appPromise = require('../../src/index');
 const notificationRepository = require('../../src/repository/notificationRepository');
 const taskRepository = require('../../src/repository/taskRepository');
 const userRepository = require('../../src/repository/userRepository');
 const projectRepository = require('../../src/repository/projectRepository');
 
 describe('Task Deletion Notification - Integration Tests', () => {
+  let app;
+
+  beforeAll(async () => {
+    app = await appPromise;
+  });
   
   const mockAuthUser = {
     id: 5,

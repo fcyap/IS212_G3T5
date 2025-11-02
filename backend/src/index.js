@@ -266,9 +266,23 @@ app.get('/test-email', async (req, res) => {
     }
   });
 
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  // Only start server if not in test mode
+  if (process.env.NODE_ENV !== 'test') {
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 }
 
-initializeApp().catch(console.error);
+// Initialize app
+if (process.env.NODE_ENV === 'test') {
+  // For testing, we need to initialize the app but not start the server
+  // Export a promise that resolves when app is initialized
+  module.exports = (async () => {
+    await initializeApp();
+    return app;
+  })();
+} else {
+  initializeApp().catch(console.error);
+  module.exports = app;
+}
