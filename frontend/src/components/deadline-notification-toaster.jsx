@@ -42,10 +42,17 @@ export function DeadlineNotificationToaster() {
     }
 
     console.log('Checking for notifications for user:', user.email);
+    if (!user?.email) {
+      console.log('No user email, skipping notification check');
+      return;
+    }
+
+    console.log('Checking for notifications for user:', user.email);
 
     try {
       // Fetch only non-dismissed notifications for toaster display
       const data = await notificationService.getUserNotifications(10, 0, false)
+      console.log('Raw notifications data:', data.notifications.slice(0, 5)) // Log first 5 notifications
       console.log('Raw notifications data:', data.notifications.slice(0, 5)) // Log first 5 notifications
       const eligibleTypes = new Set([
         'deadline',
@@ -55,10 +62,15 @@ export function DeadlineNotificationToaster() {
         'comment',
         'invitation',
         'task_deletion',
+        'overdue',
         'general'
       ])
 
       const relevantNotifications = data.notifications.filter(notification => {
+        if (!notification.recipient_emails) {
+          console.log('Notification missing recipient_emails:', notification.notif_id);
+          return false;
+        }
         if (!notification.recipient_emails) {
           console.log('Notification missing recipient_emails:', notification.notif_id);
           return false;
@@ -70,6 +82,9 @@ export function DeadlineNotificationToaster() {
 
         console.log('Filtering notification:', {
           id: notification.notif_id,
+          type: notifType,
+          recipient_emails: notification.recipient_emails,
+          userEmail: user.email,
           type: notifType,
           recipient_emails: notification.recipient_emails,
           userEmail: user.email,
@@ -85,6 +100,7 @@ export function DeadlineNotificationToaster() {
         return isForUser && isEligible
       })
 
+      console.log('Total notifications from API:', data.notifications.length)
       console.log('Total notifications from API:', data.notifications.length)
       console.log('Filtered notifications:', relevantNotifications.length)
       console.log('Eligible types:', Array.from(eligibleTypes))
@@ -127,6 +143,13 @@ export function DeadlineNotificationToaster() {
       // Call API to mark notification as dismissed
       await notificationService.dismissNotification(notificationId)
       console.log('Successfully dismissed notification:', notificationId)
+      
+      // Remove from shown notifications set so it doesn't stay in memory forever
+      setShownNotifications(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(notificationId)
+        return newSet
+      })
       
       // Remove from shown notifications set so it doesn't stay in memory forever
       setShownNotifications(prev => {
@@ -180,6 +203,14 @@ export function DeadlineNotificationToaster() {
       color: () => 'text-amber-400',
       gradient: () => 'from-amber-500/20 to-orange-500/20',
       border: () => 'border-amber-400/40'
+    },
+    overdue: {
+      title: '⚠️ Task Overdue',
+      icon: () => <AlertTriangle className="w-6 h-6" />,
+      color: () => 'text-red-500',
+      gradient: () => 'from-red-600/30 to-red-700/30',
+      border: () => 'border-red-500/50',
+      showUrgentBadge: () => true
     },
     comment: {
       title: '💬 New Comment',
@@ -273,6 +304,7 @@ export function DeadlineNotificationToaster() {
         </div>
       </div>
     ), {
+      id: `notification-${notificationId}`, // Use unique ID to prevent duplicates
       id: `notification-${notificationId}`, // Use unique ID to prevent duplicates
       duration: 5000, // Auto-dismiss after 5 seconds
       position: 'top-right',
