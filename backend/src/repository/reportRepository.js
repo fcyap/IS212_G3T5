@@ -458,9 +458,9 @@ class ReportRepository {
         };
 
         const priorityCounts = {
-          low: deptTasks.filter(t => t.priority === 'low').length,
-          medium: deptTasks.filter(t => t.priority === 'medium').length,
-          high: deptTasks.filter(t => t.priority === 'high').length
+          low: deptTasks.filter(t => Number(t.priority) >= 1 && Number(t.priority) <= 3).length,
+          medium: deptTasks.filter(t => Number(t.priority) >= 4 && Number(t.priority) <= 6).length,
+          high: deptTasks.filter(t => Number(t.priority) >= 7 && Number(t.priority) <= 10).length
         };
 
         const totalTasks = deptTasks.length;
@@ -539,9 +539,9 @@ class ReportRepository {
           };
 
           const priorityCounts = {
-            low: periodTasks.filter(t => t.priority === 'low').length,
-            medium: periodTasks.filter(t => t.priority === 'medium').length,
-            high: periodTasks.filter(t => t.priority === 'high').length
+            low: periodTasks.filter(t => Number(t.priority) >= 1 && Number(t.priority) <= 3).length,
+            medium: periodTasks.filter(t => Number(t.priority) >= 4 && Number(t.priority) <= 6).length,
+            high: periodTasks.filter(t => Number(t.priority) >= 7 && Number(t.priority) <= 10).length
           };
 
           return {

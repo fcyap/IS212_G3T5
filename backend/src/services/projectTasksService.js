@@ -771,9 +771,9 @@ class ProjectTasksService {
           cancelled: tasks.filter(t => t.status === 'cancelled').length
         },
         byPriority: {
-          high: tasks.filter(t => t.priority === 'high').length,
-          medium: tasks.filter(t => t.priority === 'medium').length,
-          low: tasks.filter(t => t.priority === 'low').length
+          high: tasks.filter(t => Number(t.priority) >= 7 && Number(t.priority) <= 10).length,
+          medium: tasks.filter(t => Number(t.priority) >= 4 && Number(t.priority) <= 6).length,
+          low: tasks.filter(t => Number(t.priority) >= 1 && Number(t.priority) <= 3).length
         },
         overdue: overdueTasks.length,
         completionRate: tasks.length > 0 ?
