@@ -2245,21 +2245,65 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
 
   const handleSave = async () => {
     if (!canSave || saving) return
-    const payload = {
-      id: task.id,
-      title: title.trim(),
-      description: description.trim(),
-      priority,
-      status,
-      deadline,
-      tags,
-      assignees: assignees.map((assignee) => assignee.id)
-    }
-    if (canUpdateHours && hoursSpent !== "" && Number.isFinite(numericHours) && numericHours >= 0) {
-      payload.hours = numericHours
-    }
+    
     try {
       if (isMountedRef.current) setSaving(true)
+      
+      // Upload attachments first if there are any
+      if (attachments.length > 0) {
+        try {
+          const formData = new FormData()
+          attachments.forEach(file => {
+            formData.append('files', file)
+          })
+
+          const response = await fetchWithCsrf(`${API}/api/tasks/${task.id}/files`, {
+            method: 'POST',
+            body: formData,
+          })
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            throw new Error(errorData.message || 'Failed to upload files')
+          }
+
+          const result = await response.json()
+          
+          // Check if there were any errors during upload
+          if (result.data?.errors && result.data.errors.length > 0) {
+            result.data.errors.forEach(error => {
+              toast.error(error, { duration: 5000 })
+            })
+          }
+          
+          if (result.data?.uploaded && result.data.uploaded.length > 0) {
+            toast.success(`${result.data.uploaded.length} file(s) uploaded successfully`)
+          }
+
+          setAttachments([])
+        } catch (error) {
+          console.error('Error uploading files:', error)
+          toast.error(error.message || 'Failed to upload files', { duration: 5000 })
+          // Don't proceed with save if file upload fails
+          return
+        }
+      }
+      
+      // Now save the task
+      const payload = {
+        id: task.id,
+        title: title.trim(),
+        description: description.trim(),
+        priority,
+        status,
+        deadline,
+        tags,
+        assignees: assignees.map((assignee) => assignee.id)
+      }
+      if (canUpdateHours && hoursSpent !== "" && Number.isFinite(numericHours) && numericHours >= 0) {
+        payload.hours = numericHours
+      }
+      
       const updatedTask = await onSave?.(payload)
       if (updatedTask?.time_tracking && isMountedRef.current) {
         const summary = normalizeTimeSummary(updatedTask.time_tracking)
@@ -2518,52 +2562,9 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
               disabled={!canEditTask}
             />
             {attachments.length > 0 && (
-              <Button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const formData = new FormData()
-                    attachments.forEach(file => {
-                      formData.append('files', file)
-                    })
-
-                    const response = await fetchWithCsrf(`${API}/api/tasks/${task.id}/files`, {
-                      method: 'POST',
-                      body: formData,
-                    })
-
-                    if (!response.ok) {
-                      const errorData = await response.json().catch(() => ({}))
-                      throw new Error(errorData.message || 'Failed to upload files')
-                    }
-
-                    const result = await response.json()
-                    
-                    // Check if there were any errors during upload
-                    if (result.data?.errors && result.data.errors.length > 0) {
-                      result.data.errors.forEach(error => {
-                        toast.error(error, { duration: 5000 })
-                      })
-                    }
-                    
-                    if (result.data?.uploaded && result.data.uploaded.length > 0) {
-                      toast.success(`${result.data.uploaded.length} file(s) uploaded successfully`)
-                    }
-
-                    setAttachments([])
-                    // Optionally refresh attachments display
-                    window.location.reload()
-                  } catch (error) {
-                    console.error('Error uploading files:', error)
-                    toast.error(error.message || 'Failed to upload files', { duration: 5000 })
-                  }
-                }}
-                className="mt-2 bg-blue-500 hover:bg-blue-600 text-white"
-                size="sm"
-                disabled={!canEditTask}
-              >
-                Upload {attachments.length} File{attachments.length > 1 ? 's' : ''}
-              </Button>
+              <p className="text-xs text-gray-400 mt-2">
+                {attachments.length} file{attachments.length > 1 ? 's' : ''} selected. Click &quot;Save&quot; to upload and save changes.
+              </p>
             )}
           </div>
 
