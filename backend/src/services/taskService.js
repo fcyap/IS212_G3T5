@@ -291,8 +291,8 @@ class TaskService {
       }
     }
 
-    // Normalize priority and status
-    const normPriority = String(priority || "medium").toLowerCase();
+    // Normalize priority (numeric 1-10) and status
+    const normPriority = priority != null ? Number(priority) : 5; // Default to 5 (medium)
     const allowedStatuses = new Set(["pending", "in_progress", "completed", "blocked", "cancelled"]);
     const requested = String(status || "pending").toLowerCase();
     const normStatus = allowedStatuses.has(requested) ? requested : "pending";
@@ -504,7 +504,7 @@ class TaskService {
 
     if (input.title !== undefined) patch.title = input.title;
     if (input.description !== undefined) patch.description = input.description;
-    if (input.priority !== undefined) patch.priority = String(input.priority).toLowerCase();
+    if (input.priority !== undefined) patch.priority = Number(input.priority);
     if (input.status !== undefined) patch.status = input.status;
     if (input.deadline !== undefined) {
       // Validate deadline is not in the past
@@ -851,6 +851,34 @@ class TaskService {
   }
 
   /**
+   * Get subtasks for a parent task
+   */
+  async getSubtasks(parentId) {
+    return await taskRepository.getSubtasks(parentId);
+  }
+
+  /**
+   * Get tasks with their subtasks
+   */
+  async getTasksWithSubtasks(filters = {}) {
+    const tasks = await taskRepository.getTasksWithFilters(filters);
+
+    // Fetch subtasks for each task
+    const tasksWithSubtasks = await Promise.all(
+      tasks.map(async (task) => {
+        const subtasks = await taskRepository.getSubtasks(task.id);
+        return {
+          ...task,
+          subtasks,
+          subtaskCount: subtasks.length
+        };
+      })
+    );
+
+    return tasksWithSubtasks;
+  }
+
+  /**
    * Get task statistics for a project
    */
   async getProjectTaskStats(projectId) {
@@ -884,9 +912,9 @@ class TaskService {
       cancelledTasks: tasks.filter(t => t.status === 'cancelled').length,
       blockedTasks: tasks.filter(t => t.status === 'blocked').length,
       tasksByPriority: {
-        low: tasks.filter(t => t.priority === 'low').length,
-        medium: tasks.filter(t => t.priority === 'medium').length,
-        high: tasks.filter(t => t.priority === 'high').length
+        low: tasks.filter(t => Number(t.priority) >= 1 && Number(t.priority) <= 3).length,
+        medium: tasks.filter(t => Number(t.priority) >= 4 && Number(t.priority) <= 6).length,
+        high: tasks.filter(t => Number(t.priority) >= 7 && Number(t.priority) <= 10).length
       },
       overdueTasks: tasks.filter(t =>
         t.deadline &&

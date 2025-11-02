@@ -9,9 +9,6 @@ const taskAttachmentsRoutes = require('./taskAttachments');
 const taskFilesRoutes = require('./taskFiles');
 const taskFilesDeleteRoutes = require('./taskFilesDelete');
 const notificationsRoutes = require('./notifications');
-// const taskAttachmentsRoutes = require('./taskAttachmentsRoute');
-// const taskFilesRoutes = require('./taskFiles');
-// const taskFilesDeleteRoutes = require('./taskFilesDelete');
 
 router.use('/users', teamMembersRoutes);
 router.use('/projects', projectsRoutes);
