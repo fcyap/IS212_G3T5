@@ -12,10 +12,12 @@ export default function LoginPage() {
   const [pw, setPw] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const onSubmit = async (e) => {
     e.preventDefault();
     setErr("");
+    setLoading(true);
     try {
       const res = await fetchWithCsrf(`${API}/auth/supabase-login`, {
         method: "POST",
@@ -44,6 +46,8 @@ export default function LoginPage() {
       router.push("/");
     } catch (e) {
       setErr(e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -86,9 +90,13 @@ export default function LoginPage() {
         {err && <p className="text-red-400 text-sm">{err}</p>}
         <button
           type="submit"
-          className="w-full py-2 rounded-lg bg-white text-black font-medium hover:opacity-90"
+          disabled={loading}
+          className="w-full py-2 rounded-lg bg-white text-black font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          Sign in
+          {loading && (
+            <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+          )}
+          {loading ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useSession } from "@/components/session-provider"
 import { SidebarNavigation } from "@/components/sidebar-navigation"
 import { BoardHeader } from "@/components/board-header"
@@ -30,11 +30,15 @@ const ReportsPage = dynamic(() => import('./reports/page'), { ssr: false })
 
 function ProtectedProjectTimelinePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
-  const [selectedProjectId, setSelectedProjectId] = useState(null)
-  const [currentView, setCurrentView] = useState('home') // 'home', 'board', 'projects', etc.
-  const { user, loading } = useSession()
+
+  // Read state from URL
+  const selectedProjectId = searchParams.get('project') ? Number(searchParams.get('project')) : null
+  const currentView = searchParams.get('view') || 'home'
+
+  const { user, loading: sessionLoading } = useSession()
   const { projects, loading: projectsLoading } = useProjects()
   const [stats, setStats] = useState({
     totalProjects: 0,
@@ -44,42 +48,22 @@ function ProtectedProjectTimelinePage() {
     overdueTasks: 0
   })
 
-  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
-
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login')
-    }
-  }, [user, loading, router])
-
-  useEffect(() => {
-    if (projects && projects.length > 0) {
-      const activeProjects = projects.filter(p => p.status === 'active').length
-      setStats(prev => ({
-        ...prev,
-        totalProjects: projects.length,
-        activeProjects
-      }))
-      
-      // Fetch task stats
-      fetchTaskStats()
-    }
-  }, [projects])
-
+  // Define fetchTaskStats before useEffect
   const fetchTaskStats = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/tasks`, {
+      // Request all tasks with maximum page size to get accurate counts
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/tasks?limit=1000`, {
         credentials: 'include'
       })
       if (response.ok) {
         const data = await response.json()
-        const tasks = data.tasks || []
-        
+        // API can return either an array directly or an object with tasks property
+        const tasks = Array.isArray(data) ? data : (data.tasks || [])
+
         const completed = tasks.filter(t => t.status === 'completed').length
         const pending = tasks.filter(t => t.status === 'pending').length
         const now = new Date()
-        const overdue = tasks.filter(t => 
+        const overdue = tasks.filter(t =>
           t.status !== 'completed' && t.deadline && new Date(t.deadline) < now
         ).length
 
@@ -106,32 +90,52 @@ function ProtectedProjectTimelinePage() {
   const toggleMobileSidebar = () => setIsMobileSidebarOpen(!isMobileSidebarOpen)
 
   const handleProjectSelect = (projectId) => {
-    setSelectedProjectId(projectId)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('project', projectId.toString())
+    params.delete('view') // Clear view when selecting project
+    router.push(`/?${params.toString()}`)
+    setIsMobileSidebarOpen(false)
   }
 
   const handleViewSelect = (view) => {
-    setCurrentView(view)
-    setSelectedProjectId(null) // Clear project selection when switching views
-    setIsMobileSidebarOpen(false) // Close mobile sidebar after selection
+    const params = new URLSearchParams()
+    params.set('view', view)
+    router.push(`/?${params.toString()}`)
+    setIsMobileSidebarOpen(false)
   }
 
   const handleBackToBoard = () => {
-    setSelectedProjectId(null)
+    router.push('/')
   }
 
-  // Show loading spinner while checking authentication
-  if (loading) {
+  // useEffect must come after all useState calls but before conditional returns
+  useEffect(() => {
+    if (projects && projects.length > 0) {
+      const activeProjects = projects.filter(p => p.status === 'active').length
+      setStats(prev => ({
+        ...prev,
+        totalProjects: projects.length,
+        activeProjects
+      }))
+
+      // Fetch task stats
+      fetchTaskStats()
+    }
+  }, [projects])
+
+  // Show loading state while checking authentication (after all hooks)
+  if (sessionLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'rgb(var(--background))', color: 'rgb(var(--foreground))' }}>
+      <div className="flex h-screen bg-[#1a1a1d] items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 mb-4" style={{ borderColor: 'rgb(var(--foreground))' }}></div>
-          <p>Loading...</p>
+          <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading...</p>
         </div>
       </div>
     )
   }
 
-  // Don't render if no user (will redirect)
+  // Redirect to login if not authenticated (SessionProvider will handle this, but show nothing while it does)
   if (!user) {
     return null
   }
@@ -165,10 +169,8 @@ function ProtectedProjectTimelinePage() {
         <div className="lg:hidden border-b p-3 flex items-center justify-between" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
           <button
             onClick={() => setIsMobileSidebarOpen(true)}
-            className="p-2 rounded-lg transition-colors" 
-            style={{ color: 'rgb(var(--foreground))', backgroundColor: 'transparent' }}
-            onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--muted))'}
-            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+            className="p-2 text-white hover:bg-gray-700 active:bg-gray-600 rounded-lg transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label="Open menu"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -202,13 +204,13 @@ function ProtectedProjectTimelinePage() {
                   <h1 className="text-3xl sm:text-4xl font-bold mb-2" style={{ color: 'rgb(var(--foreground))' }}>
                     {getGreeting()}, {user?.name || 'User'}!
                   </h1>
-                  <p style={{ color: 'rgb(var(--muted-foreground))' }}>Here's what's happening with your projects today</p>
+                  <p className="text-gray-400">Here&apos;s what&apos;s happening with your projects today</p>
                 </div>
 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                   {/* Total Projects */}
-                  <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 cursor-pointer">
+                  <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 active:scale-95 sm:hover:scale-105 cursor-pointer touch-manipulation">
                     <div className="flex items-center justify-between mb-3">
                       <FolderOpen className="w-8 h-8 text-white/90" />
                       <div className="bg-white/20 rounded-lg px-2 py-1">
@@ -220,7 +222,7 @@ function ProtectedProjectTimelinePage() {
                   </div>
 
                   {/* Active Projects */}
-                  <div className="bg-gradient-to-br from-green-600 to-green-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 cursor-pointer">
+                  <div className="bg-gradient-to-br from-green-600 to-green-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 active:scale-95 sm:hover:scale-105 cursor-pointer touch-manipulation">
                     <div className="flex items-center justify-between mb-3">
                       <CheckCircle2 className="w-8 h-8 text-white/90" />
                       <div className="bg-white/20 rounded-lg px-2 py-1">
@@ -232,7 +234,7 @@ function ProtectedProjectTimelinePage() {
                   </div>
 
                   {/* Pending Tasks */}
-                  <div className="bg-gradient-to-br from-amber-600 to-amber-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 cursor-pointer">
+                  <div className="bg-gradient-to-br from-amber-600 to-amber-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 active:scale-95 sm:hover:scale-105 cursor-pointer touch-manipulation">
                     <div className="flex items-center justify-between mb-3">
                       <Clock className="w-8 h-8 text-white/90" />
                     </div>
@@ -241,7 +243,7 @@ function ProtectedProjectTimelinePage() {
                   </div>
 
                   {/* Overdue Tasks */}
-                  <div className="bg-gradient-to-br from-red-600 to-red-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 cursor-pointer">
+                  <div className="bg-gradient-to-br from-red-600 to-red-700 rounded-xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-200 active:scale-95 sm:hover:scale-105 cursor-pointer touch-manipulation">
                     <div className="flex items-center justify-between mb-3">
                       <AlertCircle className="w-8 h-8 text-white/90" />
                       {stats.overdueTasks > 0 && (
@@ -256,19 +258,18 @@ function ProtectedProjectTimelinePage() {
                 </div>
 
                 {/* Quick Actions & Recent Projects */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
                   {/* Quick Actions */}
                   <div className="lg:col-span-1">
-                    <div className="rounded-xl p-6 border" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
-                      <h2 className="text-xl font-semibold mb-4 flex items-center gap-2" style={{ color: 'rgb(var(--card-foreground))' }}>
+                    <div className="bg-[#2a2a2e] rounded-xl p-4 sm:p-6 border border-gray-700/50">
+                      <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
                         <TrendingUp className="w-5 h-5 text-blue-400" />
                         Quick Actions
                       </h2>
                       <div className="space-y-3">
                         <button
-                          onClick={() => setCurrentView('board')}
-                          className="w-full text-left p-4 rounded-lg transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group hover:bg-blue-600 hover:text-white"
-                          style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--muted-foreground))' }}
+                          onClick={() => handleViewSelect('board')}
+                          className="w-full text-left p-3 sm:p-4 bg-[#1f1f23] rounded-lg text-gray-300 hover:bg-blue-600 hover:text-white active:bg-blue-700 transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group touch-manipulation min-h-[44px]"
                         >
                           <div className="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center group-hover:bg-white/20">
                             <CheckCircle2 className="w-5 h-5" />
@@ -279,9 +280,8 @@ function ProtectedProjectTimelinePage() {
                           </div>
                         </button>
                         <button
-                          onClick={() => setCurrentView('projects')}
-                          className="w-full text-left p-4 rounded-lg transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group hover:bg-green-600 hover:text-white"
-                          style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--muted-foreground))' }}
+                          onClick={() => handleViewSelect('projects')}
+                          className="w-full text-left p-3 sm:p-4 bg-[#1f1f23] rounded-lg text-gray-300 hover:bg-green-600 hover:text-white active:bg-green-700 transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group touch-manipulation min-h-[44px]"
                         >
                           <div className="w-10 h-10 bg-green-600/20 rounded-lg flex items-center justify-center group-hover:bg-white/20">
                             <FolderOpen className="w-5 h-5" />
@@ -297,8 +297,8 @@ function ProtectedProjectTimelinePage() {
 
                   {/* Recent Projects */}
                   <div className="lg:col-span-2">
-                    <div className="rounded-xl p-6 border" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
-                      <h2 className="text-xl font-semibold mb-4 flex items-center gap-2" style={{ color: 'rgb(var(--card-foreground))' }}>
+                    <div className="bg-[#2a2a2e] rounded-xl p-4 sm:p-6 border border-gray-700/50">
+                      <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
                         <Calendar className="w-5 h-5 text-purple-400" />
                         Recent Projects
                       </h2>
@@ -310,10 +310,7 @@ function ProtectedProjectTimelinePage() {
                             <button
                               key={project.id}
                               onClick={() => handleProjectSelect(project.id)}
-                              className="w-full text-left p-4 rounded-lg transition-all duration-200 hover:translate-x-1"
-                              style={{ backgroundColor: 'rgb(var(--muted))' }}
-                              onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--accent))'}
-                              onMouseLeave={(e) => e.target.style.backgroundColor = 'rgb(var(--muted))'}
+                              className="w-full text-left p-3 sm:p-4 bg-[#1f1f23] rounded-lg hover:bg-[#3a3a3e] active:bg-[#4a4a4e] transition-all duration-200 hover:translate-x-1 touch-manipulation min-h-[44px]"
                             >
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">

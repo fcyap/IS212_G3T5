@@ -10,9 +10,53 @@ class ProjectTasksService {
    * Validation constants
    */
   static VALID_TASK_STATUSES = ['pending', 'in_progress', 'completed', 'cancelled'];
-  static VALID_TASK_PRIORITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]; // New 1-10 priority system
+  static PRIORITY_MIN = 1;
+  static PRIORITY_MAX = 10;
+  static DEFAULT_PRIORITY = 5;
+  static LEGACY_PRIORITY_MAP = { low: 1, medium: 5, high: 10 };
   static VALID_SORT_FIELDS = ['id', 'title', 'status', 'priority', 'created_at', 'updated_at', 'deadline'];
   static VALID_SORT_ORDERS = ['asc', 'desc'];
+
+  static get PRIORITY_ERROR_MESSAGE() {
+    return `Priority must be an integer between ${ProjectTasksService.PRIORITY_MIN} and ${ProjectTasksService.PRIORITY_MAX}`;
+  }
+
+  static normalizePriority(priority) {
+    if (priority === undefined || priority === null || priority === '') {
+      return null;
+    }
+
+    const toProcess = typeof priority === 'string' ? priority.trim().toLowerCase() : priority;
+
+    if (typeof toProcess === 'string') {
+      if (toProcess in ProjectTasksService.LEGACY_PRIORITY_MAP) {
+        return ProjectTasksService.LEGACY_PRIORITY_MAP[toProcess];
+      }
+      if (toProcess === '') {
+        return null;
+      }
+      const parsed = Number(toProcess);
+      if (!Number.isFinite(parsed)) {
+        throw new Error(ProjectTasksService.PRIORITY_ERROR_MESSAGE);
+      }
+      return ProjectTasksService.normalizePriority(parsed);
+    }
+
+    const numericPriority = Number(toProcess);
+    if (!Number.isFinite(numericPriority)) {
+      throw new Error(ProjectTasksService.PRIORITY_ERROR_MESSAGE);
+    }
+
+    const intPriority = Math.trunc(numericPriority);
+    if (
+      intPriority < ProjectTasksService.PRIORITY_MIN ||
+      intPriority > ProjectTasksService.PRIORITY_MAX
+    ) {
+      throw new Error(ProjectTasksService.PRIORITY_ERROR_MESSAGE);
+    }
+
+    return intPriority;
+  }
 
   /**
    * Validate project exists
@@ -27,6 +71,18 @@ class ProjectTasksService {
       throw new Error('Project not found');
     }
     return true;
+  }
+
+  async _fetchProjectDetails(projectId) {
+    if (typeof projectRepository.getProjectById !== 'function') {
+      return null;
+    }
+    try {
+      return await projectRepository.getProjectById(projectId);
+    } catch (error) {
+      console.error('[ProjectTasksService] Failed to fetch project details:', error);
+      return null;
+    }
   }
 
   /**
@@ -83,11 +139,12 @@ class ProjectTasksService {
       cleanFilters.status = filters.status;
     }
 
-    if (filters.priority) {
-      if (!ProjectTasksService.VALID_TASK_PRIORITIES.includes(filters.priority)) {
-        throw new Error(`Invalid priority. Must be one of: ${ProjectTasksService.VALID_TASK_PRIORITIES.join(', ')}`);
+    if (filters.priority !== undefined && filters.priority !== null && filters.priority !== '') {
+      if (filters.priority === 'all') {
+        // No-op for legacy UI filters
+      } else {
+        cleanFilters.priority = ProjectTasksService.normalizePriority(filters.priority);
       }
-      cleanFilters.priority = filters.priority;
     }
 
     if (filters.assigned_to) {
@@ -214,7 +271,7 @@ class ProjectTasksService {
 
       return {
         success: true,
-        tasks,
+        tasks: tasks,
         totalTasks: totalCount,
         pagination: {
           page: pagination.page,
@@ -293,9 +350,30 @@ class ProjectTasksService {
       // Validate project exists
       const validatedProjectId = this.validatePositiveInteger(projectId, 'projectId');
       await this.validateProjectExists(validatedProjectId);
+      const projectDetails = await this._fetchProjectDetails(validatedProjectId);
+      const projectStatus = String(projectDetails?.status || '').toLowerCase();
+      if (projectStatus === 'archived') {
+        console.warn('[ProjectTasksService] Attempted task creation on archived project', {
+          projectId: validatedProjectId,
+          requestedBy: creatorId,
+          payload: {
+            title: taskData?.title,
+            status: taskData?.status,
+            priority: taskData?.priority,
+          },
+        });
+        throw new Error('Cannot create tasks for archived projects');
+      }
 
       // Validate required fields
-      const { title, description, assigned_to, priority = 'medium', deadline, status = 'pending' } = taskData;
+      const {
+        title,
+        description,
+        assigned_to,
+        priority = ProjectTasksService.DEFAULT_PRIORITY,
+        deadline,
+        status = 'pending'
+      } = taskData;
 
       if (!title || title.trim() === '') {
         throw new Error('Title is required');
@@ -306,9 +384,8 @@ class ProjectTasksService {
         throw new Error(`Invalid status. Must be one of: ${ProjectTasksService.VALID_TASK_STATUSES.join(', ')}`);
       }
 
-      if (priority && !ProjectTasksService.VALID_TASK_PRIORITIES.includes(priority)) {
-        throw new Error(`Invalid priority. Must be one of: ${ProjectTasksService.VALID_TASK_PRIORITIES.join(', ')}`);
-      }
+      const normalizedPriority = ProjectTasksService.normalizePriority(priority ?? ProjectTasksService.DEFAULT_PRIORITY)
+        ?? ProjectTasksService.DEFAULT_PRIORITY;
 
       // Validate assigned_to array if provided
       if (assigned_to && (!Array.isArray(assigned_to) || assigned_to.some(id => isNaN(parseInt(id)) || parseInt(id) <= 0))) {
@@ -340,11 +417,27 @@ class ProjectTasksService {
         throw new Error('Invalid deadline format. Use ISO 8601 format');
       }
 
+      // Disallow deadlines that are before today (past dates)
+      if (deadline) {
+        const parsedDeadline = new Date(deadline);
+        if (isNaN(parsedDeadline.getTime())) {
+          throw new Error('Invalid deadline format. Use ISO 8601 format');
+        }
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const deadlineDate = new Date(parsedDeadline.getFullYear(), parsedDeadline.getMonth(), parsedDeadline.getDate());
+        if (deadlineDate.getTime() < today.getTime()) {
+          const err = new Error('Deadline cannot be in the past');
+          err.statusCode = 400;
+          throw err;
+        }
+      }
+
       const cleanTaskData = {
         title: title.trim(),
         description: description?.trim() || '',
         status,
-        priority,
+        priority: normalizedPriority,
         project_id: validatedProjectId,
         assigned_to: uniqueAssignees,
         deadline: deadline || null,
@@ -376,14 +469,16 @@ class ProjectTasksService {
           console.log(`Today: ${today.toISOString().split('T')[0]}, Tomorrow: ${tomorrow.toISOString().split('T')[0]}, Task deadline: ${deadlineDate.toISOString().split('T')[0]}`);
           console.log(`Today time: ${today.getTime()}, Tomorrow time: ${tomorrow.getTime()}, Deadline time: ${deadlineDate.getTime()}`);
 
-          // Check if deadline is today or tomorrow
+          // Check if deadline is today, tomorrow, or overdue
           const isToday = deadlineDate.getTime() === today.getTime();
           const isTomorrow = deadlineDate.getTime() === tomorrow.getTime();
+          const isOverdue = deadlineDate.getTime() < today.getTime();
           
-          console.log(`Is today: ${isToday}, Is tomorrow: ${isTomorrow}`);
+          console.log(`Is today: ${isToday}, Is tomorrow: ${isTomorrow}, Is overdue: ${isOverdue}`);
           
-          if (isToday || isTomorrow) {
-            console.log(`Task "${newTask.title}" has deadline ${deadlineDate.toDateString()}, sending immediate notifications`);
+          if (isToday || isTomorrow || isOverdue) {
+            const deadlineType = isOverdue ? 'overdue' : isToday ? 'today' : 'tomorrow';
+            console.log(`Task "${newTask.title}" has ${deadlineType} deadline ${deadlineDate.toDateString()}, sending immediate notifications`);
 
             // Hydrate task with assignee information
             const hydratedTask = { ...newTask };
@@ -407,7 +502,7 @@ class ProjectTasksService {
             }
 
             // Send deadline notifications using the unified method
-            await this.sendDeadlineNotifications(hydratedTask);
+            await this.sendDeadlineNotifications(hydratedTask, deadlineType);
           }
         } catch (notificationError) {
           console.error('Error sending immediate deadline notification:', notificationError);
@@ -485,8 +580,12 @@ class ProjectTasksService {
         throw new Error(`Invalid status. Must be one of: ${ProjectTasksService.VALID_TASK_STATUSES.join(', ')}`);
       }
 
-      if (filteredUpdateData.priority && !ProjectTasksService.VALID_TASK_PRIORITIES.includes(filteredUpdateData.priority)) {
-        throw new Error(`Invalid priority. Must be one of: ${ProjectTasksService.VALID_TASK_PRIORITIES.join(', ')}`);
+      if (Object.prototype.hasOwnProperty.call(filteredUpdateData, 'priority')) {
+        const normalizedPriorityUpdate = ProjectTasksService.normalizePriority(filteredUpdateData.priority);
+        if (normalizedPriorityUpdate === null) {
+          throw new Error(ProjectTasksService.PRIORITY_ERROR_MESSAGE);
+        }
+        filteredUpdateData.priority = normalizedPriorityUpdate;
       }
 
       if (filteredUpdateData.assigned_to && (!Array.isArray(filteredUpdateData.assigned_to) ||
@@ -510,6 +609,22 @@ class ProjectTasksService {
 
       if (filteredUpdateData.deadline && isNaN(Date.parse(filteredUpdateData.deadline))) {
         throw new Error('Invalid deadline format. Use ISO 8601 format');
+      }
+
+      // When updating, disallow changing the deadline to a past date
+      if (filteredUpdateData.deadline) {
+        const parsedNewDeadline = new Date(filteredUpdateData.deadline);
+        if (isNaN(parsedNewDeadline.getTime())) {
+          throw new Error('Invalid deadline format. Use ISO 8601 format');
+        }
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const newDeadlineDate = new Date(parsedNewDeadline.getFullYear(), parsedNewDeadline.getMonth(), parsedNewDeadline.getDate());
+        if (newDeadlineDate.getTime() < today.getTime()) {
+          const err = new Error('Deadline cannot be in the past');
+          err.statusCode = 400;
+          throw err;
+        }
       }
 
       const updatedTask = await projectTasksRepository.update(validatedTaskId, filteredUpdateData);
@@ -656,9 +771,9 @@ class ProjectTasksService {
           cancelled: tasks.filter(t => t.status === 'cancelled').length
         },
         byPriority: {
-          high: tasks.filter(t => t.priority === 'high').length,
-          medium: tasks.filter(t => t.priority === 'medium').length,
-          low: tasks.filter(t => t.priority === 'low').length
+          high: tasks.filter(t => Number(t.priority) >= 7 && Number(t.priority) <= 10).length,
+          medium: tasks.filter(t => Number(t.priority) >= 4 && Number(t.priority) <= 6).length,
+          low: tasks.filter(t => Number(t.priority) >= 1 && Number(t.priority) <= 3).length
         },
         overdue: overdueTasks.length,
         completionRate: tasks.length > 0 ?
@@ -691,7 +806,7 @@ class ProjectTasksService {
     try {
       if (!task.deadline) return;
 
-      // Check if deadline is today or tomorrow
+      // Check deadline status
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
@@ -702,14 +817,17 @@ class ProjectTasksService {
 
       const isToday = deadlineDate.getTime() === today.getTime();
       const isTomorrow = deadlineDate.getTime() === tomorrow.getTime();
+      const isOverdue = deadlineDate.getTime() < today.getTime();
 
-      if (!isToday && !isTomorrow) return;
+      // For impending deadlines, only send if today or tomorrow
+      // For overdue, always send (since we're calling this explicitly for overdue tasks)
+      if (deadlineType !== 'overdue' && !isToday && !isTomorrow) return;
 
       console.log('Sending deadline notifications for task:', {
         taskId: task.id,
         title: task.title,
         deadline: task.deadline,
-        deadlineType: isToday ? 'today' : 'tomorrow',
+        deadlineType: deadlineType,
         hasProject: !!task.project_id
       });
 
@@ -745,15 +863,30 @@ class ProjectTasksService {
         index === self.findIndex(u => u.id === user.id)
       );
 
-      console.log(`Sending ${isToday ? 'today' : 'tomorrow'} deadline notifications to ${uniqueRecipients.length} recipients:`, uniqueRecipients.map(u => u.id));
+      console.log(`Sending ${deadlineType} deadline notifications to ${uniqueRecipients.length} recipients:`, uniqueRecipients.map(u => u.id));
 
-      // Send notifications
-      for (const recipient of uniqueRecipients) {
-        try {
-          await notificationService.createDeadlineNotification(task, recipient);
-          await notificationService.sendDeadlineEmailNotification(task, recipient);
-        } catch (error) {
-          console.error(`Failed to send notification to user ${recipient.id}:`, error);
+      // Send notifications based on type
+      if (deadlineType === 'overdue') {
+        // For overdue notifications, create once for all recipients
+        await notificationService.createOverdueNotifications(task);
+        
+        // Then send individual emails
+        for (const recipient of uniqueRecipients) {
+          try {
+            await notificationService.sendOverdueEmailNotification(task, recipient);
+          } catch (error) {
+            console.error(`Failed to send ${deadlineType} email notification to user ${recipient.id}:`, error);
+          }
+        }
+      } else {
+        // For impending deadline notifications, create and send for each recipient
+        for (const recipient of uniqueRecipients) {
+          try {
+            await notificationService.createDeadlineNotification(task, recipient);
+            await notificationService.sendDeadlineEmailNotification(task, recipient);
+          } catch (error) {
+            console.error(`Failed to send ${deadlineType} notification to user ${recipient.id}:`, error);
+          }
         }
       }
 

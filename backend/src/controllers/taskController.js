@@ -73,12 +73,16 @@ const update = async (req, res) => {
     if (!Number.isFinite(id)) {
       return res.status(400).json({ error: "Invalid id" });
     }
-    console.log("req.body:", req.body);
     const task = await taskService.updateTask(id, req.body, req.user?.id ?? null);
     res.json(task);
   } catch (e) {
     console.error("[PUT /tasks/:id]", e);
-    res.status(e.status || 500).json({ error: e.message || "Server error" });
+    const status = e.status || e.httpCode || 500;
+    if (status === 400 || status === 403) {
+      res.status(status).json({ message: e.message });
+    } else {
+      res.status(status).json({ error: e.message || "Server error" });
+    }
   }
 };
 
@@ -219,13 +223,44 @@ const createTask = async (req, res) => {
       });
     }
 
-    // Validate priority is between 1-10
-    if (priority !== undefined && priority !== null) {
-      const priorityNum = Number(priority);
-      if (!Number.isInteger(priorityNum) || priorityNum < 1 || priorityNum > 10) {
+    // Validate and normalize priority (supports both legacy string values and numeric 1-10)
+    const PRIORITY_MIN = 1;
+    const PRIORITY_MAX = 10;
+    const DEFAULT_PRIORITY = 5;
+    const LEGACY_PRIORITY_MAP = { low: 1, medium: 5, high: 10 };
+
+    let normalizedPriority = DEFAULT_PRIORITY;
+    if (priority !== undefined && priority !== null && priority !== '') {
+      const value = typeof priority === 'string' ? priority.trim().toLowerCase() : priority;
+
+      if (typeof value === 'string') {
+        if (LEGACY_PRIORITY_MAP[value] !== undefined) {
+          normalizedPriority = LEGACY_PRIORITY_MAP[value];
+        } else {
+          const parsed = Number(value);
+          if (!Number.isFinite(parsed)) {
+            return res.status(400).json({
+              success: false,
+              message: `Priority must be an integer between ${PRIORITY_MIN} and ${PRIORITY_MAX}`
+            });
+          }
+          normalizedPriority = Math.trunc(parsed);
+        }
+      } else {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+          return res.status(400).json({
+            success: false,
+            message: `Priority must be an integer between ${PRIORITY_MIN} and ${PRIORITY_MAX}`
+          });
+        }
+        normalizedPriority = Math.trunc(numeric);
+      }
+
+      if (normalizedPriority < PRIORITY_MIN || normalizedPriority > PRIORITY_MAX) {
         return res.status(400).json({
           success: false,
-          message: 'Priority must be an integer between 1 and 10'
+          message: `Priority must be an integer between ${PRIORITY_MIN} and ${PRIORITY_MAX}`
         });
       }
     }
@@ -236,7 +271,7 @@ const createTask = async (req, res) => {
       project_id: project_id ? parseInt(project_id) : undefined,
       assigned_to: assigned_to || [],
       status: status || 'pending',
-      priority: priority ? Number(priority) : 5, // Default to medium priority (5)
+      priority: normalizedPriority,
       deadline: deadline || null,
       parent_id: (parent_id === null || parent_id === undefined) ? null : parseInt(parent_id),
     };
@@ -284,14 +319,50 @@ const updateTask = async (req, res) => {
     }
 
     if (priority !== undefined) {
-      const priorityNum = Number(priority);
-      if (!Number.isInteger(priorityNum) || priorityNum < 1 || priorityNum > 10) {
-        return res.status(400).json({
-          success: false,
-          message: 'Priority must be an integer between 1 and 10'
-        });
+      // Validate and normalize priority (supports both legacy string values and numeric 1-10)
+      const PRIORITY_MIN = 1;
+      const PRIORITY_MAX = 10;
+      const LEGACY_PRIORITY_MAP = { low: 1, medium: 5, high: 10 };
+
+      let normalizedPriority;
+      if (priority === null || priority === '') {
+        normalizedPriority = null;
+      } else {
+        const value = typeof priority === 'string' ? priority.trim().toLowerCase() : priority;
+
+        if (typeof value === 'string') {
+          if (LEGACY_PRIORITY_MAP[value] !== undefined) {
+            normalizedPriority = LEGACY_PRIORITY_MAP[value];
+          } else {
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed)) {
+              return res.status(400).json({
+                success: false,
+                message: `Priority must be an integer between ${PRIORITY_MIN} and ${PRIORITY_MAX}`
+              });
+            }
+            normalizedPriority = Math.trunc(parsed);
+          }
+        } else {
+          const numeric = Number(value);
+          if (!Number.isFinite(numeric)) {
+            return res.status(400).json({
+              success: false,
+              message: `Priority must be an integer between ${PRIORITY_MIN} and ${PRIORITY_MAX}`
+            });
+          }
+          normalizedPriority = Math.trunc(numeric);
+        }
+
+        if (normalizedPriority < PRIORITY_MIN || normalizedPriority > PRIORITY_MAX) {
+          return res.status(400).json({
+            success: false,
+            message: `Priority must be an integer between ${PRIORITY_MIN} and ${PRIORITY_MAX}`
+          });
+        }
       }
-      updates.priority = priorityNum;
+
+      updates.priority = normalizedPriority;
     }
 
     if (Object.keys(updates).length === 0) {

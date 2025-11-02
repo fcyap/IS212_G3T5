@@ -1,14 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { CreateProjectDialog } from "@/components/create-project"
 import { SettingsMenu } from "@/components/settings-menu"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useProjects } from "@/contexts/project-context"
+import { useNotifications } from "@/contexts/notification-context"
 import { useSession } from "@/components/session-provider"
 import { useRouter } from "next/navigation"
-import { notificationService } from "@/lib/api"
 import {
     Home,
     BarChart3,
@@ -25,12 +25,12 @@ const NavItem = ({ icon: Icon, label, isActive, isCollapsed, onClick, hasChevron
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors ${
+      className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors touch-manipulation min-h-[44px] ${
         isActive
           ? "bg-blue-500 text-white"
-          : "hover:text-white"
+          : "text-gray-300 hover:bg-gray-700 hover:text-white active:bg-gray-600"
       }`}
-      style={!isActive ? { 
+      style={!isActive ? {
         color: 'rgb(var(--muted-foreground))',
         backgroundColor: 'transparent'
       } : {}}
@@ -50,8 +50,8 @@ const NavItem = ({ icon: Icon, label, isActive, isCollapsed, onClick, hasChevron
 
 export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSelect, onViewSelect, selectedProjectId, currentView }) {
     const [isProjectsExpanded, setIsProjectsExpanded] = useState(true)
-    const [notificationCount, setNotificationCount] = useState(0)
     const { projects, loading, error, selectedProject, selectProject } = useProjects()
+    const { unreadCount } = useNotifications()
     const { user, role, loading: sessionLoading } = useSession()
     const router = useRouter()
 
@@ -60,31 +60,7 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
         return user?.role === 'manager' || user?.role === 'admin'
     }
 
-    useEffect(() => {
-        if (user) {
-            fetchNotificationCount()
-            // Refresh notification count every 2 minutes
-            const interval = setInterval(fetchNotificationCount, 120000)
-            return () => clearInterval(interval)
-        }
-    }, [user])
-
-    const fetchNotificationCount = async () => {
-        if (!user?.email) return
-        
-        try {
-            const data = await notificationService.getUserNotifications(50, 0, false)
-            const unreadNotifications = data.notifications.filter(notif => {
-                if (!notif.recipient_emails) return false
-                const recipients = notif.recipient_emails.split(',').map(email => email.trim())
-                return recipients.includes(user.email)
-            })
-            setNotificationCount(unreadNotifications.length)
-        } catch (err) {
-            console.error('Failed to fetch notification count:', err)
-            setNotificationCount(0)
-        }
-    }
+    // Notification count is now provided by NotificationContext - no need to fetch separately
 
     const handleNotificationClick = () => {
         router.push('/notifications')
@@ -106,23 +82,12 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
 
     return (
         <div
-            className={`${isCollapsed ? "w-16" : "w-64"} flex flex-col h-screen transition-all duration-300 flex-shrink-0 border-r`}
-            style={{ 
-              backgroundColor: 'rgb(var(--card))', 
-              color: 'rgb(var(--card-foreground))', 
-              borderColor: 'rgb(var(--border))' 
-            }}
+            className={`${isCollapsed ? "w-16" : "w-64"} bg-[#1f1f23] text-white flex flex-col h-screen transition-all duration-300 flex-shrink-0 border-r border-gray-700 safe-area-inset-left`}
         >
             {/* Header */}
             <div className="p-4 border-b" style={{ borderColor: 'rgb(var(--border))' }}>
                 <div className="flex items-center gap-3 mb-4">
-                    <button 
-                      onClick={onToggleCollapse} 
-                      className="p-1 rounded transition-colors"
-                      style={{ backgroundColor: 'transparent' }}
-                      onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--muted))'}
-                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
-                    >
+                    <button onClick={onToggleCollapse} className="p-2 hover:bg-gray-700 active:bg-gray-600 rounded transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Toggle sidebar">
                         <Menu className="w-5 h-5" />
                     </button>
                     {!isCollapsed && (
@@ -138,13 +103,13 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                 {canCreateProject() && (
                     isCollapsed ? (
                         <CreateProjectDialog isCollapsed={true}>
-                            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-lg p-2">
+                            <Button className="w-full bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white rounded-lg p-2 min-h-[44px] touch-manipulation">
                                 <Plus className="w-4 h-4" />
                             </Button>
                         </CreateProjectDialog>
                     ) : (
                         <CreateProjectDialog isCollapsed={false}>
-                            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-lg">
+                            <Button className="w-full bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white rounded-lg min-h-[44px] touch-manipulation">
                                 <Plus className="w-4 h-4 mr-2" />
                                 Create
                             </Button>
@@ -175,13 +140,13 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                         {!isCollapsed && (
                             <button
                                 onClick={handleNotificationClick}
-                                className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-gray-300 hover:bg-gray-700 hover:text-white relative"
+                                className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-gray-300 hover:bg-gray-700 hover:text-white active:bg-gray-600 relative touch-manipulation min-h-[44px]"
                             >
                                 <Bell className="w-4 h-4" />
                                 <span className="flex-1 text-left">Notifications</span>
-                                {notificationCount > 0 && (
+                                {unreadCount > 0 && (
                                     <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                                        {notificationCount > 99 ? '99+' : notificationCount}
+                                        {unreadCount > 99 ? '99+' : unreadCount}
                                     </span>
                                 )}
                             </button>
@@ -189,12 +154,12 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                         {isCollapsed && (
                             <button
                                 onClick={handleNotificationClick}
-                                className="w-full flex items-center justify-center px-3 py-2 text-sm rounded-lg transition-colors text-gray-300 hover:bg-gray-700 hover:text-white relative"
+                                className="w-full flex items-center justify-center px-3 py-2 text-sm rounded-lg transition-colors text-gray-300 hover:bg-gray-700 hover:text-white active:bg-gray-600 relative touch-manipulation min-h-[44px]"
                             >
                                 <Bell className="w-4 h-4" />
-                                {notificationCount > 0 && (
+                                {unreadCount > 0 && (
                                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center text-[10px]">
-                                        {notificationCount > 9 ? '9+' : notificationCount}
+                                        {unreadCount > 9 ? '9+' : unreadCount}
                                     </span>
                                 )}
                             </button>

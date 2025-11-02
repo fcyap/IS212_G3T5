@@ -23,6 +23,7 @@ const notificationRoutes = require('./routes/notifications');
 const { createLoggerMiddleware, logError } = require('./middleware/logger');
 const cron = require('node-cron');
 const notificationService = require('./services/notificationService');
+const { checkTaskDeadlines } = require('./jobs/checkOverdueTasks');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -124,6 +125,7 @@ async function initializeApp() {
     cors({
       origin: process.env.FRONTEND_ORIGIN || true, // Allow all origins in development
       credentials: true,
+      exposedHeaders: ['Content-Disposition']
     })
   );
     app.get("/csrf-token", (req, res) => {
@@ -254,14 +256,16 @@ app.get('/test-email', async (req, res) => {
 
 // ... existing code (your other routes and app.listen) ...
 
-  // Schedule deadline notification checks to run daily at 8am
+  // Schedule task deadline checks to run daily at 8am
+  // This checks for both impending deadlines (within 24 hours) and overdue tasks
   cron.schedule('0 8 * * *', async () => {
-    console.log('Running scheduled deadline notification check at 8am...');
+    console.log('Running scheduled task deadline checks (impending + overdue) at 8am...');
     try {
-      const result = await notificationService.checkAndSendDeadlineNotifications();
-      console.log(`Deadline notification check completed. Sent ${result.notificationsSent} notifications for ${result.tasksChecked} tasks.`);
+      const results = await checkTaskDeadlines();
+      const totalNotifications = results.impendingDeadlines.notificationsSent + results.overdueTask.notificationsSent;
+      console.log(`Task deadline checks completed. Sent ${totalNotifications} total notifications.`);
     } catch (error) {
-      console.error('Error during scheduled deadline notification check:', error);
+      console.error('Error during scheduled task deadline checks:', error);
     }
   });
 

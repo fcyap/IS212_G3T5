@@ -273,9 +273,8 @@ class TaskService {
       }
     }
 
-    // Normalize priority and status
-    const normPriority = Number(priority) || 5; // Default to medium priority (5)
-    const validPriority = (normPriority >= 1 && normPriority <= 10) ? normPriority : 5;
+    // Normalize priority (numeric 1-10) and status
+    const normPriority = priority != null ? Number(priority) : 5; // Default to 5 (medium)
     const allowedStatuses = new Set(["pending", "in_progress", "completed", "blocked", "cancelled"]);
     const requested = String(status || "pending").toLowerCase();
     const normStatus = allowedStatuses.has(requested) ? requested : "pending";
@@ -337,7 +336,7 @@ class TaskService {
     const newTaskData = {
       title: title.trim(),
       description: description?.trim() || null,
-      priority: validPriority,
+      priority: normPriority,
       status: normStatus,
       deadline: deadline || null,
       project_id: effectiveProjectId,
@@ -880,13 +879,11 @@ class TaskService {
       completedTasks: tasks.filter(t => t.status === 'completed').length,
       cancelledTasks: tasks.filter(t => t.status === 'cancelled').length,
       blockedTasks: tasks.filter(t => t.status === 'blocked').length,
-      tasksByPriority: tasks.reduce((acc, task) => {
-        const priority = task.priority;
-        if (priority >= 1 && priority <= 10) {
-          acc[priority] = (acc[priority] || 0) + 1;
-        }
-        return acc;
-      }, { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 }),
+      tasksByPriority: {
+        low: tasks.filter(t => Number(t.priority) >= 1 && Number(t.priority) <= 3).length,
+        medium: tasks.filter(t => Number(t.priority) >= 4 && Number(t.priority) <= 6).length,
+        high: tasks.filter(t => Number(t.priority) >= 7 && Number(t.priority) <= 10).length
+      },
       overdueTasks: tasks.filter(t =>
         t.deadline &&
         new Date(t.deadline) < now &&
