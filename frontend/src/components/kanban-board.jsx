@@ -439,16 +439,6 @@ export function KanbanBoard({ projectId = null }) {
     }
   }, [panelTask, visibleTasks]);
 
-  // Also check if panelTask is still in filtered tasks
-  useEffect(() => {
-    if (!panelTask) return;
-    const isVisible = filteredTasks.some((task) => task.id === panelTask.id);
-    if (!isVisible && tagFilter.trim()) {
-      // Don't close panel if task is just filtered out
-      // User should be able to see the task even if it's filtered
-    }
-  }, [panelTask, filteredTasks, tagFilter]);
-
   const { isAdding, editorPosition, startAddTask, cancelAddTask, editorLane } = useKanban()
 
   // Apply tag filtering to visible tasks
