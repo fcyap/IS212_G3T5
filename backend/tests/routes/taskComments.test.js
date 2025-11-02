@@ -33,13 +33,13 @@ describe('Task comment routes', () => {
     app = express();
     app.use(express.json());
     app.use((req, _res, next) => {
-      req.user = { id: 1, department: 'HR Team' };
+      req.user = { id: 1, role: 'hr', department: 'HR Team' };
       next();
     });
     app.use('/api/tasks', taskCommentRoutes);
   });
 
-  test('DELETE /api/tasks/comments/:commentId allows HR Team user', async () => {
+  test('DELETE /api/tasks/comments/:commentId allows HR role user', async () => {
     mockCommentService.deleteComment.mockResolvedValue({ success: true, deletedReplies: true });
 
     const res = await request(app)
@@ -48,22 +48,22 @@ describe('Task comment routes', () => {
 
     expect(mockCommentService.deleteComment).toHaveBeenCalledWith({
       id: '10',
-      requester: { id: 1, department: 'HR Team' },
+      requester: { id: 1, role: 'hr', department: 'HR Team' },
     });
     expect(res.body.success).toBe(true);
     expect(res.body.deletedReplies).toBe(true);
   });
 
-  test('DELETE /api/tasks/comments/:commentId rejects non-admin department', async () => {
+  test('DELETE /api/tasks/comments/:commentId rejects non-privileged role', async () => {
     app = express();
     app.use(express.json());
     app.use((req, _res, next) => {
-      req.user = { id: 2, department: 'Engineering' };
+      req.user = { id: 2, role: 'staff', department: 'Engineering' };
       next();
     });
     app.use('/api/tasks', taskCommentRoutes);
 
-    mockCommentService.deleteComment.mockRejectedValue({ message: 'Only admins can delete comments', httpCode: 403 });
+    mockCommentService.deleteComment.mockRejectedValue({ message: 'Only admins or HR can delete comments', httpCode: 403 });
 
     const res = await request(app)
       .delete('/api/tasks/comments/11')
@@ -71,9 +71,9 @@ describe('Task comment routes', () => {
 
     expect(mockCommentService.deleteComment).toHaveBeenCalledWith({
       id: '11',
-      requester: { id: 2, department: 'Engineering' },
+      requester: { id: 2, role: 'staff', department: 'Engineering' },
     });
-    expect(res.body.error).toBe('Only admins can delete comments');
+    expect(res.body.error).toBe('Only admins or HR can delete comments');
   });
 
   test('DELETE /api/tasks/comments/:commentId surfaces service errors', async () => {
@@ -95,7 +95,7 @@ describe('Task comment routes', () => {
       .expect(200);
 
     expect(mockCommentService.listThread).toHaveBeenCalledWith('5');
-    expect(mockCommentService.canUserComment).toHaveBeenCalledWith('5', { id: 1, department: 'HR Team' });
+    expect(mockCommentService.canUserComment).toHaveBeenCalledWith('5', { id: 1, role: 'hr', department: 'HR Team' });
     expect(res.body).toEqual({ comments: [{ id: 1 }], canComment: true });
   });
 

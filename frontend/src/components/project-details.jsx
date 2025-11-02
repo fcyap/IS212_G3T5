@@ -30,6 +30,61 @@ import toast from "react-hot-toast"
 
 const API = process.env.NEXT_PUBLIC_API_URL ;
 
+const normalizePriorityValue = (priority) => {
+  if (priority === null || priority === undefined) {
+    return null;
+  }
+  if (typeof priority === "string") {
+    const trimmed = priority.trim();
+    return trimmed ? trimmed.toLowerCase() : null;
+  }
+  if (typeof priority === "object") {
+    if (typeof priority.value === "string" && priority.value.trim().length > 0) {
+      return priority.value.trim().toLowerCase();
+    }
+    if (typeof priority.label === "string" && priority.label.trim().length > 0) {
+      return priority.label.trim().toLowerCase();
+    }
+  }
+  const fallback = String(priority).trim();
+  return fallback ? fallback.toLowerCase() : null;
+};
+
+const getPriorityPresentation = (priority) => {
+  const normalized = normalizePriorityValue(priority);
+  if (!normalized) {
+    return {
+      normalized: null,
+      uppercase: null,
+      badgeClass: "bg-gray-600 text-white",
+      textClass: "text-gray-400"
+    };
+  }
+
+  const badgeClass = normalized === "high"
+    ? "bg-red-600 text-white"
+    : normalized === "medium"
+      ? "bg-yellow-600 text-white"
+      : normalized === "low"
+        ? "bg-green-600 text-white"
+        : "bg-gray-600 text-white";
+
+  const textClass = normalized === "high"
+    ? "text-red-400"
+    : normalized === "medium"
+      ? "text-yellow-400"
+      : normalized === "low"
+        ? "text-green-400"
+        : "text-gray-400";
+
+  return {
+    normalized,
+    uppercase: normalized.toUpperCase(),
+    badgeClass,
+    textClass
+  };
+};
+
 export function ProjectDetails({ projectId, onBack }) {
   const { currentUserId } = useAuth()
   const [project, setProject] = useState(null)
@@ -572,6 +627,8 @@ export function ProjectDetails({ projectId, onBack }) {
   const filteredTasks = (tasks || []).filter(task => {
     // Helper to check if task is blocked
     const isBlocked = task.blocked === true || task.status === 'blocked'
+    const normalizedPriority = normalizePriorityValue(task.priority)
+    const matchesPriority = taskFilters.priority === 'all' || normalizedPriority === taskFilters.priority.toLowerCase()
 
     // If showing blocked only, ignore other filters except assignee and priority
     if (taskFilters.showBlockedOnly) {
@@ -618,10 +675,15 @@ export function ProjectDetails({ projectId, onBack }) {
     }
 
     if (taskFilters.priority !== 'all') {
-      const taskPriority = Number(task.priority);
-      const filterPriority = Number(taskFilters.priority);
-      if (!isNaN(taskPriority) && !isNaN(filterPriority) && taskPriority !== filterPriority) {
-        return false;
+      const taskPriority = Number(task.priority)
+      const filterPriority = Number(taskFilters.priority)
+      const bothNumeric = !Number.isNaN(taskPriority) && !Number.isNaN(filterPriority)
+      if (bothNumeric) {
+        if (taskPriority !== filterPriority) {
+          return false
+        }
+      } else if (!matchesPriority) {
+        return false
       }
     }
 
@@ -1906,7 +1968,8 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   const canAddAssignees = canEditTask
   const canRemoveAssignees = isProjectManager || (canEditTask && isCreator)
 
-  const canUpdateHours = userIsAssignee
+  const isPendingStatus = status === "pending"
+  const canUpdateHours = userIsAssignee && !isPendingStatus
   const numericHours = Number(hoursSpent)
   const isHoursValid =
     hoursSpent === "" ||
@@ -2294,16 +2357,24 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
             </Select>
           </div>
 
-          <TaskTimeTracking
-            value={hoursSpent}
-            onChange={handleHoursInputChange}
-            canEdit={canUpdateHours && canEditTask}
-            totalHours={timeTracking.total_hours}
-            perAssignee={timeTracking.per_assignee}
-            assignees={breakdownAssignees}
-          />
-          {!isHoursValid && (
-            <p className="text-xs text-red-400">Please enter a non-negative number of hours.</p>
+          {!isPendingStatus ? (
+            <>
+              <TaskTimeTracking
+                value={hoursSpent}
+                onChange={handleHoursInputChange}
+                canEdit={canUpdateHours && canEditTask}
+                totalHours={timeTracking.total_hours}
+                perAssignee={timeTracking.per_assignee}
+                assignees={breakdownAssignees}
+              />
+              {!isHoursValid && (
+                <p className="text-xs text-red-400">Please enter a non-negative number of hours.</p>
+              )}
+            </>
+          ) : (
+            <div className="rounded-md border border-gray-700 bg-[#202126] p-3 text-xs text-gray-400">
+              Time tracking becomes available after this task leaves the pending state.
+            </div>
           )}
 
           {/* Tags */}
@@ -3145,6 +3216,9 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                     return user ? (user.name || user.email) : 'Unknown'
                   }).join(', ') || 'Unassigned'
                   const totalHeight = calculateTaskHeight(task, isExpanded)
+                  const priorityInfo = getPriorityPresentation(task.priority)
+                  const priorityTextClass = priorityInfo.uppercase ? priorityInfo.textClass : "text-gray-500"
+                  const priorityText = priorityInfo.uppercase || "N/A"
 
                   return (
                     <div

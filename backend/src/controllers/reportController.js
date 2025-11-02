@@ -190,6 +190,67 @@ const generateProjectReport = async (req, res, next) => {
 };
 
 /**
+ * Generate manual time report
+ * POST /api/reports/time/manual
+ */
+const generateManualTimeReport = async (req, res, next) => {
+  try {
+    const user = req.user;
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
+
+    // Validate date format
+    if (req.body.startDate && !/^\d{4}-\d{2}-\d{2}$/.test(req.body.startDate)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid startDate format. Use YYYY-MM-DD'
+      });
+    }
+
+    if (req.body.endDate && !/^\d{4}-\d{2}-\d{2}$/.test(req.body.endDate)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid endDate format. Use YYYY-MM-DD'
+      });
+    }
+
+    if (req.body.startDate && req.body.endDate) {
+      const start = new Date(req.body.startDate);
+      const end = new Date(req.body.endDate);
+      if (end < start) {
+        return res.status(400).json({
+          success: false,
+          error: 'endDate must be after or equal to startDate'
+        });
+      }
+    }
+
+    const filters = {
+      projectIds: req.body.projectIds,
+      departments: req.body.departments,
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
+      view: req.body.view
+    };
+
+    const report = await reportService.generateManualTimeReport(user, filters);
+
+    res.status(200).json({
+      success: true,
+      data: report
+    });
+  } catch (error) {
+    console.error('Error in generateManualTimeReport:', error);
+    next(error);
+  }
+};
+
+/**
  * Export report to PDF
  * POST /api/reports/export/pdf
  */
@@ -404,6 +465,7 @@ const generateDepartmentalPerformanceReport = async (req, res, next) => {
 
 module.exports = {
   generateTaskReport,
+  generateManualTimeReport,
   generateUserProductivityReport,
   generateProjectReport,
   exportReportToPDF,
