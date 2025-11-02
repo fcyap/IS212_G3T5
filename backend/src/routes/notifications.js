@@ -4,7 +4,8 @@ const {
   getUserNotifications,
   getNotificationsByCreator,
   createTestNotification,
-  dismissNotification
+  dismissNotification,
+  checkOverdueTasks
 } = require('../controllers/notificationController');
 
 // Get user notifications
@@ -15,6 +16,9 @@ router.get('/created', getNotificationsByCreator);
 
 // Create a test notification (for testing purposes)
 router.post('/test', createTestNotification);
+
+// Check for overdue tasks and send notifications
+router.post('/check-overdue', checkOverdueTasks);
 
 // Dismiss a notification
 router.patch('/:notifId/dismiss', dismissNotification);
