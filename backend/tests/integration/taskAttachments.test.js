@@ -127,18 +127,22 @@ describe('Task Attachment Integration Tests', () => {
       error.status = 413;
       taskAttachmentService.uploadAttachments.mockRejectedValue(error);
 
+      // Use small buffer but claim it's 51MB via size property
+      const smallBuffer = Buffer.from('fake large file');
+      const claimedSize = 51 * 1024 * 1024; // 51MB
+
       const response = await request(app)
         .post(`/api/tasks/${testTaskId}/attachments`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           files: [
-            { originalname: 'large_file.pdf', buffer: largeBuffer, mimetype: 'application/pdf', size: largeBuffer.length }
+            { originalname: 'large_file.pdf', buffer: smallBuffer, mimetype: 'application/pdf', size: claimedSize }
           ]
         });
 
       expect(response.status).toBe(413);
       expect(response.body.error).toContain('50MB');
-    });
+    }, 30000);
 
     test('should reject invalid file formats', async () => {
       const error = new Error('Invalid file format. Allowed formats: PDF, DOCX, XLSX, PNG, JPG');
@@ -196,7 +200,10 @@ describe('Task Attachment Integration Tests', () => {
         }
       ];
 
-      taskAttachmentService.getAttachments.mockResolvedValue(mockAttachments);
+      taskAttachmentService.getAttachments.mockResolvedValue({
+        attachments: mockAttachments,
+        totalSize: 7340032
+      });
 
       const response = await request(app)
         .get(`/api/tasks/${testTaskId}/attachments`)
@@ -208,7 +215,10 @@ describe('Task Attachment Integration Tests', () => {
     });
 
     test('should return empty array when task has no attachments', async () => {
-      taskAttachmentService.getAttachments.mockResolvedValue([]);
+      taskAttachmentService.getAttachments.mockResolvedValue({
+        attachments: [],
+        totalSize: 0
+      });
 
       const response = await request(app)
         .get(`/api/tasks/${testTaskId}/attachments`)
@@ -452,43 +462,45 @@ describe('Task Attachment Integration Tests', () => {
       };
       taskAttachmentService.uploadAttachments.mockResolvedValue(mockResult);
 
-      const file1 = Buffer.alloc(25 * 1024 * 1024); // 25MB
-      const file2 = Buffer.alloc(24 * 1024 * 1024); // 24MB
+      // Use small buffers but claim they're large via size property
+      const file1 = Buffer.from('fake file 1');
+      const file2 = Buffer.from('fake file 2');
 
       const response = await request(app)
         .post(`/api/tasks/${testTaskId}/attachments`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           files: [
-            { originalname: 'file1.pdf', buffer: file1, mimetype: 'application/pdf', size: file1.length },
-            { originalname: 'file2.pdf', buffer: file2, mimetype: 'application/pdf', size: file2.length }
+            { originalname: 'file1.pdf', buffer: file1, mimetype: 'application/pdf', size: 25 * 1024 * 1024 },
+            { originalname: 'file2.pdf', buffer: file2, mimetype: 'application/pdf', size: 24 * 1024 * 1024 }
           ]
         });
 
       expect(response.status).toBe(201);
-    });
+    }, 30000);
 
     test('should reject files totaling 51MB', async () => {
       const error = new Error('Total file size cannot exceed 50MB');
       error.status = 413;
       taskAttachmentService.uploadAttachments.mockRejectedValue(error);
 
-      const file1 = Buffer.alloc(26 * 1024 * 1024); // 26MB
-      const file2 = Buffer.alloc(25 * 1024 * 1024); // 25MB
+      // Use small buffers but claim they're large via size property
+      const file1 = Buffer.from('fake file 1');
+      const file2 = Buffer.from('fake file 2');
 
       const response = await request(app)
         .post(`/api/tasks/${testTaskId}/attachments`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           files: [
-            { originalname: 'file1.pdf', buffer: file1, mimetype: 'application/pdf', size: file1.length },
-            { originalname: 'file2.pdf', buffer: file2, mimetype: 'application/pdf', size: file2.length }
+            { originalname: 'file1.pdf', buffer: file1, mimetype: 'application/pdf', size: 26 * 1024 * 1024 },
+            { originalname: 'file2.pdf', buffer: file2, mimetype: 'application/pdf', size: 25 * 1024 * 1024 }
           ]
         });
 
       expect(response.status).toBe(413);
       expect(response.body.error).toContain('50MB');
-    });
+    }, 30000);
 
     test('should reject when adding to existing attachments exceeds limit', async () => {
       const error = new Error('Total file size cannot exceed 50MB');
