@@ -57,10 +57,10 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
     new Date(deadline) < today;
 
   const getCardClasses = () => {
-    const baseClasses = "task-card border rounded-lg hover:border-gray-500 active:border-gray-400 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/40 touch-manipulation"
+    const baseClasses = "task-card border rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/40 touch-manipulation"
     const statusClasses = isOverdue
       ? "bg-red-950/40 border-red-500"
-      : "bg-[#2a2a2e] border-gray-600"
+      : ""
 
     const viewClasses = {
       compact: "p-2",
@@ -88,11 +88,14 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
       >
       <div className="flex items-start gap-2 sm:gap-3">
         <div className="flex-1 min-w-0">
-          <h3 className={`text-white font-medium break-words ${viewMode === 'compact' ? 'text-sm' : 'text-sm sm:text-base'}`}>
+          <h3
+            className={`font-medium break-words ${viewMode === 'compact' ? 'text-sm' : 'text-sm sm:text-base'}`}
+            style={{ color: 'rgb(var(--foreground))' }}
+          >
             {title}
           </h3>
           {shouldShowDescription() && description && (
-            <p className="text-gray-400 text-sm mt-1 line-clamp-2">{description}</p>
+            <p className="text-sm mt-1 line-clamp-2" style={{ color: 'rgb(var(--muted-foreground))' }}>{description}</p>
           )}
         </div>
         {onUnarchive ? (
@@ -103,12 +106,19 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
               e.stopPropagation();
               onUnarchive?.();
             }}
-            className="p-2 rounded text-gray-200 hover:bg-gray-700 active:bg-gray-600 touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
+            className="p-2 rounded touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0 transition-colors"
+            style={{ color: 'rgb(var(--foreground))' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent'
+            }}
           >
             <ArchiveRestore className="w-4 h-4" />
           </button>
         ) : (
-          <Settings className="w-4 h-4 text-gray-400" />
+          <Settings className="w-4 h-4" style={{ color: 'rgb(var(--muted-foreground))' }} />
         )}
 
       </div>
@@ -139,14 +149,14 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
             {assignees.length > 0 && (
               <div className="flex -space-x-2">
                 {assignees.slice(0, 3).map((a, i) => (
-                  <Avatar key={i} className="w-6 h-6 border-2 border-[#2a2a2e]">
-                    <AvatarFallback className="bg-gray-600 text-white text-xs font-medium">
+                  <Avatar key={i} className="w-6 h-6 border-2" style={{ borderColor: 'rgb(var(--task-background))' }}>
+                    <AvatarFallback className="text-xs font-medium" style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))' }}>
                       {(a.name?.charAt(0) || "U").toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                 ))}
                 {assignees.length > 3 && (
-                  <div className="w-6 h-6 rounded-full bg-gray-700 border-2 border-[#2a2a2e] text-[10px] text-gray-200 flex items-center justify-center">
+                  <div className="w-6 h-6 rounded-full border-2 text-[10px] flex items-center justify-center" style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--task-background))', color: 'rgb(var(--foreground))' }}>
                     +{assignees.length - 3}
                   </div>
                 )}
@@ -154,7 +164,7 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
             )}
 
             {dueText && (
-              <span className="flex items-center gap-1 text-xs sm:text-sm text-gray-400 whitespace-nowrap">
+              <span className="flex items-center gap-1 text-xs sm:text-sm whitespace-nowrap" style={{ color: 'rgb(var(--muted-foreground))' }}>
                 <CalendarDays className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                 <span className="truncate">Due {dueText}</span>
               </span>
@@ -172,7 +182,8 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
             {tags.map((tag, i) => (
               <span
                 key={`${tag}-${i}`}
-                className="rounded-md px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200 truncate max-w-[80px] sm:max-w-none"
+                className="rounded-md px-2 py-0.5 text-xs font-medium truncate max-w-[80px] sm:max-w-none"
+                style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))' }}
                 title={tag}
               >
                 {tag}
@@ -191,19 +202,19 @@ export function TaskCard({ title, priority, status, assignees = [], dateRange, d
               <div className="flex -space-x-1">
                 {assignees.slice(0, 2).map((a, i) => (
                   <Avatar key={i} className="w-4 h-4">
-                    <AvatarFallback className="bg-gray-600 text-white text-xs">
+                    <AvatarFallback className="text-xs" style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))' }}>
                       {(a.name?.charAt(0) || "U").toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                 ))}
                 {assignees.length > 2 && (
-                  <span className="text-xs text-gray-400 ml-1">+{assignees.length - 2}</span>
+                  <span className="text-xs ml-1" style={{ color: 'rgb(var(--muted-foreground))' }}>+{assignees.length - 2}</span>
                 )}
               </div>
             )}
           </div>
           {dueText && (
-            <span className="text-xs text-gray-400">
+            <span className="text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>
               {dueText}
             </span>
           )}

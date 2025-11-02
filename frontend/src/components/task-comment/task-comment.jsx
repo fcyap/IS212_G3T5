@@ -177,9 +177,9 @@ export const CommentBox = ({ onSubmit, currentUser, placeholder = "Start typing 
   }, [mentionActive, mentionResults]);
 
   return (
-  <div className="bg-[#23232a] rounded-lg border border-gray-700 shadow-sm p-4 mb-6">
+  <div className="rounded-lg border shadow-sm p-4 mb-6" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
       <div className="flex gap-3">
-  <div className="w-10 h-10 bg-gray-700 rounded-full flex items-center justify-center text-white font-medium text-sm flex-shrink-0">
+  <div className="w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm flex-shrink-0" style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))' }}>
           {initials}
         </div>
 
@@ -195,30 +195,47 @@ export const CommentBox = ({ onSubmit, currentUser, placeholder = "Start typing 
                 onClick={handleCursorMove}
                 onSelect={handleCursorMove}
                 placeholder={placeholder}
-                className="w-full min-h-[80px] p-3 text-gray-100 placeholder-gray-400 bg-[#23232a] border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                className="w-full min-h-[80px] p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))', border: '1px solid' }}
               />
 
               {mentionActive && (
-                <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-gray-700 bg-[#1e1e23] shadow-lg">
+                <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border shadow-lg" style={{ borderColor: 'rgb(var(--border))', backgroundColor: 'rgb(var(--card))' }}>
                   {mentionLoading ? (
-                    <div className="px-3 py-2 text-sm text-gray-400">Searching users…</div>
+                    <div className="px-3 py-2 text-sm" style={{ color: 'rgb(var(--muted-foreground))' }}>Searching users…</div>
                   ) : mentionResults.length > 0 ? (
                     mentionResults.map((user, index) => (
                       <button
                         key={user.id ?? `${user.email}-${index}`}
                         type="button"
-                        className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm transition-colors ${index === highlightIndex ? 'bg-gray-700 text-white' : 'text-gray-200 hover:bg-gray-700 hover:text-white'}`}
+                        className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm transition-colors"
+                        style={{
+                          backgroundColor: index === highlightIndex ? 'rgb(var(--muted))' : 'transparent',
+                          color: index === highlightIndex ? 'rgb(var(--foreground))' : 'rgb(var(--muted-foreground))'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (index !== highlightIndex) {
+                            e.currentTarget.style.backgroundColor = 'rgb(var(--muted))';
+                            e.currentTarget.style.color = 'rgb(var(--foreground))';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (index !== highlightIndex) {
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                            e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+                          }
+                        }}
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => handleMentionSelection(user)}
                       >
                         <span className="font-medium">{user.name || user.email}</span>
                         {user.email && (
-                          <span className="ml-auto text-xs text-gray-400">{user.email}</span>
+                          <span className="ml-auto text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>{user.email}</span>
                         )}
                       </button>
                     ))
                   ) : (
-                    <div className="px-3 py-2 text-sm text-gray-400">
+                    <div className="px-3 py-2 text-sm" style={{ color: 'rgb(var(--muted-foreground))' }}>
                       {mentionQuery ? 'No users found' : 'Type to search users'}
                     </div>
                   )}
@@ -227,11 +244,11 @@ export const CommentBox = ({ onSubmit, currentUser, placeholder = "Start typing 
 
               <div className="flex items-center justify-between mt-3">
                 <div className="flex items-center gap-2">
-                  
+
                 </div>
 
                 <div className="flex items-center gap-3">
-    
+
 
                   <button
                     type="submit"

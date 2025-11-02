@@ -464,7 +464,7 @@ export function KanbanBoard({ projectId = null }) {
   const blocked = filteredTasks.filter(t => t.workflow === "blocked")
 
   return (
-    <div className="flex-1 bg-[#1a1a1d] p-3 sm:p-6 overflow-hidden">
+    <div className="flex-1 p-3 sm:p-6 overflow-hidden" style={{ backgroundColor: 'rgb(var(--background))' }}>
       {banner && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
           <div className="rounded-md bg-emerald-600 px-4 py-2 text-white shadow-lg ring-1 ring-black/10">
@@ -478,12 +478,12 @@ export function KanbanBoard({ projectId = null }) {
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button className="flex items-center gap-2 text-gray-400 hover:text-gray-200 transition-colors">
+              <button className="flex items-center gap-2 transition-colors" style={{ color: 'rgb(var(--muted-foreground))' }}>
                 <HelpCircle className="w-4 h-4" />
                 <span className="text-sm">Priority System</span>
               </button>
             </TooltipTrigger>
-            <TooltipContent className="bg-gray-800 border-gray-700 text-white max-w-sm">
+            <TooltipContent className="max-w-sm" style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))', color: 'rgb(var(--foreground))' }}>
               <div className="space-y-2 p-2">
                 <p className="font-semibold">Priority Scale (1-10):</p>
                 <ul className="text-xs space-y-1">
@@ -507,10 +507,15 @@ export function KanbanBoard({ projectId = null }) {
             placeholder="Search tasks by tags (e.g., frontend, backend, urgent)..."
             value={tagFilter}
             onChange={(e) => setTagFilter(e.target.value)}
-            className="bg-gray-800 border-gray-600 text-white placeholder-gray-400 focus:border-blue-500"
+            className="focus:border-blue-500"
+            style={{
+              backgroundColor: 'rgb(var(--muted))',
+              borderColor: 'rgb(var(--border))',
+              color: 'rgb(var(--foreground))'
+            }}
           />
           {tagFilter && (
-            <div className="mt-2 text-sm text-gray-400 text-center">
+            <div className="mt-2 text-sm text-center" style={{ color: 'rgb(var(--muted-foreground))' }}>
               Showing {filteredTasks.length} of {visibleTasks.length} tasks
             </div>
           )}
@@ -524,8 +529,8 @@ export function KanbanBoard({ projectId = null }) {
           <div className="w-[280px] sm:w-[360px] flex-none space-y-4 flex flex-col">
             <div className="flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-white font-medium">To do</h2>
-                <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
+                <h2 className="font-medium" style={{ color: 'rgb(var(--foreground))' }}>To do</h2>
+                <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--muted-foreground))' }}>
                   {todo.length + (isAdding && editorLane === "pending" ? 1 : 0)}
                 </span>
 
@@ -574,7 +579,11 @@ export function KanbanBoard({ projectId = null }) {
                 <Button
                   onClick={() => startAddTask("bottom", "pending")}
                   variant="ghost"
-                  className="w-full text-gray-400 hover:text-white hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 py-8"
+                  className="w-full border-2 border-dashed py-8"
+                  style={{
+                    color: 'rgb(var(--muted-foreground))',
+                    borderColor: 'rgb(var(--border))'
+                  }}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add task
@@ -586,8 +595,8 @@ export function KanbanBoard({ projectId = null }) {
           {/* Doing Column */}
           <div className="w-[280px] sm:w-[360px] flex-none space-y-4 flex flex-col">
             <div className="flex items-center gap-2 flex-shrink-0">
-              <h2 className="text-white font-medium">Doing</h2>
-              <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
+              <h2 className="font-medium" style={{ color: 'rgb(var(--foreground))' }}>Doing</h2>
+              <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--muted-foreground))' }}>
                 {doing.length + (isAdding && editorLane === "in_progress" ? 1 : 0)}
               </span>
 
@@ -634,7 +643,11 @@ export function KanbanBoard({ projectId = null }) {
                 <Button
                   onClick={() => startAddTask("bottom", "in_progress")}
                   variant="ghost"
-                  className="w-full text-gray-400 hover:text-white hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 py-8"
+                  className="w-full border-2 border-dashed py-8"
+                  style={{
+                    color: 'rgb(var(--muted-foreground))',
+                    borderColor: 'rgb(var(--border))'
+                  }}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add task
@@ -647,8 +660,8 @@ export function KanbanBoard({ projectId = null }) {
           {/* Done Column */}
           <div className="w-[280px] sm:w-[360px] flex-none space-y-4 flex flex-col">
             <div className="flex items-center gap-2 flex-shrink-0">
-              <h2 className="text-white font-medium">Done</h2>
-              <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
+              <h2 className="font-medium" style={{ color: 'rgb(var(--foreground))' }}>Done</h2>
+              <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--muted-foreground))' }}>
                 {done.length + (isAdding && editorLane === "completed" ? 1 : 0)}
               </span>
             </div>
@@ -692,7 +705,11 @@ export function KanbanBoard({ projectId = null }) {
                 <Button
                   onClick={() => startAddTask("bottom", "completed")}
                   variant="ghost"
-                  className="w-full text-gray-400 hover:text-white hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 py-8"
+                  className="w-full border-2 border-dashed py-8"
+                  style={{
+                    color: 'rgb(var(--muted-foreground))',
+                    borderColor: 'rgb(var(--border))'
+                  }}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add task
@@ -704,8 +721,8 @@ export function KanbanBoard({ projectId = null }) {
           {/* Blocked Column */}
           <div className="w-[280px] sm:w-[360px] flex-none space-y-4 flex flex-col">
             <div className="flex items-center gap-2 flex-shrink-0">
-              <h2 className="text-white font-medium">Blocked</h2>
-              <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
+              <h2 className="font-medium" style={{ color: 'rgb(var(--foreground))' }}>Blocked</h2>
+              <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--muted-foreground))' }}>
                 {blocked.length + (isAdding && editorLane === "blocked" ? 1 : 0)}
               </span>
             </div>

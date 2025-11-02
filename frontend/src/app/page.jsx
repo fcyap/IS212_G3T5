@@ -126,10 +126,10 @@ function ProtectedProjectTimelinePage() {
   // Show loading state while checking authentication (after all hooks)
   if (sessionLoading) {
     return (
-      <div className="flex h-screen bg-[#1a1a1d] items-center justify-center">
+      <div className="flex h-screen items-center justify-center" style={{ backgroundColor: 'rgb(var(--background))' }}>
         <div className="text-center">
-          <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading...</p>
+          <div className="animate-spin w-12 h-12 border-4 border-t-transparent rounded-full mx-auto mb-4" style={{ borderColor: 'rgb(var(--foreground))', borderTopColor: 'transparent' }}></div>
+          <p style={{ color: 'rgb(var(--muted-foreground))' }}>Loading...</p>
         </div>
       </div>
     )
@@ -169,7 +169,14 @@ function ProtectedProjectTimelinePage() {
         <div className="lg:hidden border-b p-3 flex items-center justify-between" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
           <button
             onClick={() => setIsMobileSidebarOpen(true)}
-            className="p-2 text-white hover:bg-gray-700 active:bg-gray-600 rounded-lg transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+            className="p-2 rounded-lg transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+            style={{ color: 'rgb(var(--foreground))' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent'
+            }}
             aria-label="Open menu"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -204,7 +211,7 @@ function ProtectedProjectTimelinePage() {
                   <h1 className="text-3xl sm:text-4xl font-bold mb-2" style={{ color: 'rgb(var(--foreground))' }}>
                     {getGreeting()}, {user?.name || 'User'}!
                   </h1>
-                  <p className="text-gray-400">Here&apos;s what&apos;s happening with your projects today</p>
+                  <p style={{ color: 'rgb(var(--muted-foreground))' }}>Here&apos;s what&apos;s happening with your projects today</p>
                 </div>
 
                 {/* Stats Grid */}
@@ -261,15 +268,16 @@ function ProtectedProjectTimelinePage() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
                   {/* Quick Actions */}
                   <div className="lg:col-span-1">
-                    <div className="bg-[#2a2a2e] rounded-xl p-4 sm:p-6 border border-gray-700/50">
-                      <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                    <div className="rounded-xl p-4 sm:p-6 border" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
+                      <h2 className="text-xl font-semibold mb-4 flex items-center gap-2" style={{ color: 'rgb(var(--foreground))' }}>
                         <TrendingUp className="w-5 h-5 text-blue-400" />
                         Quick Actions
                       </h2>
                       <div className="space-y-3">
                         <button
                           onClick={() => handleViewSelect('board')}
-                          className="w-full text-left p-3 sm:p-4 bg-[#1f1f23] rounded-lg text-gray-300 hover:bg-blue-600 hover:text-white active:bg-blue-700 transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group touch-manipulation min-h-[44px]"
+                          className="w-full text-left p-3 sm:p-4 rounded-lg hover:bg-blue-600 hover:text-white active:bg-blue-700 transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group touch-manipulation min-h-[44px]"
+                          style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))' }}
                         >
                           <div className="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center group-hover:bg-white/20">
                             <CheckCircle2 className="w-5 h-5" />
@@ -281,7 +289,8 @@ function ProtectedProjectTimelinePage() {
                         </button>
                         <button
                           onClick={() => handleViewSelect('projects')}
-                          className="w-full text-left p-3 sm:p-4 bg-[#1f1f23] rounded-lg text-gray-300 hover:bg-green-600 hover:text-white active:bg-green-700 transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group touch-manipulation min-h-[44px]"
+                          className="w-full text-left p-3 sm:p-4 rounded-lg hover:bg-green-600 hover:text-white active:bg-green-700 transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group touch-manipulation min-h-[44px]"
+                          style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))' }}
                         >
                           <div className="w-10 h-10 bg-green-600/20 rounded-lg flex items-center justify-center group-hover:bg-white/20">
                             <FolderOpen className="w-5 h-5" />
@@ -297,8 +306,8 @@ function ProtectedProjectTimelinePage() {
 
                   {/* Recent Projects */}
                   <div className="lg:col-span-2">
-                    <div className="bg-[#2a2a2e] rounded-xl p-4 sm:p-6 border border-gray-700/50">
-                      <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                    <div className="rounded-xl p-4 sm:p-6 border" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
+                      <h2 className="text-xl font-semibold mb-4 flex items-center gap-2" style={{ color: 'rgb(var(--foreground))' }}>
                         <Calendar className="w-5 h-5 text-purple-400" />
                         Recent Projects
                       </h2>
@@ -310,18 +319,25 @@ function ProtectedProjectTimelinePage() {
                             <button
                               key={project.id}
                               onClick={() => handleProjectSelect(project.id)}
-                              className="w-full text-left p-3 sm:p-4 bg-[#1f1f23] rounded-lg hover:bg-[#3a3a3e] active:bg-[#4a4a4e] transition-all duration-200 hover:translate-x-1 touch-manipulation min-h-[44px]"
+                              className="w-full text-left p-3 sm:p-4 rounded-lg transition-all duration-200 hover:translate-x-1 touch-manipulation min-h-[44px]"
+                              style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))' }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = 'rgb(var(--accent))'
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'
+                              }}
                             >
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">
-                                  <h3 className="font-medium mb-1" style={{ color: 'rgb(var(--card-foreground))' }}>{project.name}</h3>
+                                  <h3 className="font-medium mb-1" style={{ color: 'rgb(var(--foreground))' }}>{project.name}</h3>
                                   <p className="text-sm line-clamp-2" style={{ color: 'rgb(var(--muted-foreground))' }}>{project.description || 'No description'}</p>
                                 </div>
-                                <span className={`ml-3 text-xs px-2 py-1 rounded-full flex-shrink-0 ${
-                                  project.status === 'active' ? 'bg-green-600 text-white' :
-                                  project.status === 'hold' ? 'bg-yellow-600 text-white' :
-                                  project.status === 'completed' ? 'bg-blue-600 text-white' :
-                                  'bg-gray-600 text-white'
+                                <span className={`ml-3 text-xs px-2 py-1 rounded-full flex-shrink-0 border font-medium ${
+                                  project.status === 'active' ? 'bg-green-100 dark:bg-green-600 text-green-800 dark:text-white border-green-300 dark:border-green-600' :
+                                  project.status === 'hold' ? 'bg-yellow-100 dark:bg-yellow-600 text-yellow-800 dark:text-white border-yellow-300 dark:border-yellow-600' :
+                                  project.status === 'completed' ? 'bg-blue-100 dark:bg-blue-600 text-blue-800 dark:text-white border-blue-300 dark:border-blue-600' :
+                                  'bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-white border-gray-300 dark:border-gray-600'
                                 }`}>
                                   {project.status?.charAt(0).toUpperCase() + project.status?.slice(1) || 'Unknown'}
                                 </span>

@@ -1,7 +1,7 @@
 /* Theme Variables */
 :root {
   /* Light Theme Colors */
-  --background: 255 255 255;
+  --background: 248 250 252;
   --foreground: 15 23 42;
   --card: 255 255 255;
   --card-foreground: 15 23 42;
@@ -13,7 +13,7 @@
   --secondary-foreground: 15 23 42;
   --muted: 241 245 249;
   --muted-foreground: 100 116 139;
-  --accent: 241 245 249;
+  --accent: 226 232 240;
   --accent-foreground: 15 23 42;
   --destructive: 239 68 68;
   --destructive-foreground: 248 250 252;

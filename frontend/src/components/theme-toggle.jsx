@@ -15,15 +15,21 @@ export function ThemeToggle({ isCollapsed = false }) {
   return (
     <button
       onClick={toggleTheme}
-      className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors hover:text-white ${
+      className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors ${
         isCollapsed ? 'justify-center' : ''
       }`}
-      style={{ 
+      style={{
         color: 'rgb(var(--muted-foreground))',
         backgroundColor: 'transparent'
       }}
-      onMouseEnter={(e) => (e.target.style.backgroundColor = 'rgb(var(--muted))')}
-      onMouseLeave={(e) => (e.target.style.backgroundColor = 'transparent')}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = 'rgb(var(--muted))';
+        e.currentTarget.style.color = 'rgb(var(--foreground))';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = 'transparent';
+        e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+      }}
       title={`Switch to ${settings.theme === 'dark' ? 'light' : 'dark'} mode`}
     >
       {settings.theme === 'dark' ? (
