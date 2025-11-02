@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useSession } from "@/components/session-provider"
+import { useRouter, useSearchParams } from "next/navigation"
 import { SidebarNavigation } from "@/components/sidebar-navigation"
 import { BoardHeader } from "@/components/board-header"
 import { KanbanBoard } from "@/components/kanban-board"
