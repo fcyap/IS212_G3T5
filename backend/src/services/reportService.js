@@ -1826,10 +1826,14 @@ class ReportService {
         byStatus[status]++;
       }
 
-      // Count by priority
-      const priority = task.priority || 'medium';
-      if (byPriority.hasOwnProperty(priority)) {
-        byPriority[priority]++;
+      // Count by priority (numeric 1-10 mapped to low/medium/high)
+      const priorityValue = Number(task.priority) || 5;
+      if (priorityValue >= 1 && priorityValue <= 3) {
+        byPriority.low++;
+      } else if (priorityValue >= 4 && priorityValue <= 6) {
+        byPriority.medium++;
+      } else if (priorityValue >= 7 && priorityValue <= 10) {
+        byPriority.high++;
       }
     });
 
