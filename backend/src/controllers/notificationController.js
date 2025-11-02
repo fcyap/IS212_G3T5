@@ -134,9 +134,39 @@ const dismissNotification = async (req, res) => {
   }
 };
 
+/**
+ * Check for overdue tasks and send notifications
+ * This endpoint can be called manually or by a cron job
+ */
+const checkOverdueTasks = async (req, res) => {
+  try {
+    console.log('Manual overdue task check triggered');
+
+    const result = await notificationService.checkAndSendOverdueNotifications();
+
+    res.json({
+      success: true,
+      message: 'Overdue task check completed',
+      data: {
+        notificationsSent: result.notificationsSent,
+        tasksChecked: result.tasksChecked,
+        overdueTasksFound: result.overdueTasksFound
+      }
+    });
+  } catch (err) {
+    console.error('Error checking overdue tasks:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to check overdue tasks',
+      error: err.message 
+    });
+  }
+};
+
 module.exports = {
   getUserNotifications,
   getNotificationsByCreator,
   createTestNotification,
-  dismissNotification
+  dismissNotification,
+  checkOverdueTasks
 };
