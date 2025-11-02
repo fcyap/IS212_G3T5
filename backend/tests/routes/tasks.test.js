@@ -2,6 +2,12 @@ const request = require('supertest');
 const express = require('express');
 
 jest.mock('../../src/services/taskService');
+jest.mock('../../src/middleware/auth', () => ({
+  authMiddleware: () => (req, _res, next) => {
+    req.user = req.user || { id: 1, role: 'staff' };
+    next();
+  },
+}));
 jest.mock('../../src/middleware/rbac', () => ({
   requireTaskCreation: () => (req, _res, next) => next(),
   requireTaskModification: () => (req, _res, next) => next()

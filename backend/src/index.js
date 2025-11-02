@@ -125,6 +125,7 @@ async function initializeApp() {
     cors({
       origin: process.env.FRONTEND_ORIGIN || true, // Allow all origins in development
       credentials: true,
+      exposedHeaders: ['Content-Disposition']
     })
   );
     app.get("/csrf-token", (req, res) => {

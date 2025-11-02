@@ -78,10 +78,13 @@ class TaskCommentService {
           .filter(Boolean)
       : [];
     const requesterId = requester?.id == null ? null : String(requester.id).trim();
-    const normalizedRole = String(requester.role || '').toLowerCase();
-    const normalizedDepartment = String(requester.department || '').trim().toLowerCase();
+    const normalizedRole = String(
+      requester.role ?? requester.roleName ?? requester.role_label ?? ''
+    )
+      .trim()
+      .toLowerCase();
 
-    if (normalizedRole === 'admin' || normalizedDepartment === 'hr team') {
+    if (normalizedRole === 'admin' || normalizedRole === 'hr') {
       return true;
     }
 
@@ -227,10 +230,11 @@ class TaskCommentService {
     const existing = await this.repo.getById(numericId);
     if (!existing) throw httpError(404, 'Comment not found');
 
-    const role = String(requester?.role || requester?.roleName || requester?.role_label || '').toLowerCase();
-    const department = String(requester?.department || '').trim().toLowerCase();
-    if (role !== 'admin' && department !== 'hr team') {
-      throw httpError(403, 'Only admins can delete comments');
+    const role = String(requester?.role || requester?.roleName || requester?.role_label || '')
+      .trim()
+      .toLowerCase();
+    if (role !== 'admin' && role !== 'hr') {
+      throw httpError(403, 'Only admins or HR can delete comments');
     }
 
     const result = await this.repo.deleteCascade(numericId);

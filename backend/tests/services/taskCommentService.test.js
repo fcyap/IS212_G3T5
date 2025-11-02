@@ -20,7 +20,7 @@ describe('TaskCommentService.deleteComment', () => {
     supabase.from.mockReset();
   });
 
-  test('allows users from HR Team to delete comments and cascade deletes replies', async () => {
+  test('allows users with HR role to delete comments and cascade deletes replies', async () => {
     const repo = {
       ...baseRepo,
       getById: jest.fn().mockResolvedValue({ id: 10, user_id: 5 }),
@@ -30,7 +30,7 @@ describe('TaskCommentService.deleteComment', () => {
 
     const result = await service.deleteComment({
       id: 10,
-      requester: { department: 'HR Team' },
+      requester: { role: 'hr' },
     });
 
     expect(repo.getById).toHaveBeenCalledWith(10);
@@ -48,7 +48,7 @@ describe('TaskCommentService.deleteComment', () => {
     await expect(
       service.deleteComment({
         id: 10,
-        requester: { department: 'Engineering' },
+        requester: { role: 'staff' },
       })
     ).rejects.toMatchObject({ httpCode: 403 });
 
@@ -65,7 +65,7 @@ describe('TaskCommentService.deleteComment', () => {
     await expect(
       service.deleteComment({
         id: 999,
-        requester: { department: 'HR Team' },
+        requester: { role: 'hr' },
       })
     ).rejects.toMatchObject({ httpCode: 404 });
 
@@ -81,7 +81,7 @@ describe('TaskCommentService.deleteComment', () => {
     await expect(
       service.deleteComment({
         id: 'not-a-number',
-        requester: { department: 'HR Team' },
+        requester: { role: 'hr' },
       })
     ).rejects.toMatchObject({ httpCode: 400 });
 

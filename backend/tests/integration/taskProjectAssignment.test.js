@@ -9,6 +9,12 @@ jest.mock('../../src/middleware/rbac', () => ({
   requireTaskCreation: () => (req, _res, next) => next(),
   requireTaskModification: () => (req, _res, next) => next()
 }));
+jest.mock('../../src/middleware/auth', () => ({
+  authMiddleware: () => (req, _res, next) => {
+    req.user = req.user || { id: 1, role: 'staff' };
+    next();
+  },
+}));
 
 const taskRepository = require('../../src/repository/taskRepository');
 const projectRepository = require('../../src/repository/projectRepository');
