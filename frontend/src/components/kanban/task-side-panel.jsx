@@ -9,7 +9,6 @@ import { TaskAttachmentsDisplay } from '../task-attachments-display';
 import { FileUploadInput } from '../file-upload-input';
 import { TaskTimeTracking } from '../task-time-tracking';
 import { useAuth } from '@/hooks/useAuth';
-import { useUserSearch } from '@/hooks/useUserSearch';
 import { fetchWithCsrf } from '@/lib/csrf';
 import { extractUserHours, normalizeTimeSummary } from '@/lib/time-tracking';
 import toast from 'react-hot-toast';
@@ -100,6 +99,9 @@ export function TaskSidePanel({
   const isMountedRef = useRef(true);
   const normalizedProjectId = Number.isFinite(Number(task.projectId)) ? Number(task.projectId) : null;
   const projectEntry = normalizedProjectId != null ? projectLookup[normalizedProjectId] : null;
+  const [projectMembers, setProjectMembers] = useState([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [projectName, setProjectName] = useState(projectEntry?.name ?? null);
 
   // Subtasks
@@ -220,6 +222,66 @@ export function TaskSidePanel({
     };
   }, [ensureProject, normalizedProjectId, projectEntry?.name]);
 
+  // Fetch project members for assignee filtering
+  useEffect(() => {
+    if (!normalizedProjectId) {
+      setProjectMembers([]);
+      return;
+    }
+
+    let active = true;
+    setLoadingMembers(true);
+
+    async function fetchProjectMembers() {
+      try {
+        const res = await fetchWithCsrf(`${API}/api/projects/${normalizedProjectId}`, {
+          method: "GET",
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to fetch project: ${res.status}`);
+        }
+        const data = await res.json();
+        const project = data?.project ?? data;
+
+        // Fetch user details for each member
+        if (project?.user_ids && Array.isArray(project.user_ids)) {
+          const memberPromises = project.user_ids.map(async (userId) => {
+            try {
+              const userRes = await fetchWithCsrf(`${API}/api/users/${userId}`, {
+                method: "GET",
+              });
+              if (!userRes.ok) return null;
+              const userData = await userRes.json();
+              return userData?.user ?? userData;
+            } catch (err) {
+              console.error(`Failed to fetch user ${userId}:`, err);
+              return null;
+            }
+          });
+
+          const members = (await Promise.all(memberPromises)).filter(Boolean);
+          if (active) {
+            setProjectMembers(members);
+          }
+        } else if (active) {
+          setProjectMembers([]);
+        }
+      } catch (err) {
+        console.error('[TaskSidePanel] Failed to fetch project members:', err);
+        if (active) {
+          setProjectMembers([]);
+        }
+      } finally {
+        if (active) {
+          setLoadingMembers(false);
+        }
+      }
+    }
+
+    fetchProjectMembers();
+    return () => { active = false; };
+  }, [normalizedProjectId]);
+
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -259,19 +321,34 @@ export function TaskSidePanel({
     }
   }
 
-  const {
-    query: userSearch,
-    results: userSearchResults,
-    loading: loadingUsers,
-    search: searchUsers,
-    clear: clearUserSearch,
-  } = useUserSearch({ canSearch: canAddAssignees, minQueryLength: 1 })
+  // Filter project members based on search query
+  const filteredMemberResults = useMemo(() => {
+    if (!canAddAssignees || !memberSearchQuery.trim()) return [];
+    if (assignees.length >= MAX_ASSIGNEES) return [];
+
+    const query = memberSearchQuery.trim().toLowerCase();
+    return projectMembers
+      .filter(member => {
+        // Don't show already assigned members
+        if (assignees.some(a => a.id === member.id)) return false;
+
+        // Match by name or email
+        const name = (member.name || '').toLowerCase();
+        const email = (member.email || '').toLowerCase();
+        return name.includes(query) || email.includes(query);
+      })
+      .slice(0, 8); // Limit to 8 results
+  }, [memberSearchQuery, projectMembers, assignees, canAddAssignees]);
 
   function handleUserSearchInput(e) {
     if (!canAddAssignees || assignees.length >= MAX_ASSIGNEES) return;
     const value = e.target.value;
     console.log('[AssigneeSearch] (input onChange) value:', value);
-    searchUsers(value);
+    setMemberSearchQuery(value);
+  }
+
+  function clearUserSearch() {
+    setMemberSearchQuery('');
   }
 
   const canUpdateHours = isSelfAssignee;
@@ -700,16 +777,16 @@ export function TaskSidePanel({
                 <input
                   type="text"
                   className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500 disabled:opacity-60"
-                  placeholder="Search users by name or email..."
-                  value={userSearch}
+                  placeholder="Search project members by name or email..."
+                  value={memberSearchQuery}
                   onChange={handleUserSearchInput}
-                  aria-busy={loadingUsers ? 'true' : 'false'}
+                  aria-busy={loadingMembers ? 'true' : 'false'}
                   autoComplete="off"
                   disabled={!canAddAssignees || assignees.length >= MAX_ASSIGNEES}
                 />
-                {canAddAssignees && assignees.length < MAX_ASSIGNEES && userSearchResults.length > 0 && (
+                {canAddAssignees && assignees.length < MAX_ASSIGNEES && filteredMemberResults.length > 0 && (
                   <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
-                    {userSearchResults.map((u) => (
+                    {filteredMemberResults.map((u) => (
                       <div
                         key={u.id}
                         className="px-3 py-2 hover:bg-gray-700 cursor-pointer text-gray-100"

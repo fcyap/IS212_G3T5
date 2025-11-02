@@ -19,7 +19,9 @@ const VALID_SORT_FIELDS = {
 
 const VALID_SORT_ORDERS = ['asc', 'desc'];
 const VALID_TASK_STATUSES = ['pending', 'in_progress', 'completed', 'cancelled'];
-const VALID_TASK_PRIORITIES = ['low', 'medium', 'high'];
+const PRIORITY_MIN = 1;
+const PRIORITY_MAX = 10;
+const LEGACY_PRIORITY_MAP = { low: 1, medium: 5, high: 10 };
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -60,6 +62,63 @@ const validatePagination = (page, limit) => {
   const validatedPage = page ? validatePositiveInteger(page, 'page') : 1;
   const validatedLimit = limit ? Math.min(validatePositiveInteger(limit, 'limit'), MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE;
   return { page: validatedPage, limit: validatedLimit, offset: (validatedPage - 1) * validatedLimit };
+};
+
+const priorityError = () => {
+  const error = new Error(`Priority must be an integer between ${PRIORITY_MIN} and ${PRIORITY_MAX}`);
+  error.statusCode = 400;
+  return error;
+};
+
+const normalizePriority = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim().toLowerCase();
+    if (trimmed === '') {
+      return null;
+    }
+    if (LEGACY_PRIORITY_MAP[trimmed] !== undefined) {
+      return LEGACY_PRIORITY_MAP[trimmed];
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) {
+      throw priorityError();
+    }
+    return normalizePriority(parsed);
+  }
+
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    throw priorityError();
+  }
+
+  const integerPriority = Math.trunc(numeric);
+  if (integerPriority < PRIORITY_MIN || integerPriority > PRIORITY_MAX) {
+    throw priorityError();
+  }
+
+  return integerPriority;
+};
+
+const categorizePriority = (value) => {
+  try {
+    const normalized = normalizePriority(value);
+    if (normalized === null) {
+      return 'unknown';
+    }
+    if (normalized >= 8) {
+      return 'high';
+    }
+    if (normalized >= 4) {
+      return 'medium';
+    }
+    return 'low';
+  } catch (_error) {
+    return 'unknown';
+  }
 };
 
 // Reusable project validation helper
@@ -140,7 +199,7 @@ const getMockTasks = (projectId = null) => [
     assigned_to: [1],
     created_at: "2025-09-16T11:49:09.914069",
     deadline: null,
-    priority: "medium",
+    priority: 5,
     updated_at: "2025-09-16T13:12:57.416204"
   },
   {
@@ -152,7 +211,7 @@ const getMockTasks = (projectId = null) => [
     assigned_to: [1, 2],
     created_at: "2025-09-16T11:49:09.914069",
     deadline: null,
-    priority: "medium",
+    priority: 5,
     updated_at: "2025-09-16T13:12:57.416204"
   }
 ].filter(task => projectId ? task.project_id == projectId : true);
@@ -178,11 +237,11 @@ router.get('/:projectId/tasks', authMiddleware(), async (req, res) => {
       });
     }
 
-    if (priority && !VALID_TASK_PRIORITIES.includes(priority)) {
-      return res.status(400).json({
-        success: false,
-        error: `Invalid priority. Must be one of: ${VALID_TASK_PRIORITIES.join(', ')}`
-      });
+    let normalizedPriorityFilter = null;
+    if (priority !== undefined && priority !== null && priority !== '') {
+      if (priority !== 'all') {
+        normalizedPriorityFilter = normalizePriority(priority);
+      }
     }
 
     if (assignedTo) {
@@ -207,8 +266,8 @@ router.get('/:projectId/tasks', authMiddleware(), async (req, res) => {
         query = query.contains('assigned_to', [parseInt(assignedTo)]);
       }
 
-      if (priority) {
-        query = query.eq('priority', priority);
+      if (normalizedPriorityFilter !== null) {
+        query = query.eq('priority', normalizedPriorityFilter);
       }
 
       // Apply sorting and pagination
@@ -237,8 +296,8 @@ router.get('/:projectId/tasks', authMiddleware(), async (req, res) => {
         allTasks = allTasks.filter(task => task.assigned_to && task.assigned_to.includes(parseInt(assignedTo)));
       }
 
-      if (priority) {
-        allTasks = allTasks.filter(task => task.priority === priority);
+      if (normalizedPriorityFilter !== null) {
+        allTasks = allTasks.filter(task => task.priority === normalizedPriorityFilter);
       }
 
       // Apply sorting
@@ -273,7 +332,7 @@ router.get('/:projectId/tasks', authMiddleware(), async (req, res) => {
       filters: {
         status: status || null,
         assignedTo: assignedTo || null,
-        priority: priority || null,
+        priority: normalizedPriorityFilter,
         sortBy,
         sortOrder
       },
@@ -364,6 +423,19 @@ router.get('/:projectId/tasks/stats', authMiddleware(), async (req, res) => {
       !['completed', 'cancelled'].includes(task.status)
     );
 
+    const priorityBuckets = tasks.reduce(
+      (acc, task) => {
+        const bucket = categorizePriority(task.priority);
+        if (bucket === 'high' || bucket === 'medium' || bucket === 'low') {
+          acc[bucket] += 1;
+        } else {
+          acc.unknown += 1;
+        }
+        return acc;
+      },
+      { high: 0, medium: 0, low: 0, unknown: 0 }
+    );
+
     const stats = {
       total: tasks.length,
       byStatus: {
@@ -373,9 +445,10 @@ router.get('/:projectId/tasks/stats', authMiddleware(), async (req, res) => {
         cancelled: tasks.filter(t => t.status === 'cancelled').length
       },
       byPriority: {
-        high: tasks.filter(t => t.priority === 'high').length,
-        medium: tasks.filter(t => t.priority === 'medium').length,
-        low: tasks.filter(t => t.priority === 'low').length
+        high: priorityBuckets.high,
+        medium: priorityBuckets.medium,
+        low: priorityBuckets.low,
+        unknown: priorityBuckets.unknown
       },
       overdue: overdueTasks.length,
       completionRate: tasks.length > 0 ?
@@ -541,11 +614,11 @@ router.get('/tasks', authMiddleware(), async (req, res) => {
       });
     }
 
-    if (priority && !VALID_TASK_PRIORITIES.includes(priority)) {
-      return res.status(400).json({
-        success: false,
-        error: `Invalid priority. Must be one of: ${VALID_TASK_PRIORITIES.join(', ')}`
-      });
+    let normalizedPriorityFilter = null;
+    if (priority !== undefined && priority !== null && priority !== '') {
+      if (priority !== 'all') {
+        normalizedPriorityFilter = normalizePriority(priority);
+      }
     }
 
     if (project_id) {
@@ -577,8 +650,8 @@ router.get('/tasks', authMiddleware(), async (req, res) => {
         query = query.contains('assigned_to', [parseInt(assigned_to)]);
       }
 
-      if (priority) {
-        query = query.eq('priority', priority);
+      if (normalizedPriorityFilter !== null) {
+        query = query.eq('priority', normalizedPriorityFilter);
       }
 
       // Apply sorting and pagination
@@ -627,6 +700,10 @@ router.get('/tasks', authMiddleware(), async (req, res) => {
         }
       });
 
+      if (normalizedPriorityFilter !== null) {
+        allTasks = allTasks.filter(task => task.priority === normalizedPriorityFilter);
+      }
+
       totalCount = allTasks.length;
       // Apply pagination
       tasks = allTasks.slice(offset, offset + validatedLimit);
@@ -647,7 +724,7 @@ router.get('/tasks', authMiddleware(), async (req, res) => {
         status: status || null,
         project_id: project_id || null,
         assigned_to: assigned_to || null,
-        priority: priority || null,
+        priority: normalizedPriorityFilter,
         sortBy,
         sortOrder
       },

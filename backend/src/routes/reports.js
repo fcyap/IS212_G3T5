@@ -18,6 +18,7 @@ router.post('/tasks', requireHROrAdmin, checkDepartmentAccess(), reportControlle
 router.post('/users/productivity', requireHROrAdmin, checkDepartmentAccess(), reportController.generateUserProductivityReport);
 router.post('/projects', requireHROrAdmin, checkDepartmentAccess(), reportController.generateProjectReport);
 router.post('/departments', requireHROrAdmin, checkDepartmentAccess(), reportController.generateDepartmentalPerformanceReport);
+router.post('/time/manual', requireHROrAdmin, checkDepartmentAccess(), reportController.generateManualTimeReport);
 
 // Export endpoints
 router.post('/export/pdf', requireHROrAdmin, reportController.exportReportToPDF);

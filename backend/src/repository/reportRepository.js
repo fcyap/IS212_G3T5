@@ -138,6 +138,139 @@ class ReportRepository {
   }
 
   /**
+   * Get manually logged time entries with contextual information
+   */
+  async getManualTimeLogs(filters = {}) {
+    try {
+      let query = supabase
+        .from('task_assignee_hours')
+        .select('task_id, user_id, hours, created_at, updated_at');
+
+      if (filters.startDate) {
+        query = query.gte('updated_at', filters.startDate);
+      }
+
+      if (filters.endDate) {
+        const endDate = new Date(filters.endDate);
+        endDate.setDate(endDate.getDate() + 1);
+        query = query.lt('updated_at', endDate.toISOString());
+      }
+
+      const { data: rows, error } = await query;
+
+      if (error) {
+        return { data: null, error };
+      }
+
+      if (!rows || rows.length === 0) {
+        return { data: [], error: null };
+      }
+
+      const normalizeIds = (values = []) => {
+        const normalized = values
+          .map(value => {
+            if (value === undefined || value === null) {
+              return null;
+            }
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed)) {
+              return null;
+            }
+            const integer = Math.trunc(parsed);
+            if (!Number.isInteger(integer) || integer <= 0) {
+              return null;
+            }
+            return integer;
+          })
+          .filter(value => value !== null);
+        return Array.from(new Set(normalized));
+      };
+
+      const taskIds = normalizeIds(rows.map(row => row.task_id));
+
+      let taskMap = new Map();
+      if (taskIds.length > 0) {
+        const { data: taskRows, error: taskError } = await supabase
+          .from('tasks')
+          .select('id, project_id, status, priority, title')
+          .in('id', taskIds);
+
+        if (taskError) {
+          return { data: null, error: taskError };
+        }
+
+        taskMap = new Map(
+          (taskRows || []).map(task => [task.id, task])
+        );
+      }
+
+      const projectIds = normalizeIds(
+        Array.from(taskMap.values()).map(task => task.project_id)
+      );
+
+      let projectMap = new Map();
+      if (projectIds.length > 0) {
+        const { data: projectRows, error: projectError } = await supabase
+          .from('projects')
+          .select('id, name')
+          .in('id', projectIds);
+
+        if (projectError) {
+          return { data: null, error: projectError };
+        }
+
+        projectMap = new Map(
+          (projectRows || []).map(project => [project.id, project])
+        );
+      }
+
+      const userIds = normalizeIds(rows.map(row => row.user_id));
+
+      let userMap = new Map();
+      if (userIds.length > 0) {
+        const { data: userRows, error: userError } = await supabase
+          .from('users')
+          .select('id, department, name')
+          .in('id', userIds);
+
+        if (userError) {
+          return { data: null, error: userError };
+        }
+
+        userMap = new Map(
+          (userRows || []).map(user => [user.id, user])
+        );
+      }
+
+      const enriched = rows.map(row => {
+        const task = taskMap.get(row.task_id) || {};
+        const project = projectMap.get(task.project_id) || {};
+        const user = userMap.get(row.user_id) || {};
+
+        return {
+          task_id: row.task_id,
+          user_id: row.user_id,
+          hours: row.hours,
+          logged_at: row.updated_at || row.created_at,
+          project_id: task.project_id || null,
+          project_name: project.name || null,
+          department: user.department || null,
+          user_name: user.name || null,
+          task_status: task.status || null,
+          task_priority: task.priority || null,
+          task_title: task.title || null,
+          is_manual: true
+        };
+      });
+
+      return { data: enriched, error: null };
+    } catch (error) {
+      console.error('Error in getManualTimeLogs:', error);
+      return { data: null, error };
+    }
+  }
+
+  /**
    * Get task statistics by status
    */
   async getTaskStatisticsByStatus(projectIds) {
