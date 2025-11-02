@@ -96,7 +96,7 @@ const NotificationItem = ({ notification }) => {
   }
 
   return (
-    <div className="bg-[#1a1a1d] rounded-lg p-4 sm:p-6 border border-white/10 hover:bg-[#2a2a2d] transition-all duration-200">
+    <div className="rounded-lg p-4 sm:p-6 border transition-all duration-200" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }} onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--muted))'} onMouseLeave={(e) => e.target.style.backgroundColor = 'rgb(var(--card))'}>
       <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
         {/* Sender Avatar */}
         <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
@@ -107,7 +107,7 @@ const NotificationItem = ({ notification }) => {
         <div className="flex-1 min-w-0 w-full">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 sm:mb-3 gap-2">
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              <h3 className="font-semibold text-white text-sm sm:text-base">
+              <h3 className="font-semibold text-sm sm:text-base" style={{ color: 'rgb(var(--card-foreground))' }}>
                 {loading ? 'Loading...' : senderName}
               </h3>
               {notification.notif_types && (
@@ -179,20 +179,29 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1a1a1d] text-white overflow-y-auto">
+    <div className="min-h-screen overflow-y-auto" style={{ backgroundColor: 'rgb(var(--background))', color: 'rgb(var(--foreground))' }}>
       <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-8">
         {/* Header */}
         <div className="flex items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
           <Button
             variant="ghost"
             onClick={handleBack}
-            className="p-1.5 sm:p-2 hover:bg-white/10 rounded-full text-gray-300 hover:text-white"
+            className="p-1.5 sm:p-2 rounded-full transition-colors"
+            style={{ color: 'rgb(var(--muted-foreground))' }}
+            onMouseEnter={(e) => { 
+              e.target.style.backgroundColor = 'rgb(var(--muted))';
+              e.target.style.color = 'rgb(var(--foreground))';
+            }}
+            onMouseLeave={(e) => { 
+              e.target.style.backgroundColor = 'transparent';
+              e.target.style.color = 'rgb(var(--muted-foreground))';
+            }}
           >
             <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
           </Button>
           <div className="flex items-center gap-2 sm:gap-3">
-            <Bell className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
-            <h1 className="text-2xl sm:text-3xl font-bold text-white">Notifications</h1>
+            <Bell className="w-6 h-6 sm:w-8 sm:h-8" style={{ color: 'rgb(var(--foreground))' }} />
+            <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: 'rgb(var(--foreground))' }}>Notifications</h1>
           </div>
         </div>
 

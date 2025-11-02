@@ -122,9 +122,9 @@ function ProtectedProjectTimelinePage() {
   // Show loading spinner while checking authentication
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-950 text-white">
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'rgb(var(--background))', color: 'rgb(var(--foreground))' }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mb-4"></div>
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 mb-4" style={{ borderColor: 'rgb(var(--foreground))' }}></div>
           <p>Loading...</p>
         </div>
       </div>
@@ -137,7 +137,7 @@ function ProtectedProjectTimelinePage() {
   }
 
   return (
-    <div className="flex h-screen bg-[#1a1a1d] dark overflow-hidden">
+    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'rgb(var(--background))' }}>
       {/* Mobile Sidebar Overlay */}
       {isMobileSidebarOpen && (
         <div 
@@ -162,16 +162,19 @@ function ProtectedProjectTimelinePage() {
       
       <div className="flex-1 flex flex-col overflow-hidden transition-all duration-300">
         {/* Mobile Menu Button */}
-        <div className="lg:hidden bg-[#1f1f23] border-b border-gray-700 p-3 flex items-center justify-between">
+        <div className="lg:hidden border-b p-3 flex items-center justify-between" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
           <button
             onClick={() => setIsMobileSidebarOpen(true)}
-            className="p-2 text-white hover:bg-gray-700 rounded-lg transition-colors"
+            className="p-2 rounded-lg transition-colors" 
+            style={{ color: 'rgb(var(--foreground))', backgroundColor: 'transparent' }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--muted))'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <h1 className="text-white font-semibold text-lg">G3T5 Project Manager</h1>
+          <h1 className="font-semibold text-lg" style={{ color: 'rgb(var(--foreground))' }}>G3T5 Project Manager</h1>
           <div className="w-10" /> {/* Spacer for centering */}
         </div>
         
@@ -192,14 +195,14 @@ function ProtectedProjectTimelinePage() {
               <KanbanBoard />
             </>
           ) : currentView === 'home' ? (
-            <div className="flex-1 bg-[#1a1a1d] p-3 sm:p-6 overflow-y-auto">
+            <div className="flex-1 p-3 sm:p-6 overflow-y-auto" style={{ backgroundColor: 'rgb(var(--background))' }}>
               <div className="max-w-7xl mx-auto space-y-6">
                 {/* Welcome Header */}
                 <div className="mb-8">
-                  <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">
+                  <h1 className="text-3xl sm:text-4xl font-bold mb-2" style={{ color: 'rgb(var(--foreground))' }}>
                     {getGreeting()}, {user?.name || 'User'}!
                   </h1>
-                  <p className="text-gray-400">Here's what's happening with your projects today</p>
+                  <p style={{ color: 'rgb(var(--muted-foreground))' }}>Here's what's happening with your projects today</p>
                 </div>
 
                 {/* Stats Grid */}
@@ -256,34 +259,36 @@ function ProtectedProjectTimelinePage() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* Quick Actions */}
                   <div className="lg:col-span-1">
-                    <div className="bg-[#2a2a2e] rounded-xl p-6 border border-gray-700/50">
-                      <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                    <div className="rounded-xl p-6 border" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
+                      <h2 className="text-xl font-semibold mb-4 flex items-center gap-2" style={{ color: 'rgb(var(--card-foreground))' }}>
                         <TrendingUp className="w-5 h-5 text-blue-400" />
                         Quick Actions
                       </h2>
                       <div className="space-y-3">
                         <button
                           onClick={() => setCurrentView('board')}
-                          className="w-full text-left p-4 bg-[#1f1f23] rounded-lg text-gray-300 hover:bg-blue-600 hover:text-white transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group"
+                          className="w-full text-left p-4 rounded-lg transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group hover:bg-blue-600 hover:text-white"
+                          style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--muted-foreground))' }}
                         >
                           <div className="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center group-hover:bg-white/20">
                             <CheckCircle2 className="w-5 h-5" />
                           </div>
                           <div>
                             <div className="font-medium">Task Board</div>
-                            <div className="text-xs text-gray-400 group-hover:text-blue-100">Manage your tasks</div>
+                            <div className="text-xs group-hover:text-blue-100" style={{ color: 'rgb(var(--muted-foreground))' }}>Manage your tasks</div>
                           </div>
                         </button>
                         <button
                           onClick={() => setCurrentView('projects')}
-                          className="w-full text-left p-4 bg-[#1f1f23] rounded-lg text-gray-300 hover:bg-green-600 hover:text-white transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group"
+                          className="w-full text-left p-4 rounded-lg transition-all duration-200 hover:translate-x-1 flex items-center gap-3 group hover:bg-green-600 hover:text-white"
+                          style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--muted-foreground))' }}
                         >
                           <div className="w-10 h-10 bg-green-600/20 rounded-lg flex items-center justify-center group-hover:bg-white/20">
                             <FolderOpen className="w-5 h-5" />
                           </div>
                           <div>
                             <div className="font-medium">All Projects</div>
-                            <div className="text-xs text-gray-400 group-hover:text-green-100">View all projects</div>
+                            <div className="text-xs group-hover:text-green-100" style={{ color: 'rgb(var(--muted-foreground))' }}>View all projects</div>
                           </div>
                         </button>
                       </div>
@@ -292,25 +297,28 @@ function ProtectedProjectTimelinePage() {
 
                   {/* Recent Projects */}
                   <div className="lg:col-span-2">
-                    <div className="bg-[#2a2a2e] rounded-xl p-6 border border-gray-700/50">
-                      <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                    <div className="rounded-xl p-6 border" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
+                      <h2 className="text-xl font-semibold mb-4 flex items-center gap-2" style={{ color: 'rgb(var(--card-foreground))' }}>
                         <Calendar className="w-5 h-5 text-purple-400" />
                         Recent Projects
                       </h2>
                       {projectsLoading ? (
-                        <div className="text-gray-400 text-center py-8">Loading projects...</div>
+                        <div className="text-center py-8" style={{ color: 'rgb(var(--muted-foreground))' }}>Loading projects...</div>
                       ) : projects && projects.length > 0 ? (
                         <div className="space-y-3">
                           {projects.slice(0, 3).map((project) => (
                             <button
                               key={project.id}
                               onClick={() => handleProjectSelect(project.id)}
-                              className="w-full text-left p-4 bg-[#1f1f23] rounded-lg hover:bg-[#3a3a3e] transition-all duration-200 hover:translate-x-1"
+                              className="w-full text-left p-4 rounded-lg transition-all duration-200 hover:translate-x-1"
+                              style={{ backgroundColor: 'rgb(var(--muted))' }}
+                              onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--accent))'}
+                              onMouseLeave={(e) => e.target.style.backgroundColor = 'rgb(var(--muted))'}
                             >
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">
-                                  <h3 className="text-white font-medium mb-1">{project.name}</h3>
-                                  <p className="text-gray-400 text-sm line-clamp-2">{project.description || 'No description'}</p>
+                                  <h3 className="font-medium mb-1" style={{ color: 'rgb(var(--card-foreground))' }}>{project.name}</h3>
+                                  <p className="text-sm line-clamp-2" style={{ color: 'rgb(var(--muted-foreground))' }}>{project.description || 'No description'}</p>
                                 </div>
                                 <span className={`ml-3 text-xs px-2 py-1 rounded-full flex-shrink-0 ${
                                   project.status === 'active' ? 'bg-green-600 text-white' :
@@ -325,7 +333,7 @@ function ProtectedProjectTimelinePage() {
                           ))}
                         </div>
                       ) : (
-                        <div className="text-gray-400 text-center py-8">
+                        <div className="text-center py-8" style={{ color: 'rgb(var(--muted-foreground))' }}>
                           <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
                           <p>No projects yet. Create one to get started!</p>
                         </div>

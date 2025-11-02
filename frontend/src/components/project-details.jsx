@@ -1026,11 +1026,11 @@ export function ProjectDetails({ projectId, onBack }) {
                                     </span>
                                     {task.priority && (
                                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                        task.priority === 'high' ? 'bg-red-600 text-white' :
-                                        task.priority === 'medium' ? 'bg-yellow-600 text-white' :
+                                        Number(task.priority) >= 7 ? 'bg-red-600 text-white' :
+                                        Number(task.priority) >= 4 ? 'bg-yellow-600 text-white' :
                                         'bg-green-600 text-white'
                                       }`}>
-                                        {task.priority.toUpperCase()}
+                                        {task.priority}
                                       </span>
                                     )}
                                     {task.blocked && (

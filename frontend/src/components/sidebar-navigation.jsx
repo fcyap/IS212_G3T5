@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { CreateProjectDialog } from "@/components/create-project"
+import { SettingsMenu } from "@/components/settings-menu"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { useProjects } from "@/contexts/project-context"
 import { useSession } from "@/components/session-provider"
 import { useRouter } from "next/navigation"
@@ -26,8 +28,14 @@ const NavItem = ({ icon: Icon, label, isActive, isCollapsed, onClick, hasChevron
       className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors ${
         isActive
           ? "bg-blue-500 text-white"
-          : "text-gray-300 hover:bg-gray-700 hover:text-white"
+          : "hover:text-white"
       }`}
+      style={!isActive ? { 
+        color: 'rgb(var(--muted-foreground))',
+        backgroundColor: 'transparent'
+      } : {}}
+      onMouseEnter={(e) => !isActive && (e.target.style.backgroundColor = 'rgb(var(--muted))')}
+      onMouseLeave={(e) => !isActive && (e.target.style.backgroundColor = 'transparent')}
     >
       <Icon className="w-4 h-4" />
       {!isCollapsed && (
@@ -98,12 +106,23 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
 
     return (
         <div
-            className={`${isCollapsed ? "w-16" : "w-64"} bg-[#1f1f23] text-white flex flex-col h-screen transition-all duration-300 flex-shrink-0 border-r border-gray-700`}
+            className={`${isCollapsed ? "w-16" : "w-64"} flex flex-col h-screen transition-all duration-300 flex-shrink-0 border-r`}
+            style={{ 
+              backgroundColor: 'rgb(var(--card))', 
+              color: 'rgb(var(--card-foreground))', 
+              borderColor: 'rgb(var(--border))' 
+            }}
         >
             {/* Header */}
-            <div className="p-4 border-b border-gray-700">
+            <div className="p-4 border-b" style={{ borderColor: 'rgb(var(--border))' }}>
                 <div className="flex items-center gap-3 mb-4">
-                    <button onClick={onToggleCollapse} className="p-1 hover:bg-gray-700 rounded transition-colors">
+                    <button 
+                      onClick={onToggleCollapse} 
+                      className="p-1 rounded transition-colors"
+                      style={{ backgroundColor: 'transparent' }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--muted))'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                    >
                         <Menu className="w-5 h-5" />
                     </button>
                     {!isCollapsed && (
@@ -180,6 +199,12 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                 )}
                             </button>
                         )}
+                        
+                        {/* Theme Toggle */}
+                        <div className="mt-2">
+                            <ThemeToggle isCollapsed={isCollapsed} />
+                        </div>
+                        
                         {(user?.role === 'hr' || user?.role === 'admin') && (
                           <NavItem 
                             icon={BarChart3} 
@@ -196,7 +221,7 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                             {/* Projects Section - Show for all users who have projects */}
                             {projects.length > 0 && (
                                 <div className="mb-6">
-                                    <div className="flex items-center justify-between px-3 py-2 text-sm font-medium text-white">
+                                    <div className="flex items-center justify-between px-3 py-2 text-sm font-medium" style={{ color: 'rgb(var(--card-foreground))' }}>
                                         <div className="flex items-center gap-2">
                                             <button
                                                 onClick={() => {
@@ -205,12 +230,16 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                                         onViewSelect('projects');
                                                     }
                                                 }}
-                                                className="p-0 bg-[#1f1f23] text-white"
+                                                className="p-0 transition-colors"
+                                                style={{ backgroundColor: 'transparent', color: 'rgb(var(--card-foreground))' }}
                                             >
                                                 {isProjectsExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                                             </button>
                                             <span
-                                                className="cursor-pointer hover:text-gray-300"
+                                                className="cursor-pointer transition-colors"
+                                                style={{ color: 'rgb(var(--card-foreground))' }}
+                                                onMouseEnter={(e) => e.target.style.color = 'rgb(var(--muted-foreground))'}
+                                                onMouseLeave={(e) => e.target.style.color = 'rgb(var(--card-foreground))'}
                                                 onClick={() => onViewSelect('projects')}
                                             >
                                                 My Projects
@@ -218,7 +247,12 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
                                         </div>
                                         {canCreateProject() && (
                                             <CreateProjectDialog>
-                                                <button className="text-gray-400 hover:text-white transition-colors">
+                                                <button 
+                                                  className="transition-colors"
+                                                  style={{ color: 'rgb(var(--muted-foreground))' }}
+                                                  onMouseEnter={(e) => e.target.style.color = 'rgb(var(--foreground))'}
+                                                  onMouseLeave={(e) => e.target.style.color = 'rgb(var(--muted-foreground))'}
+                                                >
                                                     <Plus className="w-4 h-4" />
                                                 </button>
                                             </CreateProjectDialog>
@@ -284,26 +318,30 @@ export function SidebarNavigation({ isCollapsed, onToggleCollapse, onProjectSele
 
             {/* User Info Section */}
             {!sessionLoading && user && (
-                <div className="p-4 border-t border-gray-700">
+                <div className="p-4 border-t" style={{ borderColor: 'rgb(var(--border))' }}>
                     {isCollapsed ? (
-                        <div className="flex items-center justify-center p-2 bg-gray-800 rounded-lg">
-                            <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-xs font-semibold">
-                                {initials}
+                        <div className="flex flex-col items-center gap-2">
+                            <div className="flex items-center justify-center p-2 rounded-lg" style={{ backgroundColor: 'rgb(var(--muted))' }}>
+                                <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-xs font-semibold">
+                                    {initials}
+                                </div>
                             </div>
+                            <SettingsMenu />
                         </div>
                     ) : (
-                        <div className="bg-gray-800 rounded-lg p-3">
+                        <div className="rounded-lg p-3" style={{ backgroundColor: 'rgb(var(--muted))' }}>
                             <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-sm font-semibold">
                                     {initials}
                                 </div>
                                 <div className="flex-1">
-                                    <div className="text-sm font-medium text-white">{displayName}</div>
-                                    <div className="text-xs text-gray-400 capitalize">
+                                    <div className="text-sm font-medium" style={{ color: 'rgb(var(--card-foreground))' }}>{displayName}</div>
+                                    <div className="text-xs capitalize" style={{ color: 'rgb(var(--muted-foreground))' }}>
                                         {roleLabel}
                                         {user.division && ` - ${user.division}`}
                                     </div>
                                 </div>
+                                <SettingsMenu />
                             </div>
                         </div>
                     )}

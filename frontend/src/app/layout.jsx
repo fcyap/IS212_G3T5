@@ -4,10 +4,12 @@ import { Analytics } from "@vercel/analytics/next"
 import { Suspense } from "react"
 import { Toast } from "@/components/ui/toast"
 import { ProjectProvider } from "@/contexts/project-context"
+import { SettingsProvider } from "@/contexts/settings-context"
 import { AuthProvider } from "@/hooks/useAuth"
 import { SessionProvider } from "@/components/session-provider"
 import { DeadlineNotificationToaster } from "@/components/deadline-notification-toaster"
 import "./globals.css"
+import "@/styles/themes.css"
 
 export const metadata = {
   title: "G3T5 Project Timeline",
@@ -17,17 +19,19 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable} antialiased`}>
-        <SessionProvider>
-          <AuthProvider>
-            <ProjectProvider>
-              <Suspense fallback={null}>{children}</Suspense>
-              <Toast />
-              <DeadlineNotificationToaster />
-            </ProjectProvider>
-          </AuthProvider>
-        </SessionProvider>
+        <SettingsProvider>
+          <SessionProvider>
+            <AuthProvider>
+              <ProjectProvider>
+                <Suspense fallback={null}>{children}</Suspense>
+                <Toast />
+                <DeadlineNotificationToaster />
+              </ProjectProvider>
+            </AuthProvider>
+          </SessionProvider>
+        </SettingsProvider>
         <Analytics />
       </body>
     </html>

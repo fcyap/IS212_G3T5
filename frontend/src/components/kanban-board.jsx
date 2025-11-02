@@ -26,6 +26,7 @@ import { useSession } from "@/components/session-provider"
 import { TaskTimeTracking } from "./task-time-tracking"
 import { projectService, userService } from "@/lib/api"
 import { extractUserHours, normalizeTimeSummary } from "@/lib/time-tracking"
+import { ThemeToggle } from "./theme-toggle"
 import toast from "react-hot-toast"
 
 // Priority system: 1-10 integer scale with visual mapping
@@ -569,7 +570,7 @@ export function KanbanBoard({ projectId = null }) {
   const blocked = filteredTasks.filter(t => t.workflow === "blocked")
 
   return (
-    <div className="flex-1 bg-[#1a1a1d] p-3 sm:p-6 overflow-hidden">
+    <div className="flex-1 p-3 sm:p-6 overflow-hidden" style={{ backgroundColor: 'rgb(var(--board-background))' }}>
       {banner && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
           <div className="rounded-md bg-emerald-600 px-4 py-2 text-white shadow-lg ring-1 ring-black/10">
@@ -578,8 +579,8 @@ export function KanbanBoard({ projectId = null }) {
         </div>
       )}
       <div className="overflow-x-auto overflow-y-hidden h-full">
-        {/* Priority Help */}
-        <div className="mb-2 flex justify-center">
+        {/* Header with Priority Help and Theme Toggle */}
+        <div className="mb-2 flex justify-between items-center">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -600,6 +601,8 @@ export function KanbanBoard({ projectId = null }) {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+          
+          <ThemeToggle />
         </div>
         
         {/* Tag Filter Search */}
@@ -630,7 +633,6 @@ export function KanbanBoard({ projectId = null }) {
                 <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">
                   {todo.length + (isAdding && editorLane === "pending" ? 1 : 0)}
                 </span>
-
               </div>
             </div>
 
@@ -1394,15 +1396,15 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
         {/* Backdrop */}
         <div className="absolute inset-0 bg-black/40" onClick={onClose} />
         {/* Panel */}
-        <div className="absolute right-0 top-0 h-full w-[420px] bg-[#1f2023] border-l border-gray-700 p-6 overflow-y-auto">
+        <div className="absolute right-0 top-0 h-full w-[420px] border-l p-6 overflow-y-auto" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-white text-lg font-semibold">Edit task</h3>
-            <button onClick={onClose} className="text-gray-300 hover:text-white text-xl leading-none">×</button>
+            <h3 className="text-lg font-semibold" style={{ color: 'rgb(var(--card-foreground))' }}>Edit task</h3>
+            <button onClick={onClose} className="text-xl leading-none transition-colors" style={{ color: 'rgb(var(--muted-foreground))' }} onMouseEnter={(e) => e.target.style.color = 'rgb(var(--foreground))'} onMouseLeave={(e) => e.target.style.color = 'rgb(var(--muted-foreground))'}>&times;</button>
           </div>
 
           <div className="mb-4">
-            <label className="block text-xs text-gray-400 mb-1">Project</label>
-            <div className="text-sm text-gray-100">
+            <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Project</label>
+            <div className="text-sm" style={{ color: 'rgb(var(--card-foreground))' }}>
               {projectsLoading && <span>Loading project…</span>}
               {!projectsLoading && normalizedProjectId == null && (
                 <span className="text-xs text-gray-500">No project assigned.</span>
@@ -1560,15 +1562,18 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
                   disabled={!canAddAssignees || assignees.length >= MAX_ASSIGNEES}
                 />
                 {canAddAssignees && assignees.length < MAX_ASSIGNEES && userSearchResults.length > 0 && (
-                  <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
+                  <div className="absolute z-50 border rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg" style={{ backgroundColor: 'rgb(var(--popover))', borderColor: 'rgb(var(--border))' }}>
                     {userSearchResults.map((u) => (
                       <div
                         key={u.id}
-                        className="px-3 py-2 hover:bg-gray-700 cursor-pointer text-gray-100"
+                        className="px-3 py-2 cursor-pointer transition-colors"
+                        style={{ color: 'rgb(var(--popover-foreground))' }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--muted))'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                         onClick={() => addAssignee(u)}
                       >
                         <span className="font-medium">{u.name}</span>
-                        <span className="ml-2 text-xs text-gray-400">{u.email}</span>
+                        <span className="ml-2 text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>{u.email}</span>
                       </div>
                     ))}
                   </div>
@@ -1623,21 +1628,22 @@ function TaskSidePanel({ task, projectLookup = {}, projectsLoading = false, proj
 
               {/* Table: Name + Status */}
               {subtasks.length > 0 ? (
-                <div className="overflow-hidden rounded-md border border-gray-700">
+                <div className="overflow-hidden rounded-md border" style={{ borderColor: 'rgb(var(--border))' }}>
                   <table className="w-full text-sm">
-                    <thead className="bg-[#222428] text-gray-300">
+                    <thead style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--muted-foreground))' }}>
                       <tr>
                         <th className="text-left px-3 py-2 font-medium">Name</th>
                         <th className="text-left px-3 py-2 font-medium">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-700">
+                    <tbody className="divide-y" style={{ borderColor: 'rgb(var(--border))' }}>
                       {subtasks.map((st) => (
-                        <tr key={st.id} className="hover:bg-[#25272c]">
+                        <tr key={st.id} className="transition-colors" onMouseEnter={(e) => e.target.style.backgroundColor = 'rgb(var(--muted))'} onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}>
                           <td className="px-3 py-2">
                             <button
                               type="button"
-                              className="text-left text-gray-100 hover:underline"
+                              className="text-left hover:underline"
+                              style={{ color: 'rgb(var(--card-foreground))' }}
                               onClick={() => setChildPanelTask(st)}
                               title="Open subtask"
                             >
@@ -1901,14 +1907,19 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultProjectI
   }
 
   return (
-    <div className="rounded-xl border border-gray-700 bg-[#1f2023] p-4 shadow-sm">
+    <div className="rounded-xl border p-4 shadow-sm" style={{ borderColor: 'rgb(var(--border))', backgroundColor: 'rgb(var(--card))' }}>
       {/* Title */}
-      <label className="block text-xs text-gray-400 mb-1">Title</label>
+      <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Title</label>
       <Input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Task title"
-        className="mb-3 bg-transparent text-gray-100 border-gray-700 placeholder:text-gray-500"
+        className="mb-3 bg-transparent border"
+        style={{ 
+          color: 'rgb(var(--card-foreground))', 
+          borderColor: 'rgb(var(--border))',
+          backgroundColor: 'transparent'
+        }}
       />
 
       {/* Description */}
@@ -1962,10 +1973,15 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultProjectI
       />
       {/* Assignees */}
       <div className="mt-3 relative">
-        <label className="block text-xs text-gray-400 mb-1">Assignees</label>
+        <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Assignees</label>
         <input
           type="text"
-          className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500 disabled:opacity-60"
+          className="w-full bg-transparent border rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-1 disabled:opacity-60"
+          style={{ 
+            color: 'rgb(var(--card-foreground))', 
+            borderColor: 'rgb(var(--border))',
+            backgroundColor: 'transparent'
+          }}
           placeholder="Search users by name or email..."
           value={userSearch}
           onChange={handleUserSearchInput}
@@ -1974,7 +1990,7 @@ function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultProjectI
           disabled={assignees.length >= MAX_ASSIGNEES}
         />
         {assignees.length < MAX_ASSIGNEES && userSearchResults.length > 0 && (
-          <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
+          <div className="absolute z-50 border rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg" style={{ backgroundColor: 'rgb(var(--popover))', borderColor: 'rgb(var(--border))' }}>
             {userSearchResults.map((u) => (
               <div
                 key={u.id}
@@ -2350,16 +2366,24 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute right-1/2 top-12 translate-x-1/2 w-full max-w-lg rounded-xl border border-gray-700 bg-[#1f2023] p-5 shadow-xl">
+      <div className="absolute right-1/2 top-12 translate-x-1/2 w-full max-w-lg rounded-xl border p-5 shadow-xl" style={{ borderColor: 'rgb(var(--border))', backgroundColor: 'rgb(var(--card))' }}>
         <div className="flex items-center justify-between mb-3">
-          <h4 className="text-white font-semibold">Add subtask</h4>
-          <button onClick={onClose} className="text-gray-300 hover:text-white text-xl">×</button>
+          <h4 className="font-semibold" style={{ color: 'rgb(var(--card-foreground))' }}>Add subtask</h4>
+          <button 
+            onClick={onClose} 
+            className="text-xl transition-colors" 
+            style={{ color: 'rgb(var(--muted-foreground))' }} 
+            onMouseEnter={(e) => e.target.style.color = 'rgb(var(--foreground))'} 
+            onMouseLeave={(e) => e.target.style.color = 'rgb(var(--muted-foreground))'}
+          >
+            &times;
+          </button>
         </div>
 
         <div className="space-y-4">
           {/* Title */}
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Title</label>
+            <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Title</label>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -2461,11 +2485,16 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
 
           {/* Assignees */}
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Assignees</label>
+            <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Assignees</label>
             <div className="mb-2 relative">
               <input
                 type="text"
-                className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                className="w-full bg-transparent border rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-1"
+                style={{ 
+                  color: 'rgb(var(--card-foreground))', 
+                  borderColor: 'rgb(var(--border))',
+                  backgroundColor: 'transparent'
+                }}
                 placeholder="Search users…"
                 value={userSearch}
                 onChange={handleUserSearchInput}
@@ -2473,7 +2502,7 @@ function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
                 autoComplete="off"
               />
               {userSearchResults.length > 0 && (
-                <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
+                <div className="absolute z-50 border rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg" style={{ backgroundColor: 'rgb(var(--popover))', borderColor: 'rgb(var(--border))' }}>
                   {userSearchResults.map((u) => (
                     <div
                       key={u.id}
