@@ -915,7 +915,7 @@ export function TaskSidePanel({
               />
               {attachments.length > 0 && (
                 <p className="text-xs text-gray-400 mt-2">
-                  {attachments.length} file{attachments.length !== 1 ? 's' : ''} selected. Click "Save" to upload and save changes.
+                  {attachments.length} file{attachments.length !== 1 ? 's' : ''} selected. Click &quot;Save&quot; to upload and save changes.
                 </p>
               )}
             </div>
