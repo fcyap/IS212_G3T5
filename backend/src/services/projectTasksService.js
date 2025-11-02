@@ -469,15 +469,14 @@ class ProjectTasksService {
           console.log(`Today: ${today.toISOString().split('T')[0]}, Tomorrow: ${tomorrow.toISOString().split('T')[0]}, Task deadline: ${deadlineDate.toISOString().split('T')[0]}`);
           console.log(`Today time: ${today.getTime()}, Tomorrow time: ${tomorrow.getTime()}, Deadline time: ${deadlineDate.getTime()}`);
 
-          // Check if deadline is today, tomorrow, or overdue
+          // Check if deadline is today or tomorrow (past deadlines are now blocked by validation)
           const isToday = deadlineDate.getTime() === today.getTime();
           const isTomorrow = deadlineDate.getTime() === tomorrow.getTime();
-          const isOverdue = deadlineDate.getTime() < today.getTime();
           
-          console.log(`Is today: ${isToday}, Is tomorrow: ${isTomorrow}, Is overdue: ${isOverdue}`);
+          console.log(`Is today: ${isToday}, Is tomorrow: ${isTomorrow}`);
           
-          if (isToday || isTomorrow || isOverdue) {
-            const deadlineType = isOverdue ? 'overdue' : isToday ? 'today' : 'tomorrow';
+          if (isToday || isTomorrow) {
+            const deadlineType = isToday ? 'today' : 'tomorrow';
             console.log(`Task "${newTask.title}" has ${deadlineType} deadline ${deadlineDate.toDateString()}, sending immediate notifications`);
 
             // Hydrate task with assignee information

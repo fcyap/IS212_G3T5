@@ -11,6 +11,7 @@ import { projectService, userService } from "@/lib/api"
 import { extractUserHours, normalizeTimeSummary } from "@/lib/time-tracking"
 import { TaskSidePanel } from "./kanban/task-side-panel"
 import { EditableTaskCard } from "./kanban/editable-task-card"
+import toast from "react-hot-toast"
 
 const API = process.env.NEXT_PUBLIC_API_URL
 const cap = (s) => (s ? s.toString().charAt(0).toUpperCase() + s.toString().slice(1).toLowerCase() : "")
@@ -204,7 +205,7 @@ export function KanbanBoard({ projectId = null }) {
           : null;
       console.log('[KanbanBoard] Resolved project id:', { resolvedProjectIdRaw, resolvedProjectId });
       if (resolvedProjectId == null) {
-        alert('Please select an active project before creating a task.');
+        toast.error('Please select an active project before creating a task.');
         return;
       }
       const payload = {
@@ -228,7 +229,7 @@ export function KanbanBoard({ projectId = null }) {
       })
       console.log('[KanbanBoard] POST /tasks status:', res.status);
       if (res.status === 401) {
-        alert('Your session has expired. Please sign in again and retry.');
+        toast.error('Your session has expired. Please sign in again and retry.');
         return;
       }
       if (!res.ok) {
@@ -273,7 +274,7 @@ export function KanbanBoard({ projectId = null }) {
       cancelAddTask()
     } catch (err) {
       console.error("[save task]", err)
-      alert(err.message || 'Failed to create task.');
+      toast.error(err.message || 'Failed to create task.');
     }
   }
   const [panelTask, setPanelTask] = useState(null)
@@ -756,7 +757,7 @@ export function KanbanBoard({ projectId = null }) {
               return row
             } catch (e) {
               console.error("[update task]", e)
-              alert(e.message)
+              toast.error(e.message)
             }
           }}
           onDeleted={(id) => {

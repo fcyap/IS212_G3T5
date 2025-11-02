@@ -58,7 +58,27 @@ const create = async (req, res) => {
 
     // Send deadline notifications regardless of project association
     const projectTasksService = require('../services/projectTasksService');
-    await projectTasksService.sendDeadlineNotifications(task);
+    
+    // Determine deadline type for notifications
+    if (task.deadline) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      const deadlineDate = new Date(task.deadline);
+      deadlineDate.setHours(0, 0, 0, 0);
+      
+      const isToday = deadlineDate.getTime() === today.getTime();
+      const isTomorrow = deadlineDate.getTime() === tomorrow.getTime();
+      
+      // Only check for today and tomorrow since past deadlines are now blocked
+      const deadlineType = isToday ? 'today' : isTomorrow ? 'tomorrow' : null;
+      
+      if (deadlineType) {
+        await projectTasksService.sendDeadlineNotifications(task, deadlineType);
+      }
+    }
 
     res.status(201).json(task);
   } catch (e) {

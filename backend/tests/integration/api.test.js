@@ -137,7 +137,7 @@ describe('API Integration Tests', () => {
               hierarchy: 10,
               division: 'Engineering'
             }
-          }]]),
+          }]),
           update: jest.fn(() => ({
             eq: jest.fn(() => Promise.resolve({ data: [{ id: 1 }], error: null }))
           }))
