@@ -122,4 +122,75 @@ describe('taskAssigneeHoursService', () => {
       });
     });
   });
+
+  describe('removeHoursForUsers', () => {
+    test('should remove hours for specified users', async () => {
+      const deleteResult = { deletedCount: 2, deletedUserIds: [1, 2] };
+      taskAssigneeHoursRepository.deleteByTaskAndUsers.mockResolvedValue(deleteResult);
+
+      const result = await taskAssigneeHoursService.removeHoursForUsers({
+        taskId: 42,
+        userIds: [1, 2]
+      });
+
+      expect(taskAssigneeHoursRepository.deleteByTaskAndUsers).toHaveBeenCalledWith(42, [1, 2]);
+      expect(result).toEqual(deleteResult);
+    });
+
+    test('should normalize user IDs before deleting', async () => {
+      const deleteResult = { deletedCount: 2, deletedUserIds: [5, 8] };
+      taskAssigneeHoursRepository.deleteByTaskAndUsers.mockResolvedValue(deleteResult);
+
+      await taskAssigneeHoursService.removeHoursForUsers({
+        taskId: '42',
+        userIds: ['5', 8.9]
+      });
+
+      expect(taskAssigneeHoursRepository.deleteByTaskAndUsers).toHaveBeenCalledWith(42, [5, 8]);
+    });
+
+    test('should return zero deleted count when userIds is empty', async () => {
+      const result = await taskAssigneeHoursService.removeHoursForUsers({
+        taskId: 42,
+        userIds: []
+      });
+
+      expect(result).toEqual({ deletedCount: 0 });
+      expect(taskAssigneeHoursRepository.deleteByTaskAndUsers).not.toHaveBeenCalled();
+    });
+
+    test('should handle invalid user IDs gracefully', async () => {
+      const result = await taskAssigneeHoursService.removeHoursForUsers({
+        taskId: 42,
+        userIds: ['invalid', null, undefined, -1, 0]
+      });
+
+      expect(result).toEqual({ deletedCount: 0 });
+      expect(taskAssigneeHoursRepository.deleteByTaskAndUsers).not.toHaveBeenCalled();
+    });
+
+    test('should throw when taskId is invalid', async () => {
+      await expect(
+        taskAssigneeHoursService.removeHoursForUsers({ taskId: 'invalid', userIds: [1] })
+      ).rejects.toThrow('taskId must be a positive integer');
+
+      await expect(
+        taskAssigneeHoursService.removeHoursForUsers({ taskId: 0, userIds: [1] })
+      ).rejects.toThrow('taskId must be a positive integer');
+
+      expect(taskAssigneeHoursRepository.deleteByTaskAndUsers).not.toHaveBeenCalled();
+    });
+
+    test('should filter out invalid user IDs and process valid ones', async () => {
+      const deleteResult = { deletedCount: 2, deletedUserIds: [5, 10] };
+      taskAssigneeHoursRepository.deleteByTaskAndUsers.mockResolvedValue(deleteResult);
+
+      await taskAssigneeHoursService.removeHoursForUsers({
+        taskId: 99,
+        userIds: ['invalid', 5, null, 10, 'foo', -3]
+      });
+
+      expect(taskAssigneeHoursRepository.deleteByTaskAndUsers).toHaveBeenCalledWith(99, [5, 10]);
+    });
+  });
 });
