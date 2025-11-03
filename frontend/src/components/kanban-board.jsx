@@ -746,8 +746,9 @@ export function KanbanBoard({ projectId = null }) {
                 body: JSON.stringify(payload),
               })
               if (!res.ok) {
-                const { error } = await res.json().catch(() => ({}))
-                throw new Error(error || `PUT /tasks/${panelTask.id} ${res.status}`)
+                const errorData = await res.json().catch(() => ({}))
+                const errorMessage = errorData.message || errorData.error || `Failed to update task: ${res.status}`
+                throw new Error(errorMessage)
               }
               const row = await res.json()
               console.log("[kanban board]", row);

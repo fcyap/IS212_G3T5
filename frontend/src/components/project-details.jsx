@@ -507,7 +507,8 @@ export function ProjectDetails({ projectId, onBack }) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || `Failed to update task: ${response.status}`)
+        const errorMessage = errorData.message || errorData.error || `Failed to update task: ${response.status}`
+        throw new Error(errorMessage)
       }
 
       const updatedTask = await response.json()
@@ -530,11 +531,9 @@ export function ProjectDetails({ projectId, onBack }) {
         return task
       }))
       setEditingTask(null)
-      toast.success("Task updated successfully!")
       return updatedTask
     } catch (error) {
       console.error('Error updating task:', error)
-      toast.error(`Error updating task: ${error.message}`)
       throw error
     }
   }
