@@ -2712,6 +2712,7 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
               <SubtaskDialog
                 parentId={task.id}
                 parentDeadline={deadline}
+                projectMembers={assignees}
                 onClose={() => setIsSubtaskOpen(false)}
                 onCreated={(row) => {
                   setSubtasks((prev) => [row, ...prev])

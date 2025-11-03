@@ -43,6 +43,7 @@ export function TaskSidePanel({
   toCard = (row) => row,
 }) {
   const [childPanelTask, setChildPanelTask] = useState(null);
+  const [panelOpenCounter, setPanelOpenCounter] = useState(0);
   const { user: currentUser } = useAuth()
   const currentUserId = currentUser?.id
   console.log('[TaskSidePanel] opened for task:', task);
@@ -546,6 +547,7 @@ export function TaskSidePanel({
     <>
       {childPanelTask && (
         <TaskSidePanel
+          key={`subtask-${childPanelTask.id}-${panelOpenCounter}`}
           task={childPanelTask}
           projectLookup={projectLookup}
           projectsLoading={projectsLoading}
@@ -891,7 +893,10 @@ export function TaskSidePanel({
                               type="button"
                               className="text-left hover:underline"
                               style={{ color: 'rgb(var(--foreground))' }}
-                              onClick={() => setChildPanelTask(st)}
+                              onClick={() => {
+                                setPanelOpenCounter(c => c + 1);
+                                setChildPanelTask(st);
+                              }}
                               title="Open subtask"
                             >
                               {st.title}
@@ -913,6 +918,8 @@ export function TaskSidePanel({
                 <SubtaskDialog
                   parentId={task.id}
                   parentDeadline={deadline}
+                  projectId={normalizedProjectId}
+                  projectMembers={assignees}
                   onClose={() => setIsSubtaskOpen(false)}
                   onCreated={(row) => {
                     setSubtasks((prev) => [toCard(row), ...prev]);
