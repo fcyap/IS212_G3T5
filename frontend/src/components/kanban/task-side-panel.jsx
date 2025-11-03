@@ -621,18 +621,24 @@ export function TaskSidePanel({
         {/* Backdrop */}
         <div className="absolute inset-0 bg-black/40" onClick={onClose} />
         {/* Panel */}
-        <div className="absolute right-0 top-0 h-full w-[420px] bg-[#1f2023] border-l border-gray-700 p-6 overflow-y-auto">
+        <div className="absolute right-0 top-0 h-full w-[420px] border-l p-6 overflow-y-auto" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-white text-lg font-semibold">Edit task</h3>
-            <button onClick={onClose} className="text-gray-300 hover:text-white text-xl leading-none">×</button>
+            <button
+              onClick={onClose}
+              className="text-xl leading-none"
+              style={{ color: 'rgb(var(--foreground))' }}
+              onMouseEnter={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
+            >×</button>
           </div>
 
           <div className="mb-4">
-            <label className="block text-xs text-gray-400 mb-1">Project</label>
-            <div className="text-sm text-gray-100">
+            <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Project</label>
+            <div className="text-sm" style={{ color: 'rgb(var(--foreground))' }}>
               {projectsLoading && <span>Loading project…</span>}
               {!projectsLoading && normalizedProjectId == null && (
-                <span className="text-xs text-gray-500">No project assigned.</span>
+                <span className="text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>No project assigned.</span>
               )}
               {!projectsLoading && normalizedProjectId != null && projectName && (
                 <span className="font-medium">
@@ -656,23 +662,25 @@ export function TaskSidePanel({
           <div className="space-y-4">
             {/* Title */}
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Title</label>
+              <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Title</label>
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="bg-transparent text-gray-100 border-gray-700"
+                className="bg-transparent"
+                style={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}
                 disabled={!canEdit}
               />
             </div>
 
             {/* Description */}
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Description</label>
+              <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Description</label>
               <Textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={4}
-                className="bg-transparent text-gray-100 border-gray-700"
+                className="bg-transparent"
+                style={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}
                 disabled={!canEdit}
               />
             </div>
@@ -682,9 +690,9 @@ export function TaskSidePanel({
 
             {/* Priority */}
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Priority</label>
+              <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Priority</label>
               <Select value={priority} onValueChange={setPriority} disabled={!canEdit}>
-                <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+                <SelectTrigger className="bg-transparent" style={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}>
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
                 <SelectContent className="bg-white">
@@ -698,19 +706,23 @@ export function TaskSidePanel({
             </div>
             {/* Tags */}
             <div>
-              <label className="block text-xs text-gray-400">Tags</label>
+              <label className="block text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>Tags</label>
 
               {tags.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {tags.map((t, i) => (
                     <span
                       key={`${t}-${i}`}
-                      className="inline-flex items-center rounded-md px-2 py-0.5 mb-1 text-xs font-medium bg-gray-700 text-gray-200"
+                      className="inline-flex items-center rounded-md px-2 py-0.5 mb-1 text-xs font-medium"
+                      style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))' }}
                     >
                       {t}
                       <button
                         type="button"
-                        className="ml-1 text-gray-300 hover:text-white disabled:opacity-50"
+                        className="ml-1 disabled:opacity-50"
+                        style={{ color: 'rgb(var(--foreground))' }}
+                        onMouseEnter={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
+                        onMouseLeave={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
                         onClick={() => canEdit && removeTagAt(i)}
                         disabled={!canEdit}
                         aria-label={`Remove ${t}`}
@@ -724,7 +736,12 @@ export function TaskSidePanel({
               )}
 
               <input
-                className="mt-1 w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                className="mt-1 w-full bg-transparent border rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-1"
+                style={{
+                  color: 'rgb(var(--foreground))',
+                  borderColor: 'rgb(var(--border))',
+                  '--placeholder-color': 'rgb(var(--muted-foreground))'
+                }}
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -743,9 +760,9 @@ export function TaskSidePanel({
 
             {/* Status */}
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Status</label>
+              <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Status</label>
               <Select value={status} onValueChange={setStatus} disabled={!canEdit}>
-                <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+                <SelectTrigger className="bg-transparent" style={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}>
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent className="bg-white">
@@ -772,11 +789,15 @@ export function TaskSidePanel({
             )}
             {/* Assignees */}
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Assignees</label>
+              <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Assignees</label>
               <div className="mb-2">
                 <input
                   type="text"
-                  className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500 disabled:opacity-60"
+                  className="w-full bg-transparent border rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-1 disabled:opacity-60"
+                  style={{
+                    color: 'rgb(var(--foreground))',
+                    borderColor: 'rgb(var(--border))'
+                  }}
                   placeholder="Search project members by name or email..."
                   value={memberSearchQuery}
                   onChange={handleUserSearchInput}
@@ -785,15 +806,18 @@ export function TaskSidePanel({
                   disabled={!canAddAssignees || assignees.length >= MAX_ASSIGNEES}
                 />
                 {canAddAssignees && assignees.length < MAX_ASSIGNEES && filteredMemberResults.length > 0 && (
-                  <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
+                  <div className="absolute z-50 border rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
                     {filteredMemberResults.map((u) => (
                       <div
                         key={u.id}
-                        className="px-3 py-2 hover:bg-gray-700 cursor-pointer text-gray-100"
+                        className="px-3 py-2 cursor-pointer"
+                        style={{ color: 'rgb(var(--foreground))' }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                         onClick={() => addAssignee(u)}
                       >
                         <span className="font-medium">{u.name}</span>
-                        <span className="ml-2 text-xs text-gray-400">{u.email}</span>
+                        <span className="ml-2 text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>{u.email}</span>
                       </div>
                     ))}
                   </div>
@@ -804,14 +828,18 @@ export function TaskSidePanel({
                   {assignees.map((a) => (
                     <Badge
                       key={a.id}
-                      className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200 flex items-center"
+                      className="px-2 py-0.5 text-xs font-medium flex items-center"
+                      style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))' }}
                       title={a.name}
                     >
                       {a.name}
                       {canRemoveAssignees && (
                         <button
                           type="button"
-                          className="ml-1 text-gray-300 hover:text-white disabled:opacity-60"
+                          className="ml-1 disabled:opacity-60"
+                          style={{ color: 'rgb(var(--foreground))' }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
+                          onMouseLeave={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
                           onClick={() => removeAssignee(a.id)}
                           aria-label={`Remove ${a.name}`}
                           disabled={assignees.length <= 1}
@@ -823,10 +851,10 @@ export function TaskSidePanel({
                   ))}
                 </div>
               ) : (
-                <span className="text-xs text-gray-500">No assignees</span>
+                <span className="text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>No assignees</span>
               )}
               {canAddAssignees && assignees.length >= MAX_ASSIGNEES && (
-                <p className="text-xs text-gray-500 mt-2">You can assign up to {MAX_ASSIGNEES} members.</p>
+                <p className="text-xs mt-2" style={{ color: 'rgb(var(--muted-foreground))' }}>You can assign up to {MAX_ASSIGNEES} members.</p>
               )}
               {canRemoveAssignees && assignees.length === 1 && (
                 <p className="text-xs text-amber-400 mt-2">At least one assignee is required. Add another member before removing the last one.</p>
@@ -835,10 +863,13 @@ export function TaskSidePanel({
             {/* Subtasks */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs text-gray-400">Subtasks</label>
+                <label className="block text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>Subtasks</label>
                 <Button
                   type="button"
-                  className="bg-gray-700 hover:bg-gray-600 text-white h-8 px-3"
+                  className="text-white h-8 px-3"
+                  style={{ backgroundColor: 'rgb(var(--muted))' }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
                   onClick={() => setIsSubtaskOpen(true)}
                   disabled={!canEdit}
                 >
@@ -848,27 +879,32 @@ export function TaskSidePanel({
 
               {/* Table: Name + Status */}
               {subtasks.length > 0 ? (
-                <div className="overflow-hidden rounded-md border border-gray-700">
+                <div className="overflow-hidden rounded-md border" style={{ borderColor: 'rgb(var(--border))' }}>
                   <table className="w-full text-sm">
-                    <thead className="bg-[#222428] text-gray-300">
+                    <thead style={{ backgroundColor: 'rgb(var(--card))', color: 'rgb(var(--foreground))' }}>
                       <tr>
                         <th className="text-left px-3 py-2 font-medium">Name</th>
                         <th className="text-left px-3 py-2 font-medium">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-700">
+                    <tbody className="divide-y" style={{ borderColor: 'rgb(var(--border))' }}>
                       {subtasks.map((st) => (
-                        <tr key={st.id} className="hover:bg-[#25272c]">
+                        <tr
+                          key={st.id}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        >
                           <td className="px-3 py-2">
                             <button
                               type="button"
-                              className="text-left text-gray-100 hover:underline"
+                              className="text-left hover:underline"
+                              style={{ color: 'rgb(var(--foreground))' }}
                               onClick={() => setChildPanelTask(st)}
                               title="Open subtask"
                             >
                               {st.title}
                             </button>
-                          </td>                        <td className="px-3 py-2 text-gray-300">
+                          </td>                        <td className="px-3 py-2" style={{ color: 'rgb(var(--foreground))' }}>
                             {prettyStatus(st.workflow || st.status || "pending")}
                           </td>
                         </tr>
@@ -877,7 +913,7 @@ export function TaskSidePanel({
                   </table>
                 </div>
               ) : (
-                <div className="text-xs text-gray-500">No subtasks yet.</div>
+                <div className="text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>No subtasks yet.</div>
               )}
 
               {/* Modal */}
@@ -896,25 +932,26 @@ export function TaskSidePanel({
 
             {/* Deadline */}
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Deadline</label>
+              <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Deadline</label>
               <Input
                 type="date"
                 value={deadline || ""}
                 onChange={(e) => setDeadline(e.target.value)}
-                className="bg-transparent text-gray-100 border-gray-700"
+                className="bg-transparent"
+                style={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}
                 disabled={!canEdit}
               />
             </div>
 
             {/* File Attachments */}
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Attachments</label>
+              <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Attachments</label>
               <FileUploadInput
                 onFilesChange={setAttachments}
                 disabled={!canEdit}
               />
               {attachments.length > 0 && (
-                <p className="text-xs text-gray-400 mt-2">
+                <p className="text-xs mt-2" style={{ color: 'rgb(var(--muted-foreground))' }}>
                   {attachments.length} file{attachments.length !== 1 ? 's' : ''} selected. Click &quot;Save&quot; to upload and save changes.
                 </p>
               )}
@@ -932,7 +969,14 @@ export function TaskSidePanel({
               >
                 {saving ? "Saving…" : "Save"}
               </Button>
-              <Button variant="ghost" className="bg-white/10 text-gray-300 hover:text-white" onClick={onClose}>
+              <Button
+                variant="ghost"
+                className="bg-white/10"
+                style={{ color: 'rgb(var(--foreground))' }}
+                onMouseEnter={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
+                onMouseLeave={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
+                onClick={onClose}
+              >
                 Cancel
               </Button>
               <Button

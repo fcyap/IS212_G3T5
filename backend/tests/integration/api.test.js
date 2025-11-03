@@ -2,12 +2,13 @@ const request = require('supertest');
 const express = require('express');
 const cors = require('cors');
 
-const supabaseMock = {
+// Create a factory function for supabase mock
+const createSupabaseMock = () => ({
   from: jest.fn(),
   storage: {
     from: jest.fn()
   }
-};
+});
 
 const createQueryMock = (rows = []) => {
   const resultPromise = Promise.resolve({ data: rows, error: null });
@@ -31,10 +32,34 @@ jest.mock('../../src/middleware/logger', () => ({
   logError: jest.fn()
 }));
 
-jest.mock('../../src/utils/supabase', () => supabaseMock);
-jest.mock('../../src/supabase-client', () => ({ supabase: supabaseMock }));
+// Move supabase mocks inside factory functions to avoid scope issues
+jest.mock('../../src/utils/supabase', () => ({
+  from: jest.fn(),
+  storage: {
+    from: jest.fn()
+  }
+}));
+jest.mock('../../src/supabase-client', () => ({
+  supabase: {
+    from: jest.fn(),
+    storage: {
+      from: jest.fn()
+    }
+  }
+}));
+
+// Mock auth middleware before requiring routes
+jest.mock('../../src/middleware/auth', () => ({
+  authMiddleware: jest.fn(() => (req, res, next) => {
+    // Auth middleware is bypassed in tests, user is set by test setup
+    next();
+  })
+}));
+
+// Import the mocked supabase after the mock is defined
+const supabaseMock = require('../../src/utils/supabase');
 jest.mock('../../src/middleware/rbac', () => ({
-  requireProjectCreation: () => (req, _res, next) => next(),
+  requireProjectCreation: (req, _res, next) => next(),
   requireProjectEdit: () => (req, _res, next) => next(),
   requireAddProjectMembers: () => (req, _res, next) => next(),
   filterVisibleProjects: () => {

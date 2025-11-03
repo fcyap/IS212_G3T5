@@ -120,32 +120,35 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
   }
 
   return (
-    <div className="rounded-xl border border-gray-700 bg-[#1f2023] p-4 shadow-sm">
+    <div className="rounded-xl border p-4 shadow-sm" style={{ borderColor: 'rgb(var(--border))', backgroundColor: 'rgb(var(--card))' }}>
       {/* Title */}
-      <label className="block text-xs text-gray-400 mb-1">Title</label>
+      <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Title</label>
       <Input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Task title"
-        className="mb-3 bg-transparent text-gray-100 border-gray-700 placeholder:text-gray-500"
+        className="mb-3 bg-transparent"
+        style={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}
       />
 
       {/* Description */}
-      <label className="block text-xs text-gray-400 mb-1">Description</label>
+      <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Description</label>
       <Textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Add a short description…"
-        className="mb-3 bg-transparent text-gray-100 border-gray-700 placeholder:text-gray-500"
+        className="mb-3 bg-transparent"
+        style={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}
         rows={3}
       />
       {/* Tags */}
-      <label className="block text-xs text-gray-400 mb-1">Tags</label>
+      <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Tags</label>
       <div className="flex flex-wrap gap-2 mb-2">
         {tags.map((t, i) => (
           <span
             key={`${t}-${i}`}
-            className="inline-flex items-center rounded-md bg-gray-700 text-gray-100 px-2 py-1 text-xs"
+            className="inline-flex items-center rounded-md px-2 py-1 text-xs"
+            style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))' }}
           >
             {t}
             <button
@@ -155,7 +158,10 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
                 e.stopPropagation();
                 setTags(prev => prev.filter((_, idx) => idx !== i));
               }}
-              className="ml-1 text-gray-300 hover:text-white"
+              className="ml-1"
+              style={{ color: 'rgb(var(--muted-foreground))' }}
+              onMouseEnter={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'rgb(var(--muted-foreground))'}
               aria-label={`Remove tag ${t}`}
             >
               ×
@@ -177,11 +183,15 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
           }
         }}
         placeholder="Type a tag and press Enter (or comma)"
-        className="bg-transparent text-gray-100 border-gray-700"
+        className="bg-transparent"
+        style={{
+          color: 'rgb(var(--foreground))',
+          borderColor: 'rgb(var(--border))'
+        }}
       />
 
       <div className="mt-4">
-        <label className="block text-xs text-gray-400 mb-1">Project</label>
+        <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Project</label>
         <Select
           value={selectedProjectId != null ? String(selectedProjectId) : ""}
           onValueChange={(value) => {
@@ -192,7 +202,7 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
           }}
           disabled={projectsLoading || projects.length === 0}
         >
-          <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+          <SelectTrigger className="bg-transparent" style={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}>
             <SelectValue placeholder={projectsLoading ? "Loading projects..." : "Select project"} />
           </SelectTrigger>
           <SelectContent className="bg-white">
@@ -204,7 +214,7 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
           </SelectContent>
         </Select>
         {projectsLoading && (
-          <p className="text-xs text-gray-500 mt-2">Loading active projects…</p>
+          <p className="text-xs mt-2" style={{ color: 'rgb(var(--muted-foreground))' }}>Loading active projects…</p>
         )}
         {!projectsLoading && projectsError && (
           <p className="text-xs text-red-400 mt-2">Failed to load projects.</p>
@@ -224,20 +234,24 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
       <div className="grid grid-cols-2 gap-3">
         {/* Due date */}
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Deadline</label>
+          <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Deadline</label>
           <Input
             type="date"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
-            className="bg-transparent text-gray-100 border-gray-700"
+            className="bg-transparent"
+            style={{
+              color: 'rgb(var(--foreground))',
+              borderColor: 'rgb(var(--border))'
+            }}
           />
         </div>
 
         {/* Priority dropdown */}
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Priority</label>
+          <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Priority</label>
           <Select value={priority.toString()} onValueChange={(v) => setPriority(Number(v))}>
-            <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+            <SelectTrigger className="bg-transparent" style={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}>
               <SelectValue placeholder="Select priority" />
             </SelectTrigger>
             <SelectContent className="bg-white">
@@ -254,9 +268,9 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
 
         {/* Status dropdown */}
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Status</label>
+          <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Status</label>
           <Select value={status} onValueChange={(v) => setStatus(v)}>
-            <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
+            <SelectTrigger className="bg-transparent" style={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}>
               <SelectValue placeholder="Select status" />
             </SelectTrigger>
             <SelectContent className="bg-white">
@@ -275,7 +289,7 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
 
       {/* File Attachments */}
       <div className="mt-3">
-        <label className="block text-xs text-gray-400 mb-1">Attachments (optional)</label>
+        <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Attachments (optional)</label>
         <FileUploadInput
           onFilesChange={setAttachments}
           disabled={false}
@@ -324,7 +338,14 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
           <Check className="w-4 h-4 mr-1" /> Save
         </Button>
 
-        <Button variant="ghost" onClick={onCancel} className="text-gray-300 hover:text-white">
+        <Button
+          variant="ghost"
+          onClick={onCancel}
+          style={{ color: 'rgb(var(--foreground))' }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = 'rgb(var(--foreground))'
+          }}
+        >
           <X className="w-4 h-4 mr-1" /> Cancel
         </Button>
       </div>

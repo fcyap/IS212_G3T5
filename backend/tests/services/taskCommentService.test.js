@@ -30,7 +30,7 @@ describe('TaskCommentService.deleteComment', () => {
 
     const result = await service.deleteComment({
       id: 10,
-      requester: { role: 'hr' },
+      requester: { role: 'admin' },
     });
 
     expect(repo.getById).toHaveBeenCalledWith(10);

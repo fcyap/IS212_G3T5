@@ -596,9 +596,7 @@ class NotificationService {
       }
 
       // Filter out the deleter from recipients (don't notify the person who deleted it)
-      // TODO: For testing purposes, allow deleter to receive notification too
-      // const recipientIds = assignedUserIds.filter(id => id !== deleterId);
-      const recipientIds = assignedUserIds; // Temporarily allow deleter to receive notification
+      const recipientIds = assignedUserIds.filter(id => id !== deleterId);
       console.log(`Deleter ID: ${deleterId}, Recipient IDs after filtering:`, recipientIds);
       if (recipientIds.length === 0) {
         console.log('No recipients to notify (deleter is the only/all assignees)');

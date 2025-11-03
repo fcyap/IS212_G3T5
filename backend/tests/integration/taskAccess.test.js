@@ -5,6 +5,20 @@ jest.mock('../../src/utils/supabase', () => ({
   from: jest.fn()
 }));
 
+// Mock auth middleware before requiring routes
+jest.mock('../../src/middleware/auth', () => ({
+  authMiddleware: jest.fn(() => (req, res, next) => {
+    // Auth middleware is bypassed in tests, user is set by test setup
+    next();
+  })
+}));
+
+// Mock RBAC middleware
+jest.mock('../../src/middleware/rbac', () => ({
+  requireTaskCreation: jest.fn(() => (req, res, next) => next()),
+  requireTaskModification: jest.fn(() => (req, res, next) => next())
+}));
+
 jest.mock('../../src/repository/taskRepository');
 jest.mock('../../src/repository/projectRepository');
 jest.mock('../../src/repository/projectMemberRepository');

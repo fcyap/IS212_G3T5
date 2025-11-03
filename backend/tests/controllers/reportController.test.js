@@ -182,13 +182,17 @@ describe('ReportController', () => {
         endDate: '2025-10-01'
       };
 
-      reportService.generateTaskReport.mockRejectedValue(
-        new Error('Invalid date range')
-      );
-
       await reportController.generateTaskReport(req, res, next);
 
-      expect(next).toHaveBeenCalled();
+      // Controller validates dates and returns 400 directly (doesn't call service or next)
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.stringContaining('endDate must be after')
+        })
+      );
+      expect(reportService.generateTaskReport).not.toHaveBeenCalled();
     });
   });
 
@@ -367,9 +371,12 @@ describe('ReportController', () => {
 
       await reportController.exportReportToPDF(req, res, next);
 
-      expect(next).toHaveBeenCalledWith(
+      // Controller validates and returns 400 directly (doesn't call next)
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: expect.stringContaining('reportData')
+          success: false,
+          error: expect.stringContaining('reportData')
         })
       );
     });
@@ -391,7 +398,8 @@ describe('ReportController', () => {
           tasks: [
             { id: 1, title: 'Task 1', status: 'completed' }
           ]
-        }
+        },
+        format: 'xlsx' // Controller extracts format from req.body
       };
 
       await reportController.exportReportToSpreadsheet(req, res, next);

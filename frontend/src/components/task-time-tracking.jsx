@@ -67,7 +67,7 @@ export function TaskTimeTracking({
   return (
     <div className="space-y-3">
       <div>
-        <label className="block text-xs text-gray-400 mb-1">Your hours spent</label>
+        <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Your hours spent</label>
         <div className="flex items-center gap-2">
           <Input
             type="number"
@@ -76,13 +76,14 @@ export function TaskTimeTracking({
             value={value}
             onChange={(event) => onChange?.(event.target.value)}
             disabled={!canEdit}
-            className="bg-transparent text-gray-100 border-gray-700"
+            className="bg-transparent"
+            style={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}
             placeholder="0"
             inputMode="decimal"
           />
-          <Clock className="w-4 h-4 text-gray-400" aria-hidden="true" />
+          <Clock className="w-4 h-4" style={{ color: 'rgb(var(--muted-foreground))' }} aria-hidden="true" />
         </div>
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>
           {canEdit
             ? helperText ?? "Enter the hours you've spent so far. Decimals are allowed."
             : "Only assigned members can update their own hours."}
@@ -90,22 +91,22 @@ export function TaskTimeTracking({
       </div>
 
       <div>
-        <label className="block text-xs text-gray-400 mb-1">{totalLabel}</label>
+        <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>{totalLabel}</label>
         <Input
           value={formatHours(totalHours)}
           readOnly
-          className="bg-gray-900 text-gray-200 border-gray-700"
+          style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}
         />
       </div>
 
       {breakdown.length > 0 && (
-        <div className="rounded-md border border-gray-700 bg-[#202126] p-3">
-          <p className="text-xs text-gray-400 mb-2">Breakdown by assignee</p>
-          <ul className="space-y-1 text-sm text-gray-200">
+        <div className="rounded-md border p-3" style={{ borderColor: 'rgb(var(--border))', backgroundColor: 'rgb(var(--card))' }}>
+          <p className="text-xs mb-2" style={{ color: 'rgb(var(--muted-foreground))' }}>Breakdown by assignee</p>
+          <ul className="space-y-1 text-sm" style={{ color: 'rgb(var(--foreground))' }}>
             {breakdown.map((entry) => (
               <li key={entry.userId} className="flex justify-between">
                 <span className="truncate">{entry.label}</span>
-                <span className="tabular-nums text-gray-300">{formatHours(entry.hours)}h</span>
+                <span className="tabular-nums" style={{ color: 'rgb(var(--muted-foreground))' }}>{formatHours(entry.hours)}h</span>
               </li>
             ))}
           </ul>
