@@ -32,14 +32,14 @@ class ReportRepository {
       }
 
       if (filters.startDate) {
-        query = query.gte('created_at', filters.startDate);
+        query = query.gte('deadline', filters.startDate);
       }
 
       if (filters.endDate) {
         // Add one day to include the end date
         const endDate = new Date(filters.endDate);
         endDate.setDate(endDate.getDate() + 1);
-        query = query.lte('created_at', endDate.toISOString().split('T')[0]);
+        query = query.lte('deadline', endDate.toISOString().split('T')[0]);
       }
 
       if (filters.userIds && filters.userIds.length > 0) {

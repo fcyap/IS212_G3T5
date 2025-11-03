@@ -116,9 +116,9 @@ describe('ReportRepository', () => {
 
       await reportRepository.getTasksForReport(filters);
 
-      expect(mockSupabase.gte).toHaveBeenCalledWith('created_at', '2025-10-01');
+      expect(mockSupabase.gte).toHaveBeenCalledWith('deadline', '2025-10-01');
       // Repository adds 1 day to endDate to be inclusive (2025-10-31 + 1 day = 2025-11-01)
-      expect(mockSupabase.lte).toHaveBeenCalledWith('created_at', '2025-11-01');
+      expect(mockSupabase.lte).toHaveBeenCalledWith('deadline', '2025-11-01');
     });
 
     test('should filter tasks by assigned users', async () => {
