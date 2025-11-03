@@ -26,7 +26,8 @@ const createInResponse = (data, error = null) => ({
 jest.mock('../../src/services/taskAssigneeHoursService', () => ({
   recordHours: jest.fn(),
   getTaskHoursSummary: jest.fn(),
-  normalizeHours: jest.fn()
+  normalizeHours: jest.fn(),
+  removeHoursForUsers: jest.fn()
 }));
 
 const taskService = require('../../src/services/taskService');
@@ -58,6 +59,7 @@ describe('TaskService', () => {
     taskAssigneeHoursService.recordHours.mockReset();
     taskAssigneeHoursService.getTaskHoursSummary.mockReset();
     taskAssigneeHoursService.normalizeHours.mockReset();
+    taskAssigneeHoursService.removeHoursForUsers.mockReset();
     taskAssigneeHoursService.getTaskHoursSummary.mockResolvedValue({
       total_hours: 0,
       per_assignee: []
@@ -712,6 +714,36 @@ describe('TaskService', () => {
       }));
       expect(notificationService.createTaskAssignmentNotifications).not.toHaveBeenCalled();
       expect(notificationService.createTaskUpdateNotifications).not.toHaveBeenCalled();
+    });
+
+    test('should remove hours for removed assignees', async () => {
+      const taskId = 5;
+      const updateData = { assigned_to: [1, 2] };
+
+      taskRepository.getTaskById.mockResolvedValue({
+        id: taskId,
+        assigned_to: [1, 2, 3, 4]
+      });
+
+      const mockUpdatedTask = {
+        id: taskId,
+        title: 'Updated Task',
+        assigned_to: [1, 2],
+        updated_at: new Date().toISOString()
+      };
+
+      taskRepository.updateById = jest.fn().mockResolvedValue(mockUpdatedTask);
+      taskAssigneeHoursService.removeHoursForUsers = jest.fn().mockResolvedValue({ deletedCount: 2 });
+
+      await taskService.updateTask(taskId, updateData);
+
+      expect(taskAssigneeHoursService.removeHoursForUsers).toHaveBeenCalledWith({
+        taskId: taskId,
+        userIds: [3, 4]
+      });
+      expect(taskRepository.updateById).toHaveBeenCalledWith(taskId, expect.objectContaining({
+        assigned_to: [1, 2]
+      }));
     });
 
     test('should reject update when exceeding assignee limit', async () => {
