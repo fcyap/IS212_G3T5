@@ -623,6 +623,21 @@ class TaskService {
       const previous = this._normalizeAssigneeIds(previousAssigneeIds);
       const newlyAssigned = updatedAssignees.filter(id => !previous.includes(id));
       const removedAssignees = previous.filter(id => !updatedAssignees.includes(id));
+
+      // Remove hours for removed assignees
+      if (removedAssignees.length) {
+        try {
+          await taskAssigneeHoursService.removeHoursForUsers({
+            taskId: numericTaskId,
+            userIds: removedAssignees
+          });
+          console.log(`Removed hours for ${removedAssignees.length} users from task ${numericTaskId}`);
+        } catch (err) {
+          console.error('Failed to remove hours for removed assignees:', err);
+          // Continue with task update even if hour removal fails
+        }
+      }
+
       if (newlyAssigned.length) {
         notificationService
           .createTaskAssignmentNotifications({

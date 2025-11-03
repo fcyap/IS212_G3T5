@@ -77,6 +77,25 @@ class TaskAssigneeHoursService {
       per_assignee: perAssignee
     };
   }
+
+  async removeHoursForUsers({ taskId, userIds }) {
+    const normalizedTaskId = this._requirePositiveInt(taskId, 'taskId');
+
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return { deletedCount: 0 };
+    }
+
+    const normalizedUserIds = userIds
+      .map(id => Number(id))
+      .filter(id => Number.isFinite(id) && id > 0)
+      .map(id => Math.trunc(id));
+
+    if (normalizedUserIds.length === 0) {
+      return { deletedCount: 0 };
+    }
+
+    return taskAssigneeHoursRepository.deleteByTaskAndUsers(normalizedTaskId, normalizedUserIds);
+  }
 }
 
 module.exports = new TaskAssigneeHoursService();
