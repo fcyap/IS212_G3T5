@@ -12,7 +12,9 @@ const { authMiddleware } = require('../middleware/auth');
 
 // Debug middleware: log every request to /tasks
 router.use((req, res, next) => {
-	console.log(`[tasks.js] Route hit:`, req.method, req.originalUrl);
+	// Sanitize URL to prevent log injection
+	const sanitizedUrl = req.originalUrl.replace(/[\n\r]/g, '');
+	console.log(`[tasks.js] Route hit:`, req.method, sanitizedUrl);
 	next();
 });
 

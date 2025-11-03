@@ -63,7 +63,12 @@ async function initializeApp() {
     app.use(session({
         secret: sessionSecret,
         resave: false,
-        saveUninitialized: true
+        saveUninitialized: true,
+        cookie: {
+            secure: process.env.NODE_ENV === 'production',
+            httpOnly: true,
+            sameSite: 'lax'
+        }
     }));
   
   // Store CSRF tokens in memory (keyed by session ID or socket ID)
@@ -123,7 +128,7 @@ async function initializeApp() {
   app.use(csrfMiddleware);
   app.use(
     cors({
-      origin: process.env.FRONTEND_ORIGIN || true, // Allow all origins in development
+      origin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000', // Restrict to specific origin
       credentials: true,
       exposedHeaders: ['Content-Disposition']
     })

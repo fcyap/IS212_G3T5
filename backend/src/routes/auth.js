@@ -102,7 +102,9 @@ function authRoutes() {
       console.log('DEBUG: Database connection OK:', testData);
 
       // Try to find user
-      console.log('DEBUG: Looking for user with email:', email);
+      // Sanitize email to prevent log injection
+      const sanitizedEmail = email.replace(/[\n\r]/g, '');
+      console.log('DEBUG: Looking for user with email:', sanitizedEmail);
       const { data: users, error: userError } = await supabase
         .from('users')
         .select('id, email, password_hash, role')
