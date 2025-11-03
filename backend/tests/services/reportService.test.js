@@ -37,7 +37,7 @@ describe('ReportService', () => {
           id: 1,
           title: 'Task 1',
           status: 'completed',
-          priority: 'high',
+          priority: 9,
           deadline: '2025-10-25',
           created_at: '2025-10-01',
           project_id: 1,
@@ -48,7 +48,7 @@ describe('ReportService', () => {
           id: 2,
           title: 'Task 2',
           status: 'in_progress',
-          priority: 'medium',
+          priority: 5,
           deadline: '2025-10-30',
           created_at: '2025-10-05',
           project_id: 1,
@@ -59,7 +59,7 @@ describe('ReportService', () => {
           id: 3,
           title: 'Task 3',
           status: 'pending',
-          priority: 'low',
+          priority: 2,
           deadline: '2025-11-01',
           created_at: '2025-10-10',
           project_id: 2,
@@ -253,10 +253,10 @@ describe('ReportService', () => {
       ];
 
       const mockTasks = [
-        { id: 1, assigned_to: [1], status: 'completed', priority: 'high' },
-        { id: 2, assigned_to: [1], status: 'in_progress', priority: 'medium' },
-        { id: 3, assigned_to: [2], status: 'completed', priority: 'low' },
-        { id: 4, assigned_to: [1, 2], status: 'completed', priority: 'high' }
+        { id: 1, assigned_to: [1], status: 'completed', priority: 9 },
+        { id: 2, assigned_to: [1], status: 'in_progress', priority: 5 },
+        { id: 3, assigned_to: [2], status: 'completed', priority: 2 },
+        { id: 4, assigned_to: [1, 2], status: 'completed', priority: 9 }
       ];
 
       reportRepository.getUsersByDepartmentHierarchy.mockResolvedValue({
@@ -363,9 +363,9 @@ describe('ReportService', () => {
       ];
 
       const mockTasks = [
-        { id: 1, project_id: 1, status: 'completed', priority: 'high' },
-        { id: 2, project_id: 1, status: 'in_progress', priority: 'medium' },
-        { id: 3, project_id: 2, status: 'completed', priority: 'low' }
+        { id: 1, project_id: 1, status: 'completed', priority: 9 },
+        { id: 2, project_id: 1, status: 'in_progress', priority: 5 },
+        { id: 3, project_id: 2, status: 'completed', priority: 2 }
       ];
 
       reportRepository.getUsersByDepartmentHierarchy.mockResolvedValue({
@@ -473,8 +473,8 @@ describe('ReportService', () => {
           byStatus: { completed: 5, in_progress: 3, pending: 2 }
         },
         tasks: [
-          { id: 1, title: 'Task 1', status: 'completed', priority: 'high' },
-          { id: 2, title: 'Task 2', status: 'in_progress', priority: 'medium' }
+          { id: 1, title: 'Task 1', status: 'completed', priority: 9 },
+          { id: 2, title: 'Task 2', status: 'in_progress', priority: 5 }
         ]
       };
 
@@ -493,7 +493,7 @@ describe('ReportService', () => {
             id: 1,
             title: 'Task 1',
             status: 'completed',
-            priority: 'high',
+            priority: 9,
             deadline: '2025-10-25',
             assigned_to: [1, 2]
           }
@@ -777,7 +777,7 @@ describe('ReportService', () => {
           project_name: 'Ops Revamp',
           department: 'Operations',
           task_status: 'in_progress',
-          task_priority: 'medium',
+          task_priority: 5,
           task_title: 'Ops Discovery',
           hours: 3.5,
           logged_at: '2025-02-02',
@@ -788,7 +788,7 @@ describe('ReportService', () => {
           project_name: 'Ops Revamp',
           department: 'Operations',
           task_status: 'completed',
-          task_priority: 'high',
+          task_priority: 9,
           task_title: 'Ops Execution',
           hours: 4,
           logged_at: '2025-02-05',
@@ -799,7 +799,7 @@ describe('ReportService', () => {
           project_name: 'Support Upgrade',
           department: 'Customer Success',
           task_status: 'pending',
-          task_priority: 'low',
+          task_priority: 2,
           task_title: 'Support Planning',
           hours: 2,
           logged_at: '2025-02-07',
@@ -864,7 +864,7 @@ describe('ReportService', () => {
           project_name: 'Ops Revamp',
           department: 'Engineering',
           task_status: 'pending',
-          task_priority: 'medium',
+          task_priority: 5,
           task_title: 'Ops Intake',
           hours: 2.25,
           logged_at: '2025-02-03',
@@ -875,7 +875,7 @@ describe('ReportService', () => {
           project_name: 'Support Upgrade',
           department: 'Engineering',
           task_status: 'in_progress',
-          task_priority: 'high',
+          task_priority: 9,
           task_title: 'Support Rollout',
           hours: 4.75,
           logged_at: '2025-02-06',
@@ -886,7 +886,7 @@ describe('ReportService', () => {
           project_name: 'Sales Onboarding',
           department: 'Sales',
           task_status: 'completed',
-          task_priority: 'medium',
+          task_priority: 5,
           task_title: 'Sales Enablement',
           hours: 1.5,
           logged_at: '2025-02-09',
@@ -980,10 +980,10 @@ describe('ReportService', () => {
     describe('_calculateTaskSummary', () => {
       test('should calculate summary for tasks with all statuses', () => {
         const tasks = [
-          { status: 'pending', priority: 'high' },
-          { status: 'in_progress', priority: 'medium' },
-          { status: 'completed', priority: 'low' },
-          { status: 'blocked', priority: 'high' }
+          { status: 'pending', priority: 9 },
+          { status: 'in_progress', priority: 5 },
+          { status: 'completed', priority: 2 },
+          { status: 'blocked', priority: 8 }
         ];
 
         const summary = reportService._calculateTaskSummary(tasks);
@@ -1026,7 +1026,7 @@ describe('ReportService', () => {
       test('should handle tasks with missing status/priority', () => {
         const tasks = [
           { status: 'completed' },
-          { priority: 'high' },
+          { priority: 9 },
           {}
         ];
 
@@ -1286,7 +1286,7 @@ describe('ReportService', () => {
             department: 'Engineering',
             user_name: 'Alice',
             task_status: 'completed',
-            task_priority: 'high',
+            task_priority: 9,
             task_title: 'Task 1'
           }
         ];
@@ -1407,7 +1407,7 @@ describe('ReportService', () => {
       test('should generate PDF with correct filename for task report', async () => {
         const reportData = {
           tasks: [
-            { id: 1, title: 'Task 1', status: 'completed', priority: 'high', project_name: 'Project A' }
+            { id: 1, title: 'Task 1', status: 'completed', priority: 9, project_name: 'Project A' }
           ],
           summary: {
             totalTasks: 1,
@@ -1487,7 +1487,7 @@ describe('ReportService', () => {
               id: 1,
               title: 'Task 1',
               status: 'completed',
-              priority: 'high',
+              priority: 9,
               deadline: '2025-10-31',
               created_at: '2025-10-01',
               project_id: 1,
@@ -1516,7 +1516,7 @@ describe('ReportService', () => {
               id: 1,
               title: 'Task 1',
               status: 'completed',
-              priority: 'high'
+              priority: 9
             }
           ]
         };
@@ -1575,7 +1575,7 @@ describe('ReportService', () => {
             id: 1,
             title: 'Task with "quotes" and \'apostrophes\'',
             status: 'completed',
-            priority: 'high',
+            priority: 9,
             projects: { name: 'Project with <tags> & symbols' }
           }
         ];
@@ -1632,7 +1632,7 @@ describe('ReportService', () => {
       test('should handle very long task titles in summary', () => {
         const longTitle = 'A'.repeat(500);
         const tasks = [
-          { id: 1, title: longTitle, status: 'completed', priority: 'high' }
+          { id: 1, title: longTitle, status: 'completed', priority: 9 }
         ];
 
         const summary = reportService._calculateTaskSummary(tasks);
@@ -1691,7 +1691,7 @@ describe('ReportService', () => {
           id: i + 1,
           title: `Task ${i + 1}`,
           status: i % 2 === 0 ? 'completed' : 'in_progress',
-          priority: 'medium',
+          priority: 5,
           projects: { name: 'Project A' }
         }));
 

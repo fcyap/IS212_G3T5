@@ -241,7 +241,9 @@ describe('TaskService', () => {
         description: 'Task description',
         status: 'pending',
         project_id: 1,
-        assigned_to: [1, 2]
+        assigned_to: [1, 2],
+        priority: 6,
+        tags: []
       };
 
       const mockCreatedTask = {
@@ -251,7 +253,7 @@ describe('TaskService', () => {
         status: 'pending',
         project_id: 1,
         assigned_to: [1, 2],
-        priority: 'medium',
+        priority: 6,
         tags: [],
         deadline: null,
         created_at: new Date().toISOString(),
@@ -265,13 +267,18 @@ describe('TaskService', () => {
       const result = await taskService.createTask(taskData);
 
       expect(projectRepository.getProjectById).toHaveBeenCalledWith(1);
+      expect(userRepository.getUsersByIds).toHaveBeenCalledWith([1, 2]);
       expect(taskRepository.insert).toHaveBeenCalledWith(expect.objectContaining({
         title: 'New Task',
         description: 'Task description',
         status: 'pending',
         project_id: 1,
         assigned_to: [1, 2],
-        priority: 'medium',
+        priority: 6,
+        tags: [],
+        recurrence_freq: null,
+        recurrence_interval: 1,
+        recurrence_series_id: null,
         created_at: expect.any(Date),
         updated_at: expect.any(Date)
       }));
@@ -356,7 +363,7 @@ describe('TaskService', () => {
         project_id: 10,
         assigned_to: ['1', ' 2 ', null, 'abc', 3],
         tags: 'alpha, beta , ,gamma',
-        priority: 'HIGH',
+        priority: 9,
         status: 'IN_PROGRESS',
         parent_id: '5'
       };
@@ -372,7 +379,7 @@ describe('TaskService', () => {
         description: 'keep me',
         assigned_to: [1, 2, 3],
         tags: ['alpha', 'beta', 'gamma'],
-        priority: 'high',
+        priority: 9,
         status: 'in_progress',
         parent_id: 5,
         created_at: new Date(),
@@ -389,7 +396,7 @@ describe('TaskService', () => {
       const insertPayload = taskRepository.insert.mock.calls[0][0];
       expect(insertPayload.assigned_to).toEqual([1, 2, 3]);
       expect(insertPayload.tags).toEqual(['alpha', 'beta', 'gamma']);
-      expect(insertPayload.priority).toBe('high');
+      expect(insertPayload.priority).toBe(9);
       expect(insertPayload.status).toBe('in_progress');
       expect(insertPayload.parent_id).toBe(5);
       expect(insertPayload.project_id).toBe(10);
@@ -405,7 +412,7 @@ describe('TaskService', () => {
         id: 90,
         title: 'Legacy path',
         description: null,
-        priority: 'medium',
+        priority: 5,
         status: 'pending',
         assigned_to: [],
         tags: [],
@@ -804,7 +811,7 @@ describe('TaskService', () => {
       const updateData = {
         title: '  Trimmed Title ',
         description: 'Keep description',
-        priority: 'HIGH',
+        priority: 9,
         status: 'in_progress',
         deadline: '',
         archived: true,
@@ -832,7 +839,8 @@ describe('TaskService', () => {
         assigned_to: [1, 2, 3],
         tags: ['foo', 'bar', 'baz'],
         recurrence_freq: 'monthly',
-        recurrence_interval: 3
+        recurrence_interval: 3,
+        priority: 9
       });
 
       await taskService.updateTask(taskId, updateData);
@@ -840,7 +848,7 @@ describe('TaskService', () => {
       const patch = taskRepository.updateById.mock.calls[0][1];
       expect(patch.title).toBe('  Trimmed Title ');
       expect(patch.description).toBe('Keep description');
-      expect(patch.priority).toBe('high');
+      expect(patch.priority).toBe(9);
       expect(patch.status).toBe('in_progress');
       expect(patch.deadline).toBeNull();
       expect(patch.archived).toBe(true);
@@ -942,7 +950,7 @@ describe('TaskService', () => {
           id: 101,
           title: 'Child Task',
           description: 'Do something',
-          priority: 'high',
+          priority: 9,
           status: 'in_progress',
           deadline: '2024-01-08',
           project_id: 45,
@@ -1040,7 +1048,7 @@ describe('TaskService', () => {
           id: 900,
           title: 'Child Monthly',
           description: 'Child task',
-          priority: 'medium',
+          priority: 5,
           status: 'pending',
           deadline: '2024-02-15',
           project_id: null,
@@ -1118,7 +1126,7 @@ describe('TaskService', () => {
         id: 950,
         title: 'Weekly Child',
         description: 'child',
-        priority: 'medium',
+        priority: 5,
         status: 'pending',
         deadline: '2024-06-03',
         project_id: null,
@@ -1195,7 +1203,7 @@ describe('TaskService', () => {
           id: 901,
           title: 'Child missing date',
           description: null,
-          priority: 'low',
+          priority: 2,
           status: 'pending',
           deadline: null,
           project_id: null,
@@ -1323,7 +1331,7 @@ describe('TaskService', () => {
         completedTasks: 0,
         cancelledTasks: 0,
         blockedTasks: 0,
-        tasksByPriority: { low: 0, medium: 0, high: 0 },
+        tasksByPriority: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 },
         overdueTasks: 0,
         completionRate: 0
       });
@@ -1336,11 +1344,11 @@ describe('TaskService', () => {
       const futureDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
       taskRepository.getTasksByProjectId = jest.fn().mockResolvedValue([
-        { status: 'pending', priority: 'low', deadline: pastDate },
-        { status: 'in_progress', priority: 'medium', deadline: futureDate },
-        { status: 'completed', priority: 'high', deadline: pastDate },
-        { status: 'cancelled', priority: 'medium', deadline: null },
-        { status: 'blocked', priority: 'low', deadline: futureDate }
+        { status: 'pending', priority: 2, deadline: pastDate },
+        { status: 'in_progress', priority: 5, deadline: futureDate },
+        { status: 'completed', priority: 8, deadline: pastDate },
+        { status: 'cancelled', priority: 4, deadline: null },
+        { status: 'blocked', priority: 3, deadline: futureDate }
       ]);
 
       const stats = await taskService.getProjectTaskStats(2);
