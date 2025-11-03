@@ -913,6 +913,8 @@ export function TaskSidePanel({
                 <SubtaskDialog
                   parentId={task.id}
                   parentDeadline={deadline}
+                  projectId={normalizedProjectId}
+                  projectMembers={projectMembers}
                   onClose={() => setIsSubtaskOpen(false)}
                   onCreated={(row) => {
                     setSubtasks((prev) => [toCard(row), ...prev]);

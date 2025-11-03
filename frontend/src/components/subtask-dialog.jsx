@@ -11,7 +11,7 @@ import { useUserSearch } from '@/hooks/useUserSearch';
 import toast from 'react-hot-toast';
 import { fetchWithCsrf } from '@/lib/csrf';
 const API = process.env.NEXT_PUBLIC_API_URL;
-export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) {
+export function SubtaskDialog({ parentId, parentDeadline, projectId = null, projectMembers = [], onClose, onCreated }) {
   const { user: currentUser } = useAuth()
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -22,9 +22,6 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
   const [tagInput, setTagInput] = useState("");
   const [assignees, setAssignees] = useState([]);
   const [userSearch, setUserSearch] = useState("");
-  const [userSearchResults, setUserSearchResults] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [debounce, setDebounce] = useState(null);
   const [attachments, setAttachments] = useState([]);
 
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -40,6 +37,23 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
     ? String(parentDeadline).slice(0, 10)
     : null;
 
+  // Filter project members based on search query
+  const filteredMemberResults = useMemo(() => {
+    if (!userSearch.trim()) return [];
+    
+    const query = userSearch.trim().toLowerCase();
+    return projectMembers
+      .filter(member => {
+        // Don't show already assigned members
+        if (assignees.some(a => a.id === member.id)) return false;
+        
+        // Match by name or email
+        const name = (member.name || '').toLowerCase();
+        const email = (member.email || '').toLowerCase();
+        return name.includes(query) || email.includes(query);
+      })
+      .slice(0, 8); // Limit to 8 results
+  }, [userSearch, projectMembers, assignees]);
 
   const deadlineError =
     parentMax && deadline && deadline > parentMax
@@ -71,7 +85,6 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
       setAssignees((prev) => [...prev, user]);
     }
     setUserSearch("");
-    setUserSearchResults([]);
   }
   function removeAssignee(id) {
     setAssignees((prev) => prev.filter((a) => a.id !== id));
@@ -117,24 +130,6 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
   function handleUserSearchInput(e) {
     const value = e.target.value;
     setUserSearch(value);
-    if (debounce) clearTimeout(debounce);
-    if (!value.trim()) {
-      setUserSearchResults([]);
-      return;
-    }
-    setLoadingUsers(true);
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch(`${API}/users/search?q=${encodeURIComponent(value)}&limit=8`);
-        const data = await res.json();
-        setUserSearchResults(data.users || []);
-      } catch {
-        setUserSearchResults([]);
-      } finally {
-        setLoadingUsers(false);
-      }
-    }, 250);
-    setDebounce(t);
   }
 
   async function handleCreate() {
@@ -336,15 +331,14 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
               <input
                 type="text"
                 className="w-full bg-transparent text-gray-100 border border-gray-700 rounded-md px-2 py-1 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-                placeholder="Search users…"
+                placeholder="Search project members by name or email..."
                 value={userSearch}
                 onChange={handleUserSearchInput}
-                aria-busy={loadingUsers ? "true" : "false"}
                 autoComplete="off"
               />
-              {userSearchResults.length > 0 && (
+              {filteredMemberResults.length > 0 && (
                 <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
-                  {userSearchResults.map((u) => (
+                  {filteredMemberResults.map((u) => (
                     <div
                       key={u.id}
                       className="px-3 py-2 hover:bg-gray-700 cursor-pointer text-gray-100"
