@@ -273,6 +273,24 @@ class TaskService {
       }
     }
 
+    // Validate deadline is not in the past
+    if (deadline) {
+      const parsedDeadline = new Date(deadline);
+      if (isNaN(parsedDeadline.getTime())) {
+        const err = new Error('Invalid deadline format');
+        err.status = 400;
+        throw err;
+      }
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const deadlineDate = new Date(parsedDeadline.getFullYear(), parsedDeadline.getMonth(), parsedDeadline.getDate());
+      if (deadlineDate.getTime() < today.getTime()) {
+        const err = new Error('Deadline cannot be in the past');
+        err.status = 400;
+        throw err;
+      }
+    }
+
     // Normalize priority (numeric 1-10) and status
     const normPriority = priority != null ? Number(priority) : 5; // Default to 5 (medium)
     const allowedStatuses = new Set(["pending", "in_progress", "completed", "blocked", "cancelled"]);
@@ -491,7 +509,26 @@ class TaskService {
       patch.priority = (priorityNum >= 1 && priorityNum <= 10) ? priorityNum : 5;
     }
     if (input.status !== undefined) patch.status = input.status;
-    if (input.deadline !== undefined) patch.deadline = input.deadline || null;
+    if (input.deadline !== undefined) {
+      // Validate deadline is not in the past
+      if (input.deadline) {
+        const parsedDeadline = new Date(input.deadline);
+        if (isNaN(parsedDeadline.getTime())) {
+          const err = new Error('Invalid deadline format');
+          err.status = 400;
+          throw err;
+        }
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const deadlineDate = new Date(parsedDeadline.getFullYear(), parsedDeadline.getMonth(), parsedDeadline.getDate());
+        if (deadlineDate.getTime() < today.getTime()) {
+          const err = new Error('Deadline cannot be in the past');
+          err.status = 400;
+          throw err;
+        }
+      }
+      patch.deadline = input.deadline || null;
+    }
     if (input.archived !== undefined) patch.archived = !!input.archived;
     if (input.tags !== undefined) {
       const tagsArr = Array.isArray(input.tags)

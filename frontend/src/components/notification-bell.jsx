@@ -30,7 +30,9 @@ export function NotificationBell() {
         const recipients = notif.recipient_emails.split(',').map(email => email.trim())
         return recipients.includes(user.email)
       })
-      setNotificationCount(userNotifications.length)
+      // Only count notifications that haven't been dismissed
+      const undismissedCount = userNotifications.filter(notif => !notif.dismissed).length
+      setNotificationCount(undismissedCount)
     } catch (err) {
       console.error('Failed to fetch notification count:', err)
       setNotificationCount(0)
