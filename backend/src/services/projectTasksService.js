@@ -449,6 +449,26 @@ class ProjectTasksService {
 
       console.log(`Task created: ${JSON.stringify(newTask)}`);
 
+      // Send task assignment notifications to assignees (except creator)
+      const notifyAssignees = uniqueAssignees.filter((id) => id !== validCreatorId);
+      if (notifyAssignees.length > 0) {
+        try {
+          const notificationService = require('./notificationService');
+          await notificationService.createTaskAssignmentNotifications({
+            task: newTask,
+            assigneeIds: notifyAssignees,
+            assignedById: validCreatorId,
+            previousAssigneeIds: [],
+            currentAssigneeIds: uniqueAssignees,
+            notificationType: 'task_assignment'
+          });
+          console.log(`Sent task assignment notifications to ${notifyAssignees.length} users`);
+        } catch (notificationError) {
+          console.error('Error sending task assignment notifications:', notificationError);
+          // Don't fail task creation if notification fails
+        }
+      }
+
       // Send immediate deadline notifications if task has deadline today/tomorrow
       if (newTask.deadline) {
         console.log(`DEBUG: Task has deadline: "${newTask.deadline}" (type: ${typeof newTask.deadline})`);

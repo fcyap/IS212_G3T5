@@ -1589,7 +1589,7 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
     'image/jpeg'
   ]
   const canManageAssignees = () => true
-  const canSave = title.trim().length > 0 && priority !== "" && assignees.length <= MAX_ASSIGNEES
+  const canSave = title.trim().length > 0 && description.trim().length > 0 && priority !== "" && assignees.length <= MAX_ASSIGNEES && dueDate.trim().length > 0
 
   const memberOptions = useMemo(() => {
     if (!Array.isArray(projectMembers)) return []
