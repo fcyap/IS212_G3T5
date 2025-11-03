@@ -102,13 +102,13 @@ export function CreateProjectDialog({ children, variant = "default", isCollapsed
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="bg-[#1f1f23] border-gray-700 text-white">
+      <DialogContent className="border" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))', color: 'rgb(var(--foreground))' }}>
         <DialogHeader>
-          <DialogTitle>Create New Project</DialogTitle>
+          <DialogTitle style={{ color: 'rgb(var(--foreground))' }}>Create New Project</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="project_name" className="block text-sm font-medium mb-2">
+            <label htmlFor="project_name" className="block text-sm font-medium mb-2" style={{ color: 'rgb(var(--foreground))' }}>
               Project Name
             </label>
             <Input
@@ -117,13 +117,13 @@ export function CreateProjectDialog({ children, variant = "default", isCollapsed
               value={formData.project_name}
               onChange={handleChange}
               placeholder="Enter project name..."
-              className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+              style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))', color: 'rgb(var(--foreground))' }}
               required
             />
           </div>
-          
+
           <div>
-            <label htmlFor="description" className="block text-sm font-medium mb-2">
+            <label htmlFor="description" className="block text-sm font-medium mb-2" style={{ color: 'rgb(var(--foreground))' }}>
               Description
             </label>
             <textarea
@@ -132,7 +132,8 @@ export function CreateProjectDialog({ children, variant = "default", isCollapsed
               value={formData.description}
               onChange={handleChange}
               placeholder="Enter project description..."
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))', color: 'rgb(var(--foreground))' }}
               rows={3}
             />
           </div>

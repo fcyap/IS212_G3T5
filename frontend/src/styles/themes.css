@@ -1,0 +1,213 @@
+/* Theme Variables */
+:root {
+  /* Light Theme Colors */
+  --background: 248 250 252;
+  --foreground: 15 23 42;
+  --card: 255 255 255;
+  --card-foreground: 15 23 42;
+  --popover: 255 255 255;
+  --popover-foreground: 15 23 42;
+  --primary: 59 130 246;
+  --primary-foreground: 248 250 252;
+  --secondary: 241 245 249;
+  --secondary-foreground: 15 23 42;
+  --muted: 241 245 249;
+  --muted-foreground: 100 116 139;
+  --accent: 226 232 240;
+  --accent-foreground: 15 23 42;
+  --destructive: 239 68 68;
+  --destructive-foreground: 248 250 252;
+  --border: 226 232 240;
+  --input: 226 232 240;
+  --ring: 59 130 246;
+  --radius: 0.5rem;
+  
+  /* Task Board Colors */
+  --board-background: 248 250 252;
+  --column-background: 255 255 255;
+  --column-header: 71 85 105;
+  --task-background: 255 255 255;
+  --task-border: 226 232 240;
+  --task-hover: 248 250 252;
+}
+
+/* Dark Theme Colors */
+[data-theme="dark"] {
+  --background: 15 23 42;
+  --foreground: 248 250 252;
+  --card: 30 41 59;
+  --card-foreground: 248 250 252;
+  --popover: 30 41 59;
+  --popover-foreground: 248 250 252;
+  --primary: 59 130 246;
+  --primary-foreground: 15 23 42;
+  --secondary: 51 65 85;
+  --secondary-foreground: 248 250 252;
+  --muted: 51 65 85;
+  --muted-foreground: 148 163 184;
+  --accent: 51 65 85;
+  --accent-foreground: 248 250 252;
+  --destructive: 239 68 68;
+  --destructive-foreground: 248 250 252;
+  --border: 51 65 85;
+  --input: 51 65 85;
+  --ring: 59 130 246;
+  
+  /* Task Board Colors */
+  --board-background: 15 23 42;
+  --column-background: 30 41 59;
+  --column-header: 148 163 184;
+  --task-background: 30 41 59;
+  --task-border: 51 65 85;
+  --task-hover: 51 65 85;
+}
+
+/* Base styles */
+* {
+  border-color: rgb(var(--border));
+}
+
+body {
+  background-color: rgb(var(--background));
+  color: rgb(var(--foreground));
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Theme-aware component styles */
+.theme-bg-primary {
+  background-color: rgb(var(--background));
+}
+
+.theme-bg-secondary {
+  background-color: rgb(var(--card));
+}
+
+.theme-text-primary {
+  color: rgb(var(--foreground));
+}
+
+.theme-text-secondary {
+  color: rgb(var(--muted-foreground));
+}
+
+.theme-border {
+  border-color: rgb(var(--border));
+}
+
+/* Task Board Theme Styles */
+.kanban-board {
+  background-color: rgb(var(--board-background));
+  transition: background-color 0.3s ease;
+}
+
+.kanban-column {
+  background-color: rgb(var(--column-background));
+  border: 1px solid rgb(var(--border));
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.kanban-column-header {
+  color: rgb(var(--column-header));
+  transition: color 0.3s ease;
+}
+
+.task-card {
+  background-color: rgb(var(--task-background));
+  border: 1px solid rgb(var(--task-border));
+  color: rgb(var(--foreground));
+  transition: all 0.3s ease;
+}
+
+.task-card:hover {
+  background-color: rgb(var(--task-hover));
+  border-color: rgb(var(--primary));
+}
+
+/* Light theme overrides for existing dark components */
+[data-theme="light"] .bg-\[#1a1a1d\] {
+  background-color: rgb(var(--board-background)) !important;
+}
+
+[data-theme="light"] .bg-gray-800 {
+  background-color: rgb(var(--card)) !important;
+}
+
+[data-theme="light"] .text-white {
+  color: rgb(var(--foreground)) !important;
+}
+
+[data-theme="light"] .text-gray-400 {
+  color: rgb(var(--muted-foreground)) !important;
+}
+
+[data-theme="light"] .border-gray-600 {
+  border-color: rgb(var(--border)) !important;
+}
+
+[data-theme="light"] .border-gray-700 {
+  border-color: rgb(var(--border)) !important;
+}
+
+/* Dark theme (keep existing styles) */
+[data-theme="dark"] .bg-\[#1a1a1d\] {
+  background-color: #1a1a1d !important;
+}
+
+/* Settings panel styles */
+.settings-panel {
+  background-color: rgb(var(--card));
+  border: 1px solid rgb(var(--border));
+  color: rgb(var(--foreground));
+  transition: all 0.3s ease;
+}
+
+/* View transition animations */
+.view-transition {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Grid view specific styles */
+.task-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.task-grid .task-card {
+  height: auto;
+  min-height: 120px;
+}
+
+/* Compact view styles */
+.task-compact {
+  padding: 0.5rem;
+  min-height: 60px;
+}
+
+.task-compact .task-title {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.task-compact .task-details {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+/* Detailed view styles */
+.task-detailed {
+  padding: 1rem;
+  min-height: 120px;
+}
+
+.task-detailed .task-title {
+  font-size: 1rem;
+  line-height: 1.5rem;
+  font-weight: 600;
+}
+
+.task-detailed .task-details {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  margin-top: 0.5rem;
+}

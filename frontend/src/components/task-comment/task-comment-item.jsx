@@ -31,6 +31,7 @@ export const CommentItem = ({
   const [showReplies, setShowReplies] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [hoveredButton, setHoveredButton] = useState(null);
 
   console.log('Current User:', effectiveUser);
   const canEdit = comment.user?.id && effectiveUser?.id && comment.user.id === effectiveUser.id;
@@ -140,7 +141,13 @@ export const CommentItem = ({
   };
 
   return (
-    <div className={`bg-[#23232a] rounded-lg border border-gray-700 p-4 hover:shadow-md transition-shadow ${depth > 0 ? 'ml-8 mt-3' : ''}`}> 
+    <div
+      className={`rounded-lg border p-4 hover:shadow-md transition-shadow ${depth > 0 ? 'ml-8 mt-3' : ''}`}
+      style={{
+        backgroundColor: 'rgb(var(--card))',
+        borderColor: 'rgb(var(--border))'
+      }}
+    > 
       <div className="flex gap-3">
         <div
           className={`${depth > 0 ? 'w-7 h-7' : 'w-8 h-8'} bg-blue-500 rounded-full flex items-center justify-center text-white font-medium text-xs flex-shrink-0 mr-2`}
@@ -151,14 +158,14 @@ export const CommentItem = ({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2">
-            <h4 className="text-gray-400 text-sm leading-relaxed whitespace-pre-wrap">
+            <h4 className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'rgb(var(--muted-foreground))' }}>
               {comment.user.name}
             </h4>
-            <span className="text-xs text-gray-500">
+            <span className="text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>
               {formatTimestamp(comment.timestamp)}
             </span>
             {depth > 0 && (
-              <span className="text-xs text-gray-100 bg-gray-500 px-2 py-0.5 rounded-full">
+              <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: 'rgb(var(--foreground))', backgroundColor: 'rgb(var(--muted))' }}>
                 Reply
               </span>
             )}
@@ -169,7 +176,12 @@ export const CommentItem = ({
               <textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
-                className="w-full min-h-[80px] p-3 text-sm text-gray-100 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                className="w-full min-h-[80px] p-3 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                style={{
+                  color: 'rgb(var(--foreground))',
+                  borderColor: 'rgb(var(--border))',
+                  backgroundColor: 'rgb(var(--card))'
+                }}
                 maxLength={1000}
                 autoFocus
               />
@@ -191,7 +203,11 @@ export const CommentItem = ({
                 <button
                   onClick={handleCancelEdit}
                   disabled={isUpdating}
-                  className="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-1 disabled:opacity-50 transition-colors flex items-center gap-1"
+                  className="px-3 py-1.5 text-sm rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-1 disabled:opacity-50 transition-colors flex items-center gap-1"
+                  style={{
+                    backgroundColor: 'rgb(var(--muted))',
+                    color: 'rgb(var(--foreground))'
+                  }}
                 >
                   <X size={14} />
                   Cancel
@@ -200,37 +216,70 @@ export const CommentItem = ({
             </div>
           ) : (
             <>
-              <p className="text-gray-100 text-sm leading-relaxed whitespace-pre-wrap">
+              <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'rgb(var(--foreground))' }}>
                 {comment.content}
               </p>
-              
-              <div className="flex items-center gap-2 mt-3 pt-2 border-t border-gray-500">
+
+              <div className="flex items-center gap-2 mt-3 pt-2 border-t" style={{ borderColor: 'rgb(var(--border))' }}>
                 {canComment && (
                   <button
                     onClick={() => setShowReplyBox(!showReplyBox)}
-                    className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                    onMouseEnter={(e) => {
+                      setHoveredButton('reply');
+                      e.currentTarget.style.color = 'rgb(59 130 246)';
+                      e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+                    }}
+                    onMouseLeave={(e) => {
+                      setHoveredButton(null);
+                      e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    className="p-1 rounded transition-colors"
+                    style={{ color: 'rgb(var(--muted-foreground))' }}
                     title="Reply to comment"
                   >
                     <Reply size={14} />
                   </button>
                 )}
-                
+
                 {hasReplies && (
                   <button
                     onClick={toggleReplies}
-                    className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded transition-colors flex items-center gap-1"
+                    onMouseEnter={(e) => {
+                      setHoveredButton('toggleReplies');
+                      e.currentTarget.style.color = 'rgb(var(--foreground))';
+                      e.currentTarget.style.backgroundColor = 'rgb(var(--muted))';
+                    }}
+                    onMouseLeave={(e) => {
+                      setHoveredButton(null);
+                      e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    className="p-1 rounded transition-colors flex items-center gap-1"
+                    style={{ color: 'rgb(var(--muted-foreground))' }}
                     title={showReplies ? 'Hide replies' : 'Show replies'}
                   >
                     <MessageCircle size={14} />
                     <span className="text-xs">{comment.replies.length}</span>
                   </button>
                 )}
-                
+
                 {canEdit && (
                   <>
                   <button
                     onClick={handleStartEdit}
-                    className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                    onMouseEnter={(e) => {
+                      setHoveredButton('edit');
+                      e.currentTarget.style.color = 'rgb(59 130 246)';
+                      e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+                    }}
+                    onMouseLeave={(e) => {
+                      setHoveredButton(null);
+                      e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    className="p-1 rounded transition-colors"
+                    style={{ color: 'rgb(var(--muted-foreground))' }}
                     title="Edit comment"
                   >
                     <Edit2 size={14} />
@@ -240,7 +289,18 @@ export const CommentItem = ({
                 {isAdmin && (
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
-                    className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                    onMouseEnter={(e) => {
+                      setHoveredButton('delete');
+                      e.currentTarget.style.color = 'rgb(220 38 38)';
+                      e.currentTarget.style.backgroundColor = 'rgba(220, 38, 38, 0.1)';
+                    }}
+                    onMouseLeave={(e) => {
+                      setHoveredButton(null);
+                      e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    className="p-1 rounded transition-colors"
+                    style={{ color: 'rgb(var(--muted-foreground))' }}
                     title="Delete comment"
                   >
                     <Trash2 size={14} />
@@ -286,11 +346,18 @@ export const CommentItem = ({
           }
         }}
       >
-        <DialogContent className="bg-[#23232a] border border-gray-700 text-white">
+        <DialogContent
+          className="border"
+          style={{
+            backgroundColor: 'rgb(var(--card))',
+            borderColor: 'rgb(var(--border))',
+            color: 'rgb(var(--foreground))'
+          }}
+        >
           <DialogHeader>
-            <DialogTitle>Delete comment?</DialogTitle>
-            <DialogDescription className="text-gray-400">
-              This comment{hasReplies ? ' and its replies' : ''} will be permanently removed. 
+            <DialogTitle style={{ color: 'rgb(var(--foreground))' }}>Delete comment?</DialogTitle>
+            <DialogDescription style={{ color: 'rgb(var(--muted-foreground))' }}>
+              This comment{hasReplies ? ' and its replies' : ''} will be permanently removed.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex flex-row justify-end gap-2">
@@ -298,7 +365,11 @@ export const CommentItem = ({
               variant="ghost"
               onClick={() => setShowDeleteConfirm(false)}
               disabled={isDeleting}
-              className="bg-gray-800 hover:bg-gray-700 text-gray-200"
+              className="hover:bg-gray-700"
+              style={{
+                backgroundColor: 'rgb(var(--muted))',
+                color: 'rgb(var(--foreground))'
+              }}
             >
               Cancel
             </Button>

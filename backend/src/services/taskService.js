@@ -486,7 +486,10 @@ class TaskService {
 
     if (input.title !== undefined) patch.title = input.title;
     if (input.description !== undefined) patch.description = input.description;
-    if (input.priority !== undefined) patch.priority = String(input.priority).toLowerCase();
+    if (input.priority !== undefined) {
+      const priorityNum = Number(input.priority);
+      patch.priority = (priorityNum >= 1 && priorityNum <= 10) ? priorityNum : 5;
+    }
     if (input.status !== undefined) patch.status = input.status;
     if (input.deadline !== undefined) patch.deadline = input.deadline || null;
     if (input.archived !== undefined) patch.archived = !!input.archived;
@@ -860,7 +863,9 @@ class TaskService {
         completedTasks: 0,
         cancelledTasks: 0,
         blockedTasks: 0,
-        tasksByPriority: { low: 0, medium: 0, high: 0 },
+        tasksByPriority: {
+          1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0
+        },
         overdueTasks: 0,
         completionRate: 0
       };

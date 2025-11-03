@@ -56,18 +56,18 @@ const getPriorityPresentation = (priority) => {
     return {
       normalized: null,
       uppercase: null,
-      badgeClass: "bg-gray-600 text-white",
+      badgeClass: "bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-white border border-gray-300 dark:border-gray-600 font-medium",
       textClass: "text-gray-400"
     };
   }
 
   const badgeClass = normalized === "high"
-    ? "bg-red-600 text-white"
+    ? "bg-red-100 dark:bg-red-600 text-red-800 dark:text-white border border-red-300 dark:border-red-600 font-medium"
     : normalized === "medium"
-      ? "bg-yellow-600 text-white"
+      ? "bg-amber-100 dark:bg-amber-600 text-amber-800 dark:text-white border border-amber-300 dark:border-amber-600 font-medium"
       : normalized === "low"
-        ? "bg-green-600 text-white"
-        : "bg-gray-600 text-white";
+        ? "bg-green-100 dark:bg-green-600 text-green-800 dark:text-white border border-green-300 dark:border-green-600 font-medium"
+        : "bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-white border border-gray-300 dark:border-gray-600 font-medium";
 
   const textClass = normalized === "high"
     ? "text-red-400"
@@ -711,15 +711,15 @@ export function ProjectDetails({ projectId, onBack }) {
   const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
 
   if (loading) {
-    return <div className="flex-1 bg-[#1a1a1d] p-6 flex items-center justify-center text-white">Loading project...</div>
+    return <div className="flex-1 p-6 flex items-center justify-center" style={{ backgroundColor: 'rgb(var(--background))', color: 'rgb(var(--foreground))' }}>Loading project...</div>
   }
 
   if (!project) {
-    return <div className="flex-1 bg-[#1a1a1d] p-6 flex items-center justify-center text-white">Project not found</div>
+    return <div className="flex-1 p-6 flex items-center justify-center" style={{ backgroundColor: 'rgb(var(--background))', color: 'rgb(var(--foreground))' }}>Project not found</div>
   }
 
   return (
-    <div className="flex-1 bg-[#1a1a1d] p-3 sm:p-6 overflow-x-hidden">
+    <div className="flex-1 p-3 sm:p-6 overflow-x-hidden" style={{ backgroundColor: 'rgb(var(--background))' }}>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
@@ -729,21 +729,34 @@ export function ProjectDetails({ projectId, onBack }) {
             <span className="sm:hidden">Back</span>
           </Button>
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-white truncate">{project.name || 'Unnamed Project'}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold truncate" style={{ color: 'rgb(var(--foreground))' }}>{project.name || 'Unnamed Project'}</h1>
             {project.status === 'archived' && (
-              <span className="px-2 py-1 bg-gray-600 text-gray-200 text-xs sm:text-sm rounded-full flex-shrink-0">
+              <span className="px-2 py-1 text-xs sm:text-sm rounded-full flex-shrink-0" style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))' }}>
                 Archived
               </span>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {/* View Mode Toggle */}
-            <div className="flex items-center bg-[#2a2a2e] rounded-lg p-1">
+            <div className="flex items-center rounded-lg p-1" style={{ backgroundColor: 'rgb(var(--card))' }}>
               <Button
                 size="sm"
                 variant={viewMode === 'details' ? 'default' : 'ghost'}
                 onClick={() => setViewMode('details')}
-                className={viewMode === 'details' ? 'bg-blue-600 text-white text-xs sm:text-sm' : 'text-gray-400 hover:text-white hover:bg-[#1f1f23] text-xs sm:text-sm'}
+                className={viewMode === 'details' ? 'bg-blue-600 text-white text-xs sm:text-sm' : 'text-xs sm:text-sm'}
+                style={viewMode === 'details' ? {} : { color: 'rgb(var(--muted-foreground))' }}
+                onMouseEnter={(e) => {
+                  if (viewMode !== 'details') {
+                    e.currentTarget.style.color = 'rgb(var(--foreground))';
+                    e.currentTarget.style.backgroundColor = 'rgb(var(--muted))';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (viewMode !== 'details') {
+                    e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+                    e.currentTarget.style.backgroundColor = '';
+                  }
+                }}
               >
                 <List className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
                 <span className="hidden sm:inline">Details</span>
@@ -752,7 +765,20 @@ export function ProjectDetails({ projectId, onBack }) {
                 size="sm"
                 variant={viewMode === 'timeline' ? 'default' : 'ghost'}
                 onClick={() => setViewMode('timeline')}
-                className={viewMode === 'timeline' ? 'bg-blue-600 text-white text-xs sm:text-sm' : 'text-gray-400 hover:text-white hover:bg-[#1f1f23] text-xs sm:text-sm'}
+                className={viewMode === 'timeline' ? 'bg-blue-600 text-white text-xs sm:text-sm' : 'text-xs sm:text-sm'}
+                style={viewMode === 'timeline' ? {} : { color: 'rgb(var(--muted-foreground))' }}
+                onMouseEnter={(e) => {
+                  if (viewMode !== 'timeline') {
+                    e.currentTarget.style.color = 'rgb(var(--foreground))';
+                    e.currentTarget.style.backgroundColor = 'rgb(var(--muted))';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (viewMode !== 'timeline') {
+                    e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+                    e.currentTarget.style.backgroundColor = '';
+                  }
+                }}
               >
                 <Calendar className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
                 <span className="hidden sm:inline">Timeline</span>
@@ -789,20 +815,20 @@ export function ProjectDetails({ projectId, onBack }) {
         {viewMode === 'details' ? (
           <>
         {isReadOnly && (
-          <div className="mb-6 rounded-lg border border-dashed border-gray-600 bg-[#2a2a2e] p-4 text-sm text-gray-300">
+          <div className="mb-6 rounded-lg border border-dashed p-4 text-sm" style={{ borderColor: 'rgb(var(--border))', backgroundColor: 'rgb(var(--card))', color: 'rgb(var(--muted-foreground))' }}>
             This project is archived.
           </div>
         )}
         {/* Project Info */}
-        <div className="bg-[#2a2a2e] rounded-lg p-4 sm:p-6 mb-4 sm:mb-6">
-          <h2 className="text-base sm:text-lg font-semibold text-white mb-3 sm:mb-4">Project Details</h2>
-          <p className="text-sm sm:text-base text-gray-300">{project.description || "No description available."}</p>
+        <div className="rounded-lg p-4 sm:p-6 mb-4 sm:mb-6" style={{ backgroundColor: 'rgb(var(--card))' }}>
+          <h2 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4" style={{ color: 'rgb(var(--foreground))' }}>Project Details</h2>
+          <p className="text-sm sm:text-base" style={{ color: 'rgb(var(--muted-foreground))' }}>{project.description || "No description available."}</p>
         </div>
 
         {/* Members Section */}
-        <div className="bg-[#2a2a2e] rounded-lg p-4 sm:p-6">
+        <div className="rounded-lg p-4 sm:p-6" style={{ backgroundColor: 'rgb(var(--card))' }}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-base sm:text-lg font-semibold text-white">Project Members</h2>
+            <h2 className="text-base sm:text-lg font-semibold" style={{ color: 'rgb(var(--foreground))' }}>Project Members</h2>
             {userPermissions.canManageMembers && !isReadOnly && (
               <Button
                 onClick={() => setShowAddMember(!showAddMember)}
@@ -817,32 +843,34 @@ export function ProjectDetails({ projectId, onBack }) {
 
           {/* Add Member Search */}
           {showAddMember && !isReadOnly && (
-            <div className="mb-4 p-3 sm:p-4 bg-[#1f1f23] rounded-lg">
+            <div className="mb-4 p-3 sm:p-4 rounded-lg" style={{ backgroundColor: 'rgb(var(--muted))' }}>
               <div className="relative mb-2">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: 'rgb(var(--muted-foreground))' }} />
                 <Input
                   placeholder="Search users by name or email..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                  className="pl-10"
+                  style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))', color: 'rgb(var(--foreground))' }}
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-300 mb-1">Invitation Message (optional)</label>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Invitation Message (optional)</label>
                 <textarea
                   value={invitationMessage}
                   onChange={(e) => setInvitationMessage(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))', color: 'rgb(var(--foreground))' }}
                   rows={3}
                   placeholder="Add a personal message with the invitation..."
                 />
               </div>
-              
+
               {/* Bulk Actions */}
               {filteredUsers.length > 0 && (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-4 p-3 bg-[#2a2a2e] rounded-lg">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-4 p-3 rounded-lg" style={{ backgroundColor: 'rgb(var(--card))' }}>
                   <div className="flex items-center gap-2">
-                    <span className="text-gray-300 text-xs sm:text-sm">
+                    <span className="text-xs sm:text-sm" style={{ color: 'rgb(var(--muted-foreground))' }}>
                       {selectedUsers.length > 0 ? `${selectedUsers.length} user(s) selected` : 'Select users to add in bulk'}
                     </span>
                   </div>
@@ -860,18 +888,24 @@ export function ProjectDetails({ projectId, onBack }) {
               <div className="max-h-40 overflow-y-auto">
                 {console.log('About to render filteredUsers:', filteredUsers)}
                 {filteredUsers.length === 0 ? (
-                  <div className="text-gray-400 text-sm p-2">
+                  <div className="text-sm p-2" style={{ color: 'rgb(var(--muted-foreground))' }}>
                     <div>No users available to add.</div>
                   </div>
                 ) : (
                   filteredUsers.map((user) => (
-                    <div key={user.id} className="flex items-center justify-between gap-2 p-2 hover:bg-gray-700 rounded">
+                    <div
+                      key={user.id}
+                      className="flex items-center justify-between gap-2 p-2 rounded"
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
+                    >
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <input
                           type="checkbox"
                           checked={selectedUsers.includes(user.id)}
                           onChange={() => toggleUserSelection(user.id)}
-                          className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2 flex-shrink-0"
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 focus:ring-2 flex-shrink-0"
+                          style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))' }}
                         />
                         <Avatar className="w-6 h-6 flex-shrink-0">
                           <AvatarFallback className="bg-purple-500 text-white text-xs">
@@ -879,8 +913,8 @@ export function ProjectDetails({ projectId, onBack }) {
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
-                          <p className="text-white text-sm truncate">{user.name || 'Unknown User'}</p>
-                          <p className="text-gray-400 text-xs truncate">{user.email}</p>
+                          <p className="text-sm truncate" style={{ color: 'rgb(var(--foreground))' }}>{user.name || 'Unknown User'}</p>
+                          <p className="text-xs truncate" style={{ color: 'rgb(var(--muted-foreground))' }}>{user.email}</p>
                         </div>
                       </div>
                       <Button
@@ -907,7 +941,7 @@ export function ProjectDetails({ projectId, onBack }) {
               const userRole = member.role; // 'creator', 'manager', or 'collaborator'
 
               return (
-                <div key={member.user_id} className="flex items-center justify-between gap-3 p-3 bg-[#1f1f23] rounded-lg">
+                <div key={member.user_id} className="flex items-center justify-between gap-3 p-3 rounded-lg" style={{ backgroundColor: 'rgb(var(--muted))' }}>
                   <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
                     <Avatar className="w-8 h-8 flex-shrink-0">
                       <AvatarFallback className="bg-purple-500 text-white">
@@ -916,16 +950,16 @@ export function ProjectDetails({ projectId, onBack }) {
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                        <p className="text-white font-medium text-sm sm:text-base truncate">{member.name || 'Unknown User'}</p>
-                        <span className={`text-xs px-2 py-0.5 sm:py-1 rounded-full self-start sm:self-auto flex-shrink-0 ${
-                          userRole === 'manager' ? 'bg-blue-600 text-white' :
-                          userRole === 'creator' ? 'bg-red-600 text-white' :
-                          'bg-gray-600 text-white'
+                        <p className="font-medium text-sm sm:text-base truncate" style={{ color: 'rgb(var(--foreground))' }}>{member.name || 'Unknown User'}</p>
+                        <span className={`text-xs px-2 py-0.5 sm:py-1 rounded-full self-start sm:self-auto flex-shrink-0 border font-medium ${
+                          userRole === 'manager' ? 'bg-blue-100 dark:bg-blue-600 text-blue-800 dark:text-white border-blue-300 dark:border-blue-600' :
+                          userRole === 'creator' ? 'bg-red-100 dark:bg-red-600 text-red-800 dark:text-white border-red-300 dark:border-red-600' :
+                          'bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-white border-gray-300 dark:border-gray-600'
                         }`}>
                           {userRole}
                         </span>
                       </div>
-                      <p className="text-gray-400 text-xs sm:text-sm truncate">{member.email}</p>
+                      <p className="text-xs sm:text-sm truncate" style={{ color: 'rgb(var(--muted-foreground))' }}>{member.email}</p>
                     </div>
                   </div>
                   {userPermissions.canManageMembers && !isReadOnly && userRole !== 'creator' && (
@@ -933,7 +967,15 @@ export function ProjectDetails({ projectId, onBack }) {
                       size="sm"
                       variant="ghost"
                       onClick={() => handleRemoveMember(member.user_id)}
-                      className="text-red-400 hover:text-red-300 hover:bg-red-900/20 flex-shrink-0 p-2"
+                      className="text-red-400 flex-shrink-0 p-2"
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = '#fca5a5';
+                        e.currentTarget.style.backgroundColor = 'rgba(127, 29, 29, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = '#f87171';
+                        e.currentTarget.style.backgroundColor = '';
+                      }}
                     >
                       <X className="w-4 h-4" />
                     </Button>
@@ -945,20 +987,20 @@ export function ProjectDetails({ projectId, onBack }) {
         </div>
 
         {/* Tasks Section */}
-        <div className="bg-[#2a2a2e] rounded-lg p-4 sm:p-6 mt-4 sm:mt-6">
+        <div className="rounded-lg p-4 sm:p-6 mt-4 sm:mt-6" style={{ backgroundColor: 'rgb(var(--card))' }}>
           <div className="flex flex-col gap-3 mb-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                <h2 className="text-base sm:text-lg font-semibold text-white">Project Tasks</h2>
+                <h2 className="text-base sm:text-lg font-semibold" style={{ color: 'rgb(var(--foreground))' }}>Project Tasks</h2>
                 {/* Progress Indicator */}
                 <div className="flex items-center gap-2">
-                  <div className="w-20 sm:w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
+                  <div className="w-20 sm:w-24 h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'rgb(var(--muted))' }}>
                     <div
                       className="h-full bg-green-500 transition-all duration-300"
                       style={{ width: `${progressPercent}%` }}
                     ></div>
                   </div>
-                  <span className="text-xs sm:text-sm text-gray-300 whitespace-nowrap">
+                  <span className="text-xs sm:text-sm whitespace-nowrap" style={{ color: 'rgb(var(--muted-foreground))' }}>
                     {completedTasks}/{totalTasks} ({progressPercent}%)
                   </span>
                 </div>
@@ -968,7 +1010,9 @@ export function ProjectDetails({ projectId, onBack }) {
                   onClick={() => setShowFilters(!showFilters)}
                   variant="outline"
                   size="sm"
-                  className="border-gray-600 text-gray-300 hover:text-white"
+                  style={{ borderColor: 'rgb(var(--border))', color: 'rgb(var(--muted-foreground))' }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = 'rgb(var(--muted-foreground))'}
                 >
                   <Filter className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
                   <span className="hidden sm:inline">Filter</span>
@@ -992,39 +1036,41 @@ export function ProjectDetails({ projectId, onBack }) {
 
           {/* Filters */}
           {showFilters && (
-            <div className="bg-[#1f1f23] rounded-lg p-3 sm:p-4 mb-4">
+            <div className="rounded-lg p-3 sm:p-4 mb-4" style={{ backgroundColor: 'rgb(var(--muted))' }}>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-3">
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Assignee</label>
+                  <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Assignee</label>
                   <Input
                     placeholder="Search assignee..."
                     value={taskFilters.assignee}
                     onChange={(e) => setTaskFilters(prev => ({ ...prev, assignee: e.target.value }))}
-                    className="bg-gray-700 border-gray-600 text-white text-sm"
+                    className="text-sm"
+                    style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))', color: 'rgb(var(--foreground))' }}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Due Date</label>
+                  <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Due Date</label>
                   <Input
                     type="date"
                     value={taskFilters.dueDate}
                     onChange={(e) => setTaskFilters(prev => ({ ...prev, dueDate: e.target.value }))}
-                    className="bg-gray-700 border-gray-600 text-white text-sm"
+                    className="text-sm"
+                    style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))', color: 'rgb(var(--foreground))' }}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Priority</label>
+                  <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Priority</label>
                   <Select
                     value={taskFilters.priority}
                     onValueChange={(value) => setTaskFilters(prev => ({ ...prev, priority: value }))}
                   >
-                    <SelectTrigger className="bg-gray-700 border-gray-600 text-white text-sm">
+                    <SelectTrigger className="text-sm" style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))', color: 'rgb(var(--foreground))' }}>
                       <SelectValue placeholder="Any priority" />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#2a2a2e] border-gray-600" style={{ color: 'white' }}>
-                      <SelectItem value="all" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-cyan-200">Any priority</SelectItem>
+                    <SelectContent style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))', color: 'white' }}>
+                      <SelectItem value="all" style={{ color: 'black' }} className="data-[highlighted]:bg-cyan-200">Any priority</SelectItem>
                       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((p) => (
-                        <SelectItem key={p} value={p.toString()} style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700">
+                        <SelectItem key={p} value={p.toString()} style={{ color: 'black' }}>
                           Priority {p}
                         </SelectItem>
                       ))}
@@ -1032,19 +1078,19 @@ export function ProjectDetails({ projectId, onBack }) {
                   </Select>
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Status</label>
+                  <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Status</label>
                   <Select
                     value={taskFilters.status}
                     onValueChange={(value) => setTaskFilters(prev => ({ ...prev, status: value }))}
                   >
-                    <SelectTrigger className="bg-gray-700 border-gray-600 text-white text-sm">
+                    <SelectTrigger className="text-sm" style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))', color: 'rgb(var(--foreground))' }}>
                       <SelectValue placeholder="Any status" />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#2a2a2e] border-gray-600" style={{ color: 'white' }}>
-                      <SelectItem value="all" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-cyan-200">Any status</SelectItem>
-                      <SelectItem value="pending" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-red-200">Pending</SelectItem>
-                      <SelectItem value="in_progress" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-amber-200">In Progress</SelectItem>
-                      <SelectItem value="completed" style={{ color: 'black' }} className="hover:bg-gray-700 focus:bg-gray-700 data-[highlighted]:bg-green-200">Completed</SelectItem>
+                    <SelectContent style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))', color: 'white' }}>
+                      <SelectItem value="all" style={{ color: 'black' }} className="data-[highlighted]:bg-cyan-200">Any status</SelectItem>
+                      <SelectItem value="pending" style={{ color: 'black' }} className="data-[highlighted]:bg-red-200">Pending</SelectItem>
+                      <SelectItem value="in_progress" style={{ color: 'black' }} className="data-[highlighted]:bg-amber-200">In Progress</SelectItem>
+                      <SelectItem value="completed" style={{ color: 'black' }} className="data-[highlighted]:bg-green-200">Completed</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1055,9 +1101,10 @@ export function ProjectDetails({ projectId, onBack }) {
                     type="checkbox"
                     checked={taskFilters.showBlockedOnly}
                     onChange={(e) => setTaskFilters(prev => ({ ...prev, showBlockedOnly: e.target.checked }))}
-                    className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-red-500 focus:ring-red-500 focus:ring-offset-0"
+                    className="w-4 h-4 rounded text-red-500 focus:ring-red-500 focus:ring-offset-0"
+                    style={{ borderColor: 'rgb(var(--border))', backgroundColor: 'rgb(var(--muted))' }}
                   />
-                  <span className="text-sm text-gray-300">Show blocked tasks only</span>
+                  <span className="text-sm" style={{ color: 'rgb(var(--muted-foreground))' }}>Show blocked tasks only</span>
                 </label>
               </div>
               <div className="flex justify-end">
@@ -1065,7 +1112,9 @@ export function ProjectDetails({ projectId, onBack }) {
                   onClick={resetFilters}
                   variant="outline"
                   size="sm"
-                  className="border-gray-600 text-gray-300 hover:text-white"
+                  style={{ borderColor: 'rgb(var(--border))', color: 'rgb(var(--muted-foreground))' }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = 'rgb(var(--muted-foreground))'}
                 >
                   Clear Filters
                 </Button>
@@ -1094,24 +1143,24 @@ export function ProjectDetails({ projectId, onBack }) {
               blocked: 'Blocked'
             }
             const statusColors = {
-              pending: 'bg-yellow-600',
-              in_progress: 'bg-blue-600',
-              completed: 'bg-green-600',
-              blocked: 'bg-red-600'
+              pending: 'bg-amber-400 dark:bg-amber-600',
+              in_progress: 'bg-blue-400 dark:bg-blue-600',
+              completed: 'bg-green-400 dark:bg-green-600',
+              blocked: 'bg-red-400 dark:bg-red-600'
             }
 
             return (
               <div key={status} className="mb-6">
                 <div className="flex items-center gap-2 mb-3">
                   <div className={`w-3 h-3 rounded-full ${statusColors[status]}`}></div>
-                  <h3 className="text-white font-medium">{statusLabels[status]}</h3>
-                  <span className="text-sm text-gray-400">({statusTasks.length})</span>
+                  <h3 className="font-medium" style={{ color: 'rgb(var(--foreground))' }}>{statusLabels[status]}</h3>
+                  <span className="text-sm" style={{ color: 'rgb(var(--muted-foreground))' }}>({statusTasks.length})</span>
                 </div>
 
                 <div className="space-y-2">
                   {statusTasks.length === 0 ? (
-                    <div className="p-4 bg-[#1f1f23] rounded-lg">
-                      <p className="text-gray-400 text-sm">No {statusLabels[status].toLowerCase()} tasks</p>
+                    <div className="p-4 rounded-lg" style={{ backgroundColor: 'rgb(var(--muted))' }}>
+                      <p className="text-sm" style={{ color: 'rgb(var(--muted-foreground))' }}>No {statusLabels[status].toLowerCase()} tasks</p>
                     </div>
                   ) : (
                     statusTasks.map((task) => {
@@ -1123,14 +1172,21 @@ export function ProjectDetails({ projectId, onBack }) {
                       const priorityMeta = getPriorityMeta(task.priority);
 
                       return (
-                        <div key={task.id} className="bg-[#1f1f23] rounded-lg overflow-hidden">
+                        <div key={task.id} className="rounded-lg overflow-hidden" style={{ backgroundColor: 'rgb(var(--muted))' }}>
                           <div
-                            className="p-4 cursor-pointer hover:bg-[#252529] transition-colors"
+                            className="p-4 cursor-pointer transition-colors"
                             onClick={() => toggleTaskExpansion(task.id)}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--card))'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
                           >
                             <div className="flex items-start justify-between">
                               <div className="flex items-start gap-3 flex-1">
-                                <button className="mt-1 text-gray-400 hover:text-white">
+                                <button
+                                  className="mt-1"
+                                  style={{ color: 'rgb(var(--muted-foreground))' }}
+                                  onMouseEnter={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
+                                  onMouseLeave={(e) => e.currentTarget.style.color = 'rgb(var(--muted-foreground))'}
+                                >
                                   {isExpanded ? (
                                     <ChevronDown className="w-4 h-4" />
                                   ) : (
@@ -1138,9 +1194,9 @@ export function ProjectDetails({ projectId, onBack }) {
                                   )}
                                 </button>
                                 <div className="flex-1">
-                                  <h4 className="text-white font-medium mb-1">{task.title}</h4>
+                                  <h4 className="font-medium mb-1" style={{ color: 'rgb(var(--foreground))' }}>{task.title}</h4>
                                   <div className="flex items-center gap-4 text-xs">
-                                    <span className="text-gray-400">Assigned to:
+                                    <span style={{ color: 'rgb(var(--muted-foreground))' }}>Assigned to:
                                       <span className="text-blue-400 ml-1">{assigneeNames}</span>
                                     </span>
                                     {priorityMeta.label && (
@@ -1149,12 +1205,12 @@ export function ProjectDetails({ projectId, onBack }) {
                                       </span>
                                     )}
                                     {task.blocked && (
-                                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-900 text-red-200 border border-red-600">
+                                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border border-red-300 dark:border-red-600">
                                         🚫 BLOCKED
                                       </span>
                                     )}
                                     {task.deadline && (
-                                      <span className="text-gray-400">Due:
+                                      <span style={{ color: 'rgb(var(--muted-foreground))' }}>Due:
                                         <span className="text-purple-400 ml-1">
                                           {new Date(task.deadline).toLocaleDateString()}
                                         </span>
@@ -1168,23 +1224,24 @@ export function ProjectDetails({ projectId, onBack }) {
 
                           {/* Expanded task details */}
                           {isExpanded && (
-                            <div className="border-t border-gray-700 p-4 bg-[#1a1a1d]">
+                            <div className="border-t p-4" style={{ borderColor: 'rgb(var(--border))', backgroundColor: 'rgb(var(--background))' }}>
                               <div className="space-y-3">
                                 <div>
-                                  <label className="text-xs text-gray-400 block mb-1">Description</label>
-                                  <p className="text-gray-300 text-sm">
+                                  <label className="text-xs block mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Description</label>
+                                  <p className="text-sm" style={{ color: 'rgb(var(--muted-foreground))' }}>
                                     {task.description || 'No description provided'}
                                   </p>
                                 </div>
 
                                 {task.tags && task.tags.length > 0 && (
                                   <div>
-                                    <label className="text-xs text-gray-400 block mb-1">Tags</label>
+                                    <label className="text-xs block mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Tags</label>
                                     <div className="flex flex-wrap gap-1">
                                       {task.tags.map((tag, index) => (
                                         <span
                                           key={index}
-                                          className="bg-gray-700 text-gray-200 px-2 py-1 rounded-md text-xs"
+                                          className="px-2 py-1 rounded-md text-xs"
+                                          style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))' }}
                                         >
                                           {tag}
                                         </span>
@@ -1306,35 +1363,43 @@ export function ProjectDetails({ projectId, onBack }) {
           />
 
           {/* Modal */}
-          <div className="relative bg-[#2a2a2e] border border-gray-600 rounded-lg p-6 max-w-md mx-4 shadow-2xl">
+          <div className="relative border rounded-lg p-6 max-w-md mx-4 shadow-2xl" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
             <div className="flex items-start gap-4">
               <div className="flex-shrink-0 w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center">
                 <Archive className="w-6 h-6 text-orange-600 dark:text-orange-400" />
               </div>
 
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-white mb-2">
+                <h3 className="text-lg font-semibold mb-2" style={{ color: 'rgb(var(--foreground))' }}>
                   Archive Project
                 </h3>
-                <p className="text-gray-300 text-sm mb-6">
+                <p className="text-sm mb-6" style={{ color: 'rgb(var(--muted-foreground))' }}>
                   Are you sure you want to archive this project? This action will:
                 </p>
-                <ul className="text-gray-400 text-sm mb-6 space-y-1 ml-4">
+                <ul className="text-sm mb-6 space-y-1 ml-4" style={{ color: 'rgb(var(--muted-foreground))' }}>
                   <li>• Set the project status to &quot;archived&quot;</li>
                   <li>• Archive all tasks within the project</li>
                   <li>• Make the project read-only</li>
                 </ul>
-                <p className="text-gray-400 text-sm mb-6">
+                <p className="text-sm mb-6" style={{ color: 'rgb(var(--muted-foreground))' }}>
                   This action cannot be undone from the interface.
                 </p>
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-600">
+            <div className="flex justify-end gap-3 pt-4 border-t" style={{ borderColor: 'rgb(var(--border))' }}>
               <Button
                 onClick={() => setShowArchiveConfirm(false)}
                 variant="outline"
-                className="border-gray-500 text-gray-300 hover:text-white hover:border-gray-400"
+                style={{ borderColor: 'rgb(var(--border))', color: 'rgb(var(--muted-foreground))' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = 'rgb(var(--foreground))';
+                  e.currentTarget.style.borderColor = 'rgb(var(--muted-foreground))';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+                  e.currentTarget.style.borderColor = 'rgb(var(--border))';
+                }}
               >
                 Cancel
               </Button>
@@ -1396,7 +1461,7 @@ function EditProjectDialog({ project, open, onClose, onSave }) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="bg-[#1f1f23] border-gray-700 text-white max-w-md">
+      <DialogContent className="max-w-md" style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))', color: 'rgb(var(--foreground))' }}>
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold">Edit Project</DialogTitle>
         </DialogHeader>
@@ -1412,7 +1477,7 @@ function EditProjectDialog({ project, open, onClose, onSave }) {
               value={formData.name}
               onChange={handleChange}
               placeholder="Enter project name..."
-              className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+              style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))', color: 'rgb(var(--foreground))' }}
               required
             />
           </div>
@@ -1427,7 +1492,8 @@ function EditProjectDialog({ project, open, onClose, onSave }) {
               value={formData.description}
               onChange={handleChange}
               placeholder="Enter project description..."
-              className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 resize-none"
+              className="resize-none"
+              style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))', color: 'rgb(var(--foreground))' }}
               rows={4}
             />
           </div>
@@ -1440,7 +1506,7 @@ function EditProjectDialog({ project, open, onClose, onSave }) {
               value={formData.status}
               onValueChange={(value) => setFormData(prev => ({ ...prev, status: value }))}
             >
-              <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+              <SelectTrigger style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))', color: 'rgb(var(--foreground))' }}>
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
               <SelectContent className="!bg-gray-800 !border-gray-600 !text-white">
@@ -1497,16 +1563,16 @@ function EditProjectDialog({ project, open, onClose, onSave }) {
 }
 
 const priorityChipClasses = {
-  1: "bg-slate-200 text-slate-800",
-  2: "bg-slate-200 text-slate-800",
-  3: "bg-teal-200 text-teal-900",
-  4: "bg-teal-200 text-teal-900",
-  5: "bg-amber-200 text-amber-900",
-  6: "bg-amber-300 text-amber-950",
-  7: "bg-orange-300 text-orange-950",
-  8: "bg-red-300 text-red-950",
-  9: "bg-fuchsia-400 text-fuchsia-950",
-  10: "bg-purple-500 text-white",
+  1: "bg-slate-100 dark:bg-slate-600 text-slate-800 dark:text-white border border-slate-300 dark:border-slate-600 font-medium",
+  2: "bg-slate-100 dark:bg-slate-600 text-slate-800 dark:text-white border border-slate-300 dark:border-slate-600 font-medium",
+  3: "bg-teal-100 dark:bg-teal-600 text-teal-800 dark:text-white border border-teal-300 dark:border-teal-600 font-medium",
+  4: "bg-teal-100 dark:bg-teal-600 text-teal-800 dark:text-white border border-teal-300 dark:border-teal-600 font-medium",
+  5: "bg-amber-100 dark:bg-amber-600 text-amber-800 dark:text-white border border-amber-300 dark:border-amber-600 font-medium",
+  6: "bg-amber-100 dark:bg-amber-700 text-amber-900 dark:text-white border border-amber-300 dark:border-amber-700 font-medium",
+  7: "bg-orange-100 dark:bg-orange-600 text-orange-900 dark:text-white border border-orange-300 dark:border-orange-600 font-medium",
+  8: "bg-red-100 dark:bg-red-600 text-red-900 dark:text-white border border-red-300 dark:border-red-600 font-medium",
+  9: "bg-fuchsia-100 dark:bg-fuchsia-600 text-fuchsia-900 dark:text-white border border-fuchsia-300 dark:border-fuchsia-600 font-medium",
+  10: "bg-purple-100 dark:bg-purple-600 text-purple-900 dark:text-white border border-purple-300 dark:border-purple-600 font-medium",
 }
 
 function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
@@ -1652,33 +1718,36 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
     assigneeQuery.trim().length > 0 && availableAssigneeResults.length === 0
 
   return (
-    <div className="rounded-xl border border-gray-700 bg-[#1f1f23] p-4 shadow-sm">
+    <div className="rounded-xl border p-4 shadow-sm" style={{ borderColor: 'rgb(var(--border))', backgroundColor: 'rgb(var(--muted))' }}>
       {/* Title */}
-      <label className="block text-xs text-gray-400 mb-1">Title</label>
+      <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Title</label>
       <Input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Task title"
-        className="mb-3 bg-transparent text-gray-100 border-gray-700 placeholder:text-gray-500"
+        className="mb-3 bg-transparent"
+        style={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}
       />
 
       {/* Description */}
-      <label className="block text-xs text-gray-400 mb-1">Description</label>
+      <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Description</label>
       <Textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Add a short description…"
-        className="mb-3 bg-transparent text-gray-100 border-gray-700 placeholder:text-gray-500"
+        className="mb-3 bg-transparent"
+        style={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}
         rows={3}
       />
 
       {/* Tags */}
-      <label className="block text-xs text-gray-400 mb-1">Tags</label>
+      <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Tags</label>
       <div className="flex flex-wrap gap-2 mb-2">
         {tags.map((tag, index) => (
           <span
             key={`${tag}-${index}`}
-            className="inline-flex items-center rounded-md bg-gray-700 text-gray-100 px-2 py-1 text-xs"
+            className="inline-flex items-center rounded-md px-2 py-1 text-xs"
+            style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))' }}
           >
             {tag}
             <button
@@ -1688,7 +1757,10 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
                 event.stopPropagation()
                 removeTag(index)
               }}
-              className="ml-1 text-gray-300 hover:text-white"
+              className="ml-1"
+              style={{ color: 'rgb(var(--muted-foreground))' }}
+              onMouseEnter={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'rgb(var(--muted-foreground))'}
               aria-label={`Remove tag ${tag}`}
             >
               ×
@@ -1732,22 +1804,25 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
               disabled={!canManageAssignees || assignees.length >= MAX_ASSIGNEES}
             />
             {canManageAssignees && assigneeQuery && (
-              <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
+              <div className="absolute z-50 border rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
                 {availableAssigneeResults.map((member) => (
                   <button
                     key={member.id}
                     type="button"
-                    className="w-full px-3 py-2 text-left hover:bg-gray-700 text-gray-100"
+                    className="w-full px-3 py-2 text-left"
+                    style={{ color: 'rgb(var(--foreground))' }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
                     onClick={() => addAssignee(member)}
                   >
                     <span className="font-medium">{member.name}</span>
                     {member.email && (
-                      <span className="ml-2 text-xs text-gray-400">{member.email}</span>
+                      <span className="ml-2 text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>{member.email}</span>
                     )}
                   </button>
                 ))}
                 {showNoResults && (
-                  <div className="px-3 py-2 text-sm text-gray-400">No matching members</div>
+                  <div className="px-3 py-2 text-sm" style={{ color: 'rgb(var(--muted-foreground))' }}>No matching members</div>
                 )}
               </div>
             )}
@@ -1757,13 +1832,17 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
             {assignees.map((assignee) => (
               <Badge
                 key={assignee.id}
-                className="px-2 py-0.5 text-xs font-medium bg-gray-700 text-gray-200 flex items-center"
+                className="px-2 py-0.5 text-xs font-medium flex items-center"
+                style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--foreground))' }}
                 title={assignee.name}
               >
                 {assignee.name}
                 <button
                   type="button"
-                  className="ml-1 text-gray-300 hover:text-white disabled:opacity-60"
+                  className="ml-1 disabled:opacity-60"
+                  style={{ color: 'rgb(var(--muted-foreground))' }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = 'rgb(var(--muted-foreground))'}
                   onClick={() => removeAssignee(assignee.id)}
                   aria-label={`Remove ${assignee.name}`}
                   disabled={!canRemoveAssignee(assignee.id)}
@@ -2327,10 +2406,16 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
       {/* Panel */}
-      <div className="absolute right-0 top-0 h-full w-[420px] bg-[#1f2023] border-l border-gray-700 p-6 overflow-y-auto">
+      <div className="absolute right-0 top-0 h-full w-[420px] border-l p-6 overflow-y-auto" style={{ backgroundColor: 'rgb(var(--background))', borderColor: 'rgb(var(--border))' }}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-white text-lg font-semibold">Edit task</h3>
-          <button onClick={onClose} className="text-gray-300 hover:text-white text-xl leading-none">×</button>
+          <h3 className="text-lg font-semibold" style={{ color: 'rgb(var(--foreground))' }}>Edit task</h3>
+          <button
+            onClick={onClose}
+            className="text-xl leading-none"
+            style={{ color: 'rgb(var(--muted-foreground))' }}
+            onMouseEnter={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
+            onMouseLeave={(e) => e.currentTarget.style.color = 'rgb(var(--muted-foreground))'}
+          >×</button>
         </div>
 
         {!canEditTask && (
@@ -2342,11 +2427,12 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
         <div className="space-y-4">
           {/* Title */}
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Title</label>
+            <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Title</label>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="bg-transparent text-gray-100 border-gray-700"
+              className="bg-transparent"
+              style={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}
               disabled={!canEditTask}
             />
           </div>
@@ -2416,7 +2502,7 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
               )}
             </>
           ) : (
-            <div className="rounded-md border border-gray-700 bg-[#202126] p-3 text-xs text-gray-400">
+            <div className="rounded-md border p-3 text-xs" style={{ borderColor: 'rgb(var(--border))', backgroundColor: 'rgb(var(--card))', color: 'rgb(var(--muted-foreground))' }}>
               Time tracking becomes available after this task leaves the pending state.
             </div>
           )}
@@ -2486,22 +2572,25 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
                   disabled={!canAddAssignees || assignees.length >= MAX_ASSIGNEES}
                 />
                 {canAddAssignees && assigneeQuery && assignees.length < MAX_ASSIGNEES && (
-                  <div className="absolute z-50 bg-[#23232a] border border-gray-700 rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
+                  <div className="absolute z-50 border rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
                       {availableAssigneeResults.map((member) => (
                         <button
                           key={member.id}
                           type="button"
-                          className="w-full px-3 py-2 text-left hover:bg-gray-700 text-gray-100"
+                          className="w-full px-3 py-2 text-left"
+                          style={{ color: 'rgb(var(--foreground))' }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
                           onClick={() => addAssignee(member)}
                         >
                           <span className="font-medium">{member.name}</span>
                           {member.email && (
-                            <span className="ml-2 text-xs text-gray-400">{member.email}</span>
+                            <span className="ml-2 text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>{member.email}</span>
                           )}
                         </button>
                       ))}
                       {showNoAssigneeResults && (
-                        <div className="px-3 py-2 text-sm text-gray-400">No matching members</div>
+                        <div className="px-3 py-2 text-sm" style={{ color: 'rgb(var(--muted-foreground))' }}>No matching members</div>
                       )}
                     </div>
                   )}
@@ -2983,11 +3072,11 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
 
   return (
     <>
-    <div className="bg-[#2a2a2e] rounded-lg p-4 sm:p-6 overflow-x-hidden">
+    <div className="rounded-lg p-4 sm:p-6 overflow-x-hidden" style={{ backgroundColor: 'rgb(var(--card))' }}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-          <h2 className="text-base sm:text-lg font-semibold text-white">Project Timeline</h2>
-          <div className="text-xs text-gray-400 bg-[#1f1f23] px-2 sm:px-3 py-1.5 rounded border border-gray-700 self-start">
+          <h2 className="text-base sm:text-lg font-semibold" style={{ color: 'rgb(var(--foreground))' }}>Project Timeline</h2>
+          <div className="text-xs px-2 sm:px-3 py-1.5 rounded border self-start" style={{ color: 'rgb(var(--muted-foreground))', backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))' }}>
             <span className="hidden sm:inline">{minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} → {maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
             <span className="sm:hidden">{minDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} → {maxDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
           </div>
@@ -2996,35 +3085,63 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
               type="checkbox"
               checked={showBlockedOnly}
               onChange={(e) => setShowBlockedOnly(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-red-500 focus:ring-red-500 focus:ring-offset-0"
+              className="w-4 h-4 rounded text-red-500 focus:ring-red-500 focus:ring-offset-0"
+              style={{ borderColor: 'rgb(var(--border))', backgroundColor: 'rgb(var(--muted))' }}
             />
-            <span className="text-xs sm:text-sm text-gray-300 whitespace-nowrap">Show blocked only</span>
+            <span className="text-xs sm:text-sm whitespace-nowrap" style={{ color: 'rgb(var(--muted-foreground))' }}>Show blocked only</span>
           </label>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Zoom controls */}
-          <div className="flex items-center gap-1 sm:gap-2 bg-[#1f1f23] px-2 py-1.5 rounded border border-gray-700">
+          <div className="flex items-center gap-1 sm:gap-2 px-2 py-1.5 rounded border" style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))' }}>
             <button
               onClick={() => zoomWithAnchor(0.9)}
-              className="text-gray-400 hover:text-white active:text-white px-2 py-1 rounded hover:bg-gray-700 active:bg-gray-600 transition-colors touch-manipulation min-w-[32px] min-h-[32px] flex items-center justify-center"
+              className="px-2 py-1 rounded transition-colors touch-manipulation min-w-[32px] min-h-[32px] flex items-center justify-center"
+              style={{ color: 'rgb(var(--muted-foreground))' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = 'rgb(var(--foreground))';
+                e.currentTarget.style.backgroundColor = 'rgb(var(--muted))';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+                e.currentTarget.style.backgroundColor = '';
+              }}
               title="Zoom out (Ctrl + -)"
             >
               −
             </button>
-            <div className="text-xs text-gray-400 min-w-[50px] sm:min-w-[70px] text-center">
+            <div className="text-xs min-w-[50px] sm:min-w-[70px] text-center" style={{ color: 'rgb(var(--muted-foreground))' }}>
               <span className="hidden sm:inline">{Math.round(pixelsPerDay)}px/day</span>
               <span className="sm:hidden">{Math.round(pixelsPerDay)}px</span>
             </div>
             <button
               onClick={() => zoomWithAnchor(1.1)}
-              className="text-gray-400 hover:text-white active:text-white px-2 py-1 rounded hover:bg-gray-700 active:bg-gray-600 transition-colors touch-manipulation min-w-[32px] min-h-[32px] flex items-center justify-center"
+              className="px-2 py-1 rounded transition-colors touch-manipulation min-w-[32px] min-h-[32px] flex items-center justify-center"
+              style={{ color: 'rgb(var(--muted-foreground))' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = 'rgb(var(--foreground))';
+                e.currentTarget.style.backgroundColor = 'rgb(var(--muted))';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+                e.currentTarget.style.backgroundColor = '';
+              }}
               title="Zoom in (Ctrl + +)"
             >
               +
             </button>
             <button
               onClick={() => zoomWithAnchor(20 / pixelsPerDay)}
-              className="text-xs text-gray-400 hover:text-white active:text-white px-2 py-1 rounded hover:bg-gray-700 active:bg-gray-600 transition-colors touch-manipulation min-h-[32px]"
+              className="text-xs px-2 py-1 rounded transition-colors touch-manipulation min-h-[32px]"
+              style={{ color: 'rgb(var(--muted-foreground))' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = 'rgb(var(--foreground))';
+                e.currentTarget.style.backgroundColor = 'rgb(var(--muted))';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+                e.currentTarget.style.backgroundColor = '';
+              }}
               title="Reset zoom (Ctrl + 0)"
             >
               <span className="hidden sm:inline">Reset</span>
@@ -3034,7 +3151,14 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
           {/* Help button */}
           <button
             onClick={() => setShowKeyboardShortcuts(prev => !prev)}
-            className="text-xs text-gray-400 hover:text-white active:text-white bg-[#1f1f23] px-3 py-1.5 rounded border border-gray-700 transition-colors touch-manipulation min-h-[32px]"
+            className="text-xs px-3 py-1.5 rounded border transition-colors touch-manipulation min-h-[32px]"
+            style={{ color: 'rgb(var(--muted-foreground))', backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'rgb(var(--foreground))';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+            }}
             title="Keyboard shortcuts (?)"
           >
             ?
@@ -3046,7 +3170,7 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
       {showKeyboardShortcuts && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowKeyboardShortcuts(false)} />
-          <div className="relative bg-[#2a2a2e] border border-gray-600 rounded-lg p-4 sm:p-6 max-w-md w-full mx-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="relative border rounded-lg p-4 sm:p-6 max-w-md w-full mx-4 shadow-2xl max-h-[90vh] overflow-y-auto" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }}>
             <h3 className="text-base sm:text-lg font-semibold text-white mb-3 sm:mb-4">Keyboard Shortcuts</h3>
             <div className="space-y-2 text-xs sm:text-sm">
               <div className="flex justify-between items-center">
@@ -3085,43 +3209,43 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
       )}
 
       {readOnlyMode && (
-        <div className="mb-4 rounded-lg border border-dashed border-gray-600 bg-[#1f1f23] p-3 text-sm text-gray-300">
+        <div className="mb-4 rounded-lg border border-dashed p-3 text-sm" style={{ borderColor: 'rgb(var(--border))', backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--muted-foreground))' }}>
           Timeline interactions are disabled because this project is archived.
         </div>
       )}
 
       {/* Legend - Compact Grid Layout */}
-      <div className="mb-4 p-3 bg-[#1f1f23] rounded-lg border border-gray-700">
+      <div className="mb-4 p-3 rounded-lg border" style={{ backgroundColor: 'rgb(var(--muted))', borderColor: 'rgb(var(--border))' }}>
         <div className="flex items-start gap-3">
-          <span className="text-gray-400 font-semibold text-xs whitespace-nowrap pt-0.5">Legend:</span>
+          <span className="font-semibold text-xs whitespace-nowrap pt-0.5" style={{ color: 'rgb(var(--muted-foreground))' }}>Legend:</span>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-x-4 gap-y-2 text-xs flex-1">
             <div className="flex items-center gap-1.5">
               <div className="w-4 h-2.5 bg-gray-500 rounded flex-shrink-0"></div>
-              <span className="text-gray-300 truncate">Pending</span>
+              <span className="truncate" style={{ color: 'rgb(var(--muted-foreground))' }}>Pending</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-4 h-2.5 bg-blue-500 rounded flex-shrink-0"></div>
-              <span className="text-gray-300 truncate">In Progress</span>
+              <span className="truncate" style={{ color: 'rgb(var(--muted-foreground))' }}>In Progress</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-4 h-2.5 bg-green-500 rounded flex-shrink-0"></div>
-              <span className="text-gray-300 truncate">Completed</span>
+              <span className="truncate" style={{ color: 'rgb(var(--muted-foreground))' }}>Completed</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-4 h-2.5 bg-red-500 rounded flex-shrink-0"></div>
-              <span className="text-gray-300 truncate">Overdue</span>
+              <span className="truncate" style={{ color: 'rgb(var(--muted-foreground))' }}>Overdue</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-4 h-2.5 bg-gradient-to-r from-blue-500 to-red-400 rounded flex-shrink-0"></div>
-              <span className="text-gray-300 truncate">Late</span>
+              <span className="truncate" style={{ color: 'rgb(var(--muted-foreground))' }}>Late</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-4 h-2.5 bg-gradient-to-r from-gray-500 to-gray-500/20 rounded flex-shrink-0"></div>
-              <span className="text-gray-300 truncate">No Deadline</span>
+              <span className="truncate" style={{ color: 'rgb(var(--muted-foreground))' }}>No Deadline</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-4 h-2.5 bg-red-900 border border-red-600 rounded flex-shrink-0"></div>
-              <span className="text-gray-300 truncate">🚫 Blocked</span>
+              <span className="truncate" style={{ color: 'rgb(var(--muted-foreground))' }}>🚫 Blocked</span>
             </div>
           </div>
         </div>
@@ -3129,38 +3253,53 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
 
       {filteredTasks.length === 0 ? (
         <div className="text-center py-8">
-          <p className="text-gray-400">No tasks to display in timeline.</p>
+          <p style={{ color: 'rgb(var(--muted-foreground))' }}>No tasks to display in timeline.</p>
         </div>
       ) : (
         <div className="relative">
           {/* Header row - sticky */}
-          <div className="flex border-b border-gray-600 sticky top-0 bg-[#2a2a2e] z-20">
+          <div className="flex border-b sticky top-0 z-20" style={{ borderColor: 'rgb(var(--border))', backgroundColor: 'rgb(var(--card))' }}>
             {/* Task header - fixed with resize handle */}
             {!isTaskColumnCollapsed ? (
               <div className="flex-shrink-0 h-16 sm:h-20 flex items-center pr-2 relative" style={{ width: `${taskColumnWidth}px` }}>
                 <button
                   onClick={() => setIsTaskColumnCollapsed(true)}
-                  className="text-gray-400 hover:text-white active:text-white transition-colors touch-manipulation p-1 mr-1"
+                  className="transition-colors touch-manipulation p-1 mr-1"
+                  style={{ color: 'rgb(var(--muted-foreground))' }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = 'rgb(var(--foreground))'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = 'rgb(var(--muted-foreground))'}
                   title="Collapse tasks column"
                   aria-label="Collapse tasks column"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
-                <h3 className="text-xs sm:text-sm font-semibold text-gray-300 truncate flex-1">Tasks</h3>
+                <h3 className="text-xs sm:text-sm font-semibold truncate flex-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Tasks</h3>
                 {/* Resize handle - hidden on mobile */}
                 <div
-                  className="hidden sm:block absolute right-0 top-0 bottom-0 w-1 hover:w-2 bg-gray-600 hover:bg-blue-500 cursor-col-resize transition-all group"
+                  className="hidden sm:block absolute right-0 top-0 bottom-0 w-1 hover:w-2 cursor-col-resize transition-all group"
+                  style={{ backgroundColor: 'rgb(var(--border))' }}
                   onMouseDown={handleResizeStart}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--border))'}
                   title="Drag to resize"
                 >
                   <div className="absolute inset-y-0 -left-1 -right-1" />
                 </div>
               </div>
             ) : (
-              <div className="flex-shrink-0 h-16 sm:h-20 flex items-center border-r border-gray-600">
+              <div className="flex-shrink-0 h-16 sm:h-20 flex items-center border-r" style={{ borderColor: 'rgb(var(--border))' }}>
                 <button
                   onClick={() => setIsTaskColumnCollapsed(false)}
-                  className="text-gray-400 hover:text-white active:text-white bg-[#1f1f23] hover:bg-gray-700 active:bg-gray-600 transition-colors touch-manipulation p-2 h-full flex items-center"
+                  className="transition-colors touch-manipulation p-2 h-full flex items-center"
+                  style={{ color: 'rgb(var(--muted-foreground))', backgroundColor: 'rgb(var(--muted))' }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = 'rgb(var(--foreground))';
+                    e.currentTarget.style.backgroundColor = 'rgb(var(--muted))';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+                    e.currentTarget.style.backgroundColor = 'rgb(var(--muted))';
+                  }}
                   title="Expand tasks column"
                   aria-label="Expand tasks column"
                 >
@@ -3181,8 +3320,8 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                   return (
                     <div
                       key={index}
-                      className="absolute text-xs sm:text-sm font-medium text-gray-300 top-2 sm:top-4"
-                      style={{ left: `${position}px`, transform: 'translateX(-50%)' }}
+                      className="absolute text-xs sm:text-sm font-medium top-2 sm:top-4"
+                      style={{ left: `${position}px`, transform: 'translateX(-50%)', color: 'rgb(var(--muted-foreground))' }}
                     >
                       <div className="whitespace-nowrap">
                         {date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
@@ -3224,19 +3363,24 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                   return (
                     <div
                       key={`label-${task.id}`}
-                      className={`pr-1 sm:pr-2 cursor-pointer hover:bg-[#1f1f23] active:bg-[#1f1f23] rounded-l transition-all duration-200 touch-manipulation ${index % 2 === 0 ? 'bg-[#25252a]/30' : ''}`}
+                      className="pr-1 sm:pr-2 cursor-pointer rounded-l transition-all duration-200 touch-manipulation"
                       onClick={() => toggleTaskExpansion(task.id)}
-                      style={{ height: `${totalHeight}px` }}
+                      style={{
+                        height: `${totalHeight}px`,
+                        backgroundColor: index % 2 === 0 ? 'rgba(var(--muted-rgb), 0.3)' : 'transparent'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = index % 2 === 0 ? 'rgba(var(--muted-rgb), 0.3)' : 'transparent'}
                     >
                       <div className="h-12 sm:h-14 flex items-center gap-1 sm:gap-2">
-                        <ChevronRight className={`w-3 h-3 sm:w-4 sm:h-4 text-gray-400 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+                        <ChevronRight className={`w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} style={{ color: 'rgb(var(--muted-foreground))' }} />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1 sm:gap-2">
-                            <div className="text-xs sm:text-sm font-medium text-white truncate" title={task.title}>
+                            <div className="text-xs sm:text-sm font-medium truncate" style={{ color: 'rgb(var(--foreground))' }} title={task.title}>
                               {task.title}
                             </div>
                             {task.subtasks && task.subtasks.length > 0 && (
-                              <Badge variant="secondary" className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0 h-4 sm:h-5 bg-blue-900/50 text-blue-300 border-blue-700 flex-shrink-0">
+                              <Badge variant="secondary" className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0 h-4 sm:h-5 bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 border border-blue-300 dark:border-blue-700 flex-shrink-0 font-medium">
                                 {task.subtasks.length}
                               </Badge>
                             )}
@@ -3279,10 +3423,10 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                                 {task.subtasks.map((subtask) => (
                                   <div key={subtask.id} className="flex items-center gap-2" style={{ height: `${TIMELINE_HEIGHTS.SUBTASK_ITEM}px` }}>
                                     <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                      subtask.status === 'completed' ? 'bg-green-500' :
-                                      subtask.status === 'in_progress' ? 'bg-blue-500' :
-                                      subtask.status === 'blocked' ? 'bg-red-500' :
-                                      'bg-gray-500'
+                                      subtask.status === 'completed' ? 'bg-green-400 dark:bg-green-500' :
+                                      subtask.status === 'in_progress' ? 'bg-blue-400 dark:bg-blue-500' :
+                                      subtask.status === 'blocked' ? 'bg-red-400 dark:bg-red-500' :
+                                      'bg-gray-400 dark:bg-gray-500'
                                     }`}></div>
                                     <span className="truncate text-gray-300" title={subtask.title}>{subtask.title}</span>
                                   </div>
@@ -3349,8 +3493,13 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                   return (
                     <div
                       key={`bar-${task.id}`}
-                      className={`relative group hover:bg-[#1f1f23]/50 active:bg-[#1f1f23]/50 rounded-r transition-all duration-200 ${index % 2 === 0 ? 'bg-[#25252a]/30' : ''}`}
-                      style={{ height: `${totalHeight}px` }}
+                      className="relative group rounded-r transition-all duration-200"
+                      style={{
+                        height: `${totalHeight}px`,
+                        backgroundColor: index % 2 === 0 ? 'rgba(var(--muted-rgb), 0.3)' : 'transparent'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(var(--muted-rgb), 0.5)'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = index % 2 === 0 ? 'rgba(var(--muted-rgb), 0.3)' : 'transparent'}
                     >
                       {/* Main task bar section */}
                       <div className="relative h-12 sm:h-14">
@@ -3415,12 +3564,12 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                           ) : (
                             <div
                               className={`h-full ${showOverdueExtension ? 'rounded-l' : 'rounded'} ${
-                                isBlocked ? 'bg-red-900 border-2 border-red-600' :
-                                isCompleted ? 'bg-green-500' :
-                                task.status === 'in_progress' ? 'bg-blue-500' :
-                                'bg-gray-500'
+                                isBlocked ? 'bg-red-200 dark:bg-red-900 border-2 border-red-400 dark:border-red-600' :
+                                isCompleted ? 'bg-green-400 dark:bg-green-500' :
+                                task.status === 'in_progress' ? 'bg-blue-400 dark:bg-blue-500' :
+                                'bg-gray-400 dark:bg-gray-500'
                               } ${
-                                !deadlineDate && !isCompleted && !isBlocked ? 'bg-gradient-to-r from-gray-500 to-gray-500/20' : ''
+                                !deadlineDate && !isCompleted && !isBlocked ? 'bg-gradient-to-r from-gray-400 dark:from-gray-500 to-gray-400/20 dark:to-gray-500/20' : ''
                               }`}
                             />
                           )}
@@ -3517,12 +3666,12 @@ function ProjectTimeline({ tasks, allUsers, projectMembers, onUpdateTask, onDele
                                   ) : (
                                     <div
                                       className={`h-full ${subtaskShowOverdueExtension ? 'rounded-l' : 'rounded'} ${
-                                        subtaskIsBlocked ? 'bg-red-900 border-2 border-red-600' :
-                                        subtaskIsCompleted ? 'bg-green-500' :
-                                        subtask.status === 'in_progress' ? 'bg-blue-500' :
-                                        'bg-gray-500'
+                                        subtaskIsBlocked ? 'bg-red-200 dark:bg-red-900 border-2 border-red-400 dark:border-red-600' :
+                                        subtaskIsCompleted ? 'bg-green-400 dark:bg-green-500' :
+                                        subtask.status === 'in_progress' ? 'bg-blue-400 dark:bg-blue-500' :
+                                        'bg-gray-400 dark:bg-gray-500'
                                       } ${
-                                        !subtaskDeadlineDate && !subtaskIsCompleted && !subtaskIsBlocked ? 'bg-gradient-to-r from-gray-500 to-gray-500/20' : ''
+                                        !subtaskDeadlineDate && !subtaskIsCompleted && !subtaskIsBlocked ? 'bg-gradient-to-r from-gray-400 dark:from-gray-500 to-gray-400/20 dark:to-gray-500/20' : ''
                                       }`}
                                     />
                                   )}

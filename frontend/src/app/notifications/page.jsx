@@ -51,15 +51,15 @@ const NotificationItem = ({ notification, sender }) => {
 
   const getTypeColor = (type) => {
     switch (type) {
-      case 'invitation': return 'bg-blue-600'
-      case 'comment': return 'bg-green-600'
-      case 'task_assignment': return 'bg-indigo-600'
-      case 'reassignment': return 'bg-purple-600'
-      case 'remove_from_task': return 'bg-red-600'
-      case 'task_deletion': return 'bg-amber-600'
-      case 'test': return 'bg-yellow-600'
-      case 'general': return 'bg-purple-600'
-      default: return 'bg-gray-600'
+      case 'invitation': return 'bg-blue-100 dark:bg-blue-600 text-blue-800 dark:text-white border-blue-300 dark:border-blue-600'
+      case 'comment': return 'bg-green-100 dark:bg-green-600 text-green-800 dark:text-white border-green-300 dark:border-green-600'
+      case 'task_assignment': return 'bg-indigo-100 dark:bg-indigo-600 text-indigo-800 dark:text-white border-indigo-300 dark:border-indigo-600'
+      case 'reassignment': return 'bg-purple-100 dark:bg-purple-600 text-purple-800 dark:text-white border-purple-300 dark:border-purple-600'
+      case 'remove_from_task': return 'bg-red-100 dark:bg-red-600 text-red-800 dark:text-white border-red-300 dark:border-red-600'
+      case 'task_deletion': return 'bg-amber-100 dark:bg-amber-600 text-amber-800 dark:text-white border-amber-300 dark:border-amber-600'
+      case 'test': return 'bg-yellow-100 dark:bg-yellow-600 text-yellow-800 dark:text-white border-yellow-300 dark:border-yellow-600'
+      case 'general': return 'bg-purple-100 dark:bg-purple-600 text-purple-800 dark:text-white border-purple-300 dark:border-purple-600'
+      default: return 'bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-white border-gray-300 dark:border-gray-600'
     }
   }
 
@@ -78,7 +78,7 @@ const NotificationItem = ({ notification, sender }) => {
   }
 
   return (
-    <div className="bg-[#1a1a1d] rounded-lg p-4 sm:p-6 border border-white/10 hover:bg-[#2a2a2d] transition-all duration-200">
+    <div className="rounded-lg p-4 sm:p-6 border transition-all duration-200" style={{ backgroundColor: 'rgb(var(--card))', borderColor: 'rgb(var(--border))' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--card))'}>
       <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
         {/* Sender Avatar */}
         <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
@@ -89,22 +89,22 @@ const NotificationItem = ({ notification, sender }) => {
         <div className="flex-1 min-w-0 w-full">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 sm:mb-3 gap-2">
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              <h3 className="font-semibold text-white text-sm sm:text-base">
+              <h3 className="font-semibold text-sm sm:text-base" style={{ color: 'rgb(var(--foreground))' }}>
                 {senderName}
               </h3>
               {notification.notif_types && (
-                <span className={`px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs text-white rounded-full ${getTypeColor(notification.notif_types)}`}>
+                <span className={`px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs rounded-full border font-medium ${getTypeColor(notification.notif_types)}`}>
                   {getTypeLabel(notification.notif_types)}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-400 flex-shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm flex-shrink-0" style={{ color: 'rgb(var(--muted-foreground))' }}>
               <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
               <span className="whitespace-nowrap">{formatFullDateTime(notification.created_at)}</span>
             </div>
           </div>
-          
-          <p className="text-gray-300 text-sm sm:text-base leading-relaxed break-words">
+
+          <p className="text-sm sm:text-base leading-relaxed break-words" style={{ color: 'rgb(var(--muted-foreground))' }}>
             {notification.message}
           </p>
         </div>
@@ -189,10 +189,10 @@ export default function NotificationsPage() {
   // Show loading state while checking authentication (after all hooks)
   if (authLoading) {
     return (
-      <div className="flex h-screen bg-[#1a1a1d] items-center justify-center">
+      <div className="flex h-screen items-center justify-center" style={{ backgroundColor: 'rgb(var(--background))' }}>
         <div className="text-center">
-          <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading...</p>
+          <div className="animate-spin w-12 h-12 border-4 border-t-transparent rounded-full mx-auto mb-4" style={{ borderColor: 'rgb(var(--foreground))', borderTopColor: 'transparent' }}></div>
+          <p style={{ color: 'rgb(var(--muted-foreground))' }}>Loading...</p>
         </div>
       </div>
     )
@@ -204,20 +204,29 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1a1a1d] text-white overflow-y-auto">
+    <div className="min-h-screen overflow-y-auto" style={{ backgroundColor: 'rgb(var(--background))', color: 'rgb(var(--foreground))' }}>
       <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-8">
         {/* Header */}
         <div className="flex items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
           <Button
             variant="ghost"
             onClick={handleBack}
-            className="p-1.5 sm:p-2 hover:bg-white/10 rounded-full text-gray-300 hover:text-white"
+            className="p-1.5 sm:p-2 rounded-full transition-colors"
+            style={{ color: 'rgb(var(--muted-foreground))' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgb(var(--muted))';
+              e.currentTarget.style.color = 'rgb(var(--foreground))';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+            }}
           >
             <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
           </Button>
           <div className="flex items-center gap-2 sm:gap-3">
-            <Bell className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
-            <h1 className="text-2xl sm:text-3xl font-bold text-white">Notifications</h1>
+            <Bell className="w-6 h-6 sm:w-8 sm:h-8" style={{ color: 'rgb(var(--foreground))' }} />
+            <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: 'rgb(var(--foreground))' }}>Notifications</h1>
           </div>
         </div>
 
@@ -226,15 +235,15 @@ export default function NotificationsPage() {
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <div className="text-center">
-                <div className="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
-                <p className="text-gray-300">Loading notifications...</p>
+                <div className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto mb-4" style={{ borderColor: 'rgb(var(--foreground))', borderTopColor: 'transparent' }}></div>
+                <p style={{ color: 'rgb(var(--muted-foreground))' }}>Loading notifications...</p>
               </div>
             </div>
           ) : error ? (
             <div className="text-center py-16">
               <div className="bg-red-900/30 border border-red-500/30 rounded-lg p-6 max-w-md mx-auto">
                 <p className="text-red-400">{error}</p>
-                <Button 
+                <Button
                   onClick={fetchNotifications}
                   className="mt-4 bg-red-600 hover:bg-red-700 text-white"
                 >
@@ -244,20 +253,29 @@ export default function NotificationsPage() {
             </div>
           ) : notifications.length === 0 ? (
             <div className="text-center py-16">
-              <Bell className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold text-white mb-2">No notifications yet</h2>
-              <p className="text-gray-400">You&apos;ll see notifications here when you receive them.</p>
+              <Bell className="w-16 h-16 mx-auto mb-4" style={{ color: 'rgb(var(--muted-foreground))' }} />
+              <h2 className="text-xl font-semibold mb-2" style={{ color: 'rgb(var(--foreground))' }}>No notifications yet</h2>
+              <p style={{ color: 'rgb(var(--muted-foreground))' }}>You&apos;ll see notifications here when you receive them.</p>
             </div>
           ) : (
             <div className="space-y-3 sm:space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-3">
-                <p className="text-sm sm:text-base text-gray-300">
+                <p className="text-sm sm:text-base" style={{ color: 'rgb(var(--muted-foreground))' }}>
                   {notifications.length} notification{notifications.length !== 1 ? 's' : ''}
                 </p>
                 <Button
                   onClick={fetchNotifications}
                   variant="outline"
-                  className="border-white/20 text-gray-300 hover:bg-white/10 hover:text-white w-full sm:w-auto"
+                  className="w-full sm:w-auto"
+                  style={{ borderColor: 'rgb(var(--border))', color: 'rgb(var(--muted-foreground))' }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgb(var(--muted))';
+                    e.currentTarget.style.color = 'rgb(var(--foreground))';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.color = 'rgb(var(--muted-foreground))';
+                  }}
                 >
                   Refresh
                 </Button>
