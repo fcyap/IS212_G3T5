@@ -107,8 +107,9 @@ export function EditableTaskCard({ onSave, onCancel, taskId, onDeleted, defaultP
         body: JSON.stringify({ archived: true }),
       })
       if (!res.ok) {
-        const { error } = await res.json().catch(() => ({}))
-        throw new Error(error || `PUT /tasks/${taskId} ${res.status}`)
+        const errorData = await res.json().catch(() => ({}))
+        const errorMessage = errorData.message || errorData.error || `Failed to archive task: ${res.status}`
+        throw new Error(errorMessage)
       }
       onDeleted?.(taskId)
       onCancel?.()

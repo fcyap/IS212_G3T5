@@ -258,7 +258,7 @@ app.get('/test-email', async (req, res) => {
 
   // Schedule task deadline checks to run daily at 8am
   // This checks for both impending deadlines (within 24 hours) and overdue tasks
-  cron.schedule('0 8 * * *', async () => {
+  cron.schedule('0 4 * * *', async () => {
     console.log('Running scheduled task deadline checks (impending + overdue) at 8am...');
     try {
       const results = await checkTaskDeadlines();

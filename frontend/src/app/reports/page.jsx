@@ -300,7 +300,7 @@ export default function ReportsPage() {
 
     if (!payload) {
       if (!silent) {
-        alert('No report data available to export');
+        toast.error('No report data available to export');
       }
       return;
     }
@@ -365,9 +365,8 @@ export default function ReportsPage() {
     } catch (err) {
       console.error('Error exporting report:', err);
       if (!silent) {
-        alert('Failed to export report');
+        toast.error('Failed to export report');
       }
-      toast.error('Failed to export report');
     }
   };
 
