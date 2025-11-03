@@ -180,21 +180,29 @@ export function SubtaskDialog({ parentId, parentDeadline, projectId = null, proj
             formData.append('files', file);
           });
 
-          const uploadRes = await fetchWithCsrf(`${API}/tasks/${row.id}/files`, {
+          const uploadRes = await fetchWithCsrf(`${API}/api/tasks/${row.id}/files`, {
             method: 'POST',
             body: formData
           });
 
           if (!uploadRes.ok) {
             console.warn('Failed to upload some attachments');
+            toast.error('Failed to upload some attachments');
           } else {
             const uploadResult = await uploadRes.json();
             if (uploadResult.data?.errors && uploadResult.data.errors.length > 0) {
               console.warn('Some files failed:', uploadResult.data.errors);
+              uploadResult.data.errors.forEach(error => {
+                toast.error(error, { duration: 5000 });
+              });
+            }
+            if (uploadResult.data?.uploaded && uploadResult.data.uploaded.length > 0) {
+              toast.success(`${uploadResult.data.uploaded.length} file(s) uploaded successfully`);
             }
           }
         } catch (uploadError) {
           console.error('Error uploading attachments:', uploadError);
+          toast.error('Error uploading attachments: ' + uploadError.message);
         }
       }
 
