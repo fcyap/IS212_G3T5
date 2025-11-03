@@ -50,8 +50,8 @@ export function DeadlineNotificationToaster() {
     console.log('Checking for notifications for user:', user.email);
 
     try {
-      // Fetch only non-dismissed notifications for toaster display
-      const data = await notificationService.getUserNotifications(10, 0, false)
+      // Fetch more non-dismissed notifications to catch recent ones
+      const data = await notificationService.getUserNotifications(50, 0, false)
       console.log('Raw notifications data:', data.notifications.slice(0, 5)) // Log first 5 notifications
       console.log('Raw notifications data:', data.notifications.slice(0, 5)) // Log first 5 notifications
       const eligibleTypes = new Set([
@@ -59,6 +59,7 @@ export function DeadlineNotificationToaster() {
         'task_assignment',
         'reassignment',
         'remove_from_task',
+        'task_modif',
         'comment',
         'invitation',
         'task_deletion',
@@ -196,6 +197,13 @@ export function DeadlineNotificationToaster() {
       color: () => 'text-red-400',
       gradient: () => 'from-rose-500/20 to-red-500/20',
       border: () => 'border-rose-400/40'
+    },
+    task_modif: {
+      title: '✏️ Task Updated',
+      icon: () => <RefreshCcw className="w-6 h-6" />,
+      color: () => 'text-blue-400',
+      gradient: () => 'from-blue-500/20 to-cyan-500/20',
+      border: () => 'border-blue-400/40'
     },
     task_deletion: {
       title: '🗑️ Task Deleted',

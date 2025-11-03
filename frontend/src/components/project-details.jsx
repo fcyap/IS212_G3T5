@@ -530,6 +530,7 @@ export function ProjectDetails({ projectId, onBack }) {
         return task
       }))
       setEditingTask(null)
+      toast.success("Task updated successfully!")
       return updatedTask
     } catch (error) {
       console.error('Error updating task:', error)

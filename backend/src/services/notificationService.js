@@ -1717,6 +1717,7 @@ class NotificationService {
       for (const recipient of uniqueRecipients) {
         try {
           // Check if we already sent an overdue notification for this task to this user
+          console.log(`[DEBUG] Checking existing notification for task ${task.id} to ${recipient.user.email}`);
           const existingNotification = await this.checkExistingOverdueNotification(
             task.id, 
             recipient.user.email
@@ -1726,6 +1727,8 @@ class NotificationService {
             console.log(`Already sent overdue notification for task ${task.id} to ${recipient.user.email}`);
             continue;
           }
+          
+          console.log(`[DEBUG] No existing notification found, creating new one for task ${task.id}`);
 
           // Create notification message
           const deadline = new Date(task.deadline);
@@ -1758,8 +1761,8 @@ class NotificationService {
             message: message,
             creator_id: null, // System-generated notification
             recipient_emails: recipient.user.email,
-            // task_id: task.id, // Commented out until column exists in DB
-            // project_id: task.project_id || null, // Commented out until column exists in DB
+            task_id: task.id, // Include task_id to track which task this notification is for
+            // project_id: task.project_id || null, // Commented out - column may not exist yet
             created_at: new Date().toISOString()
           };
 
@@ -1801,15 +1804,60 @@ class NotificationService {
         { limit: 100 }
       );
 
+      console.log(`[DEBUG] Retrieved ${notifications?.length || 0} notifications for ${userEmail}`);
+
       if (!notifications || !Array.isArray(notifications)) {
+        console.log(`[DEBUG] No notifications array found`);
         return false;
+      }
+
+      // Filter overdue notifications for this task
+      const overdueNotificationsForTask = notifications.filter(n => 
+        n.notif_types === 'overdue' && n.task_id === taskId
+      );
+      
+      console.log(`[DEBUG] Found ${overdueNotificationsForTask.length} overdue notifications for task ${taskId}`);
+      
+      // Show all overdue notifications to debug
+      const allOverdueNotifs = notifications.filter(n => n.notif_types === 'overdue');
+      console.log(`[DEBUG] Total overdue notifications for user: ${allOverdueNotifs.length}`);
+      if (allOverdueNotifs.length > 0) {
+        console.log(`[DEBUG] Sample overdue notification:`, {
+          id: allOverdueNotifs[0].id,
+          task_id: allOverdueNotifs[0].task_id,
+          task_id_type: typeof allOverdueNotifs[0].task_id,
+          dismissed: allOverdueNotifs[0].dismissed,
+          message_preview: allOverdueNotifs[0].message?.substring(0, 50)
+        });
+      }
+      
+      if (overdueNotificationsForTask.length > 0) {
+        console.log(`[DEBUG] Notification details:`, overdueNotificationsForTask.map(n => ({
+          id: n.id,
+          task_id: n.task_id,
+          dismissed: n.dismissed,
+          created_at: n.created_at
+        })));
       }
 
       // Check if an overdue notification exists for this task
       const existingNotification = notifications.find(notification => {
-        return notification.notif_types === 'overdue' &&
-               notification.task_id === taskId &&
-               notification.recipient_emails.includes(userEmail);
+        const isOverdueType = notification.notif_types === 'overdue';
+        const matchesTask = notification.task_id === taskId;
+        const matchesRecipient = notification.recipient_emails.includes(userEmail);
+        const notDismissed = !notification.dismissed;
+        
+        // Debug logging
+        if (isOverdueType && matchesTask) {
+          console.log(`[DEBUG] Found overdue notification for task ${taskId}:`, {
+            notificationId: notification.id,
+            taskId: notification.task_id,
+            dismissed: !!notification.dismissed,
+            willSkip: notDismissed // true = will skip, false = will send again
+          });
+        }
+        
+        return isOverdueType && matchesTask && matchesRecipient && notDismissed;
       });
 
       return !!existingNotification;
@@ -1850,7 +1898,23 @@ class NotificationService {
         low: '#28a745'
       };
       
-      const priorityColor = priorityColors[task.priority?.toLowerCase()] || '#dc3545';
+      // Handle both numeric (1-10) and string (low/medium/high) priority formats
+      let priorityKey = 'medium'; // default
+      if (typeof task.priority === 'number') {
+        if (task.priority >= 8) priorityKey = 'critical';
+        else if (task.priority >= 6) priorityKey = 'high';
+        else if (task.priority >= 4) priorityKey = 'medium';
+        else priorityKey = 'low';
+      } else if (typeof task.priority === 'string') {
+        priorityKey = task.priority.toLowerCase();
+      }
+      
+      const priorityColor = priorityColors[priorityKey] || '#dc3545';
+      
+      // Display priority appropriately
+      const priorityDisplay = typeof task.priority === 'number' 
+        ? `${task.priority}/10 (${priorityKey.toUpperCase()})`
+        : (task.priority ? task.priority.toUpperCase() : 'MEDIUM');
 
       const htmlContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -1864,7 +1928,7 @@ class NotificationService {
             ${project ? `<p><strong>Project:</strong> ${project.name}</p>` : ''}
             <p><strong>Original Deadline:</strong> ${deadline.toLocaleDateString()} at ${deadline.toLocaleTimeString()}</p>
             <p><strong>Status:</strong> ${task.status || 'In Progress'}</p>
-            ${task.priority ? `<p><strong>Priority:</strong> <span style="color: ${priorityColor}; font-weight: bold;">${task.priority.toUpperCase()}</span></p>` : ''}
+            ${task.priority ? `<p><strong>Priority:</strong> <span style="color: ${priorityColor}; font-weight: bold;">${priorityDisplay}</span></p>` : ''}
             <p><strong>Days Overdue:</strong> <span style="color: #dc3545; font-weight: bold; font-size: 18px;">${daysOverdue} ${daysOverdue === 1 ? 'day' : 'days'}</span></p>
           </div>
 
