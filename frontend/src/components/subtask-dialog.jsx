@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { PriorityDropdown } from './priority-dropdown';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserSearch } from '@/hooks/useUserSearch';
 import toast from 'react-hot-toast';
@@ -26,7 +27,6 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
   const [debounce, setDebounce] = useState(null);
   const [attachments, setAttachments] = useState([]);
 
-  const PRIORITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
   const ALLOWED_FILE_TYPES = [
     'application/pdf',
@@ -46,7 +46,15 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
       ? `Deadline must be on or before ${parentMax}`
       : "";
 
-  const canSave = title.trim().length > 0 && !deadlineError;
+  // Require all fields except tags to be filled
+  const canSave =
+    title.trim().length > 0 &&
+    description.trim().length > 0 &&
+    priority !== "" &&
+    status !== "" &&
+    deadline !== "" &&
+    assignees.length > 0 &&
+    !deadlineError;
 
   function addTagFromInput() {
     const v = tagInput.trim();
@@ -148,6 +156,16 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
         assigned_to: assignedTo,
       };
 
+      // If parentId is null, just return the data without creating
+      if (parentId === null) {
+        onCreated?.({
+          ...payload,
+          assignees: assignees,
+          attachments: attachments
+        });
+        return;
+      }
+
       const res = await fetchWithCsrf(`${API}/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -158,7 +176,7 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
         throw new Error(error || `POST /tasks ${res.status}`);
       }
       const row = await res.json();
-      
+
       // Upload attachments if any
       if (attachments && attachments.length > 0) {
         try {
@@ -166,12 +184,12 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
           attachments.forEach(file => {
             formData.append('files', file);
           });
-          
+
           const uploadRes = await fetchWithCsrf(`${API}/tasks/${row.id}/files`, {
             method: 'POST',
             body: formData
           });
-          
+
           if (!uploadRes.ok) {
             console.warn('Failed to upload some attachments');
           } else {
@@ -184,7 +202,7 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
           console.error('Error uploading attachments:', uploadError);
         }
       }
-      
+
       onCreated?.(row); // push into list in parent
     } catch (e) {
       console.error("[create subtask]", e);
@@ -204,43 +222,50 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
         <div className="space-y-4">
           {/* Title */}
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Title</label>
+            <label className="block text-xs text-gray-400 mb-1">
+              Title <span className="text-red-400">*</span>
+            </label>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="bg-transparent text-gray-100 border-gray-700"
               placeholder="Subtask title"
+              required
             />
           </div>
 
           {/* Description */}
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Description</label>
+            <label className="block text-xs text-gray-400 mb-1">
+              Description <span className="text-red-400">*</span>
+            </label>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
               className="bg-transparent text-gray-100 border-gray-700"
+              placeholder="Describe the subtask"
+              required
             />
           </div>
 
           {/* Priority & Status */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Priority</label>
-              <Select value={priority.toString()} onValueChange={(v) => setPriority(Number(v))}>
-                <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
-                  <SelectValue placeholder="Select priority" />
-                </SelectTrigger>
-                <SelectContent className="bg-white">
-                  {PRIORITIES.map((p) => (
-                    <SelectItem key={p} value={p.toString()}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <label className="block text-xs text-gray-400 mb-1">
+                Priority <span className="text-red-400">*</span>
+              </label>
+              <PriorityDropdown
+                value={priority}
+                onValueChange={setPriority}
+                triggerClassName="bg-transparent text-gray-100 border-gray-700"
+                contentClassName="bg-white"
+              />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Status</label>
+              <label className="block text-xs text-gray-400 mb-1">
+                Status <span className="text-red-400">*</span>
+              </label>
               <Select value={status} onValueChange={setStatus}>
                 <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
                   <SelectValue placeholder="Select status" />
@@ -257,7 +282,9 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
 
           {/* Deadline */}
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Deadline</label>
+            <label className="block text-xs text-gray-400 mb-1">
+              Deadline <span className="text-red-400">*</span>
+            </label>
             <Input
               type="date"
               value={deadline || ""}
@@ -302,7 +329,9 @@ export function SubtaskDialog({ parentId, parentDeadline, onClose, onCreated }) 
 
           {/* Assignees */}
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Assignees</label>
+            <label className="block text-xs text-gray-400 mb-1">
+              Assignees <span className="text-red-400">*</span>
+            </label>
             <div className="mb-2 relative">
               <input
                 type="text"

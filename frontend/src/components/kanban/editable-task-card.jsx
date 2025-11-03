@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchWithCsrf } from '@/lib/csrf';
 import { FileUploadInput } from '../file-upload-input';
-import { RecurrencePicker } from './recurrence-picker';
+import { RecurrencePicker } from '../recurrence-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Trash, Check, X } from 'lucide-react';
 import toast from 'react-hot-toast';
