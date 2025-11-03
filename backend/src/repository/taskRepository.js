@@ -219,9 +219,9 @@ class TaskRepository {
       query = query.eq('priority', filters.priority);
     }
 
-    if (filters.archived !== undefined) {
-      query = query.eq('archived', filters.archived);
-    }
+    // Default to excluding archived tasks unless explicitly requested
+    const archivedFilter = filters.archived !== undefined ? filters.archived : false;
+    query = query.eq('archived', archivedFilter);
 
     // Apply sorting
     if (filters.sortBy && filters.sortOrder) {
@@ -264,9 +264,9 @@ class TaskRepository {
       query = query.eq('priority', filters.priority);
     }
 
-    if (filters.archived !== undefined) {
-      query = query.eq('archived', filters.archived);
-    }
+    // Default to excluding archived tasks unless explicitly requested
+    const archivedFilter = filters.archived !== undefined ? filters.archived : false;
+    query = query.eq('archived', archivedFilter);
 
     const { count, error } = await query;
 
