@@ -43,6 +43,7 @@ export function TaskSidePanel({
   toCard = (row) => row,
 }) {
   const [childPanelTask, setChildPanelTask] = useState(null);
+  const [panelOpenCounter, setPanelOpenCounter] = useState(0);
   const { user: currentUser } = useAuth()
   const currentUserId = currentUser?.id
   console.log('[TaskSidePanel] opened for task:', task);
@@ -546,6 +547,7 @@ export function TaskSidePanel({
     <>
       {childPanelTask && (
         <TaskSidePanel
+          key={`subtask-${childPanelTask.id}-${panelOpenCounter}`}
           task={childPanelTask}
           projectLookup={projectLookup}
           projectsLoading={projectsLoading}
@@ -870,58 +872,63 @@ export function TaskSidePanel({
                   </Button>
                 </div>
 
-                {/* Table: Name + Status */}
-                {subtasks.length > 0 ? (
-                  <div className="overflow-hidden rounded-md border" style={{ borderColor: 'rgb(var(--border))' }}>
-                    <table className="w-full text-sm">
-                      <thead style={{ backgroundColor: 'rgb(var(--card))', color: 'rgb(var(--foreground))' }}>
-                        <tr>
-                          <th className="text-left px-3 py-2 font-medium">Name</th>
-                          <th className="text-left px-3 py-2 font-medium">Status</th>
+              {/* Table: Name + Status */}
+              {subtasks.length > 0 ? (
+                <div className="overflow-hidden rounded-md border" style={{ borderColor: 'rgb(var(--border))' }}>
+                  <table className="w-full text-sm">
+                    <thead style={{ backgroundColor: 'rgb(var(--card))', color: 'rgb(var(--foreground))' }}>
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium">Name</th>
+                        <th className="text-left px-3 py-2 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y" style={{ borderColor: 'rgb(var(--border))' }}>
+                      {subtasks.map((st) => (
+                        <tr
+                          key={st.id}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        >
+                          <td className="px-3 py-2">
+                            <button
+                              type="button"
+                              className="text-left hover:underline"
+                              style={{ color: 'rgb(var(--foreground))' }}
+                              onClick={() => {
+                                setPanelOpenCounter(c => c + 1);
+                                setChildPanelTask(st);
+                              }}
+                              title="Open subtask"
+                            >
+                              {st.title}
+                            </button>
+                          </td>                        <td className="px-3 py-2" style={{ color: 'rgb(var(--foreground))' }}>
+                            {prettyStatus(st.workflow || st.status || "pending")}
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y" style={{ borderColor: 'rgb(var(--border))' }}>
-                        {subtasks.map((st) => (
-                          <tr
-                            key={st.id}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                          >
-                            <td className="px-3 py-2">
-                              <button
-                                type="button"
-                                className="text-left hover:underline"
-                                style={{ color: 'rgb(var(--foreground))' }}
-                                onClick={() => setChildPanelTask(st)}
-                                title="Open subtask"
-                              >
-                                {st.title}
-                              </button>
-                            </td>                        <td className="px-3 py-2" style={{ color: 'rgb(var(--foreground))' }}>
-                              {prettyStatus(st.workflow || st.status || "pending")}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>No subtasks yet.</div>
-                )}
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>No subtasks yet.</div>
+              )}
 
-                {/* Modal */}
-                {isSubtaskOpen && (
-                  <SubtaskDialog
-                    parentId={task.id}
-                    parentDeadline={deadline}
-                    onClose={() => setIsSubtaskOpen(false)}
-                    onCreated={(row) => {
-                      setSubtasks((prev) => [toCard(row), ...prev]);
-                      setIsSubtaskOpen(false);
-                    }}
-                  />
-                )}
-              </div>
+              {/* Modal */}
+              {isSubtaskOpen && (
+                <SubtaskDialog
+                  parentId={task.id}
+                  parentDeadline={deadline}
+                  projectId={normalizedProjectId}
+                  projectMembers={assignees}
+                  onClose={() => setIsSubtaskOpen(false)}
+                  onCreated={(row) => {
+                    setSubtasks((prev) => [toCard(row), ...prev]);
+                    setIsSubtaskOpen(false);
+                  }}
+                />
+              )}
+            </div>
             )}
 
             {/* Deadline */}
