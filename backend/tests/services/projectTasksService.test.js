@@ -87,14 +87,14 @@ describe('ProjectTasksService', () => {
     test('should validate valid priority filter', () => {
       const filters = { priority: 'high' };
       const result = projectTasksService.validateFilters(filters);
-      expect(result.priority).toBe('high');
+      expect(result.priority).toBe(10); // 'high' is normalized to 10
     });
 
     test('should throw error for invalid priority', () => {
       const filters = { priority: 'urgent' };
       expect(() => {
         projectTasksService.validateFilters(filters);
-      }).toThrow('Invalid priority. Must be one of: low, medium, high');
+      }).toThrow('Priority must be an integer between 1 and 10');
     });
 
     test('should validate assigned_to as positive integer', () => {

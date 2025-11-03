@@ -118,7 +118,7 @@ describe('ProjectTasks Routes', () => {
         .expect(200);
 
       expect(response.body.success).toBe(true);
-      expect(response.body.filters.priority).toBe('high');
+      expect(response.body.filters.priority).toBe(10); // 'high' is normalized to 10
     });
 
     test('should reject invalid priority filter', async () => {
@@ -127,7 +127,7 @@ describe('ProjectTasks Routes', () => {
         .expect(400);
 
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toContain('Invalid priority');
+      expect(response.body.error).toContain('Priority must be an integer between');
     });
 
     test('should apply assignedTo filter', async () => {
@@ -268,7 +268,7 @@ describe('ProjectTasks Routes', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.filters.status).toBe('completed');
-      expect(response.body.filters.priority).toBe('high');
+      expect(response.body.filters.priority).toBe(10); // 'high' is normalized to 10
       expect(response.body.filters.project_id).toBe('1');
       expect(response.body.filters.assigned_to).toBe('123');
     });
@@ -288,7 +288,7 @@ describe('ProjectTasks Routes', () => {
         .expect(400);
 
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toContain('Invalid priority');
+      expect(response.body.error).toContain('Priority must be an integer between');
     });
   });
 
