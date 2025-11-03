@@ -26,6 +26,9 @@ import { TaskTimeTracking } from "./task-time-tracking"
 import { CommentSection } from "./task-comment/task-comment-section"
 import { extractUserHours, normalizeTimeSummary } from "@/lib/time-tracking"
 import { getPriorityMeta } from "@/lib/utils"
+import { PriorityDropdown } from "./priority-dropdown"
+import { RecurrencePicker } from "./recurrence-picker"
+import { SubtaskDialog } from "./subtask-dialog"
 import toast from "react-hot-toast"
 
 const API = process.env.NEXT_PUBLIC_API_URL ;
@@ -358,11 +361,11 @@ export function ProjectDetails({ projectId, onBack }) {
     }
   }
 
-  const handleCreateTask = async ({ title, description, dueDate, priority, tags, assignees = [], attachments = [] }) => {
+  const handleCreateTask = async ({ title, description, dueDate, priority, tags, assignees = [], attachments = [], recurrence }) => {
     if (!ensureWritable()) return
     try {
       console.log('Creating task with projectId:', projectId, 'Type:', typeof projectId)
-      
+
       const response = await fetchWithCsrf(`${API}/api/projects/${projectId}/tasks`, {
         method: 'POST',
         headers: {
@@ -379,6 +382,7 @@ export function ProjectDetails({ projectId, onBack }) {
             ? Array.from(new Set(assignees.map((a) => a.id ?? a)))
             : [],
           tags: tags || [],
+          recurrence: recurrence ?? null,
         })
       })
 
@@ -402,12 +406,12 @@ export function ProjectDetails({ projectId, onBack }) {
           attachments.forEach(file => {
             formData.append('files', file)
           })
-          
+
           const uploadResponse = await fetchWithCsrf(`${API}/api/tasks/${newTask.id}/files`, {
             method: 'POST',
             body: formData
           })
-          
+
           if (!uploadResponse.ok) {
             console.warn('Failed to upload some attachments')
             toast.error('Task created but some attachments failed to upload')
@@ -423,7 +427,7 @@ export function ProjectDetails({ projectId, onBack }) {
           toast.error('Task created but attachments failed to upload')
         }
       }
-      
+
       setTasks(prev => [...prev, newTask])
       setIsAddingTask(false)
       toast.success("Task created successfully!")
@@ -1562,19 +1566,6 @@ function EditProjectDialog({ project, open, onClose, onSave }) {
   )
 }
 
-const priorityChipClasses = {
-  1: "bg-slate-100 dark:bg-slate-600 text-slate-800 dark:text-white border border-slate-300 dark:border-slate-600 font-medium",
-  2: "bg-slate-100 dark:bg-slate-600 text-slate-800 dark:text-white border border-slate-300 dark:border-slate-600 font-medium",
-  3: "bg-teal-100 dark:bg-teal-600 text-teal-800 dark:text-white border border-teal-300 dark:border-teal-600 font-medium",
-  4: "bg-teal-100 dark:bg-teal-600 text-teal-800 dark:text-white border border-teal-300 dark:border-teal-600 font-medium",
-  5: "bg-amber-100 dark:bg-amber-600 text-amber-800 dark:text-white border border-amber-300 dark:border-amber-600 font-medium",
-  6: "bg-amber-100 dark:bg-amber-700 text-amber-900 dark:text-white border border-amber-300 dark:border-amber-700 font-medium",
-  7: "bg-orange-100 dark:bg-orange-600 text-orange-900 dark:text-white border border-orange-300 dark:border-orange-600 font-medium",
-  8: "bg-red-100 dark:bg-red-600 text-red-900 dark:text-white border border-red-300 dark:border-red-600 font-medium",
-  9: "bg-fuchsia-100 dark:bg-fuchsia-600 text-fuchsia-900 dark:text-white border border-fuchsia-300 dark:border-fuchsia-600 font-medium",
-  10: "bg-purple-100 dark:bg-purple-600 text-purple-900 dark:text-white border border-purple-300 dark:border-purple-600 font-medium",
-}
-
 function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
   const { user } = useAuth()
   const [title, setTitle] = useState("")
@@ -1586,8 +1577,8 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
   const [assignees, setAssignees] = useState([])
   const [assigneeQuery, setAssigneeQuery] = useState("")
   const [attachments, setAttachments] = useState([])
+  const [recurrence, setRecurrence] = useState(null)
 
-  const PRIORITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
   const MAX_ASSIGNEES = 5
   const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
   const ALLOWED_FILE_TYPES = [
@@ -1879,20 +1870,12 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
         {/* Priority dropdown */}
         <div>
           <label className="block text-xs text-gray-400 mb-1">Priority</label>
-          <Select value={priority.toString()} onValueChange={(value) => setPriority(Number(value))}>
-            <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
-              <SelectValue placeholder="Select priority" />
-            </SelectTrigger>
-            <SelectContent className="bg-white">
-              {PRIORITIES.map((item) => (
-                <SelectItem key={item} value={item.toString()}>
-                  <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[item]}`}>
-                    {item}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <PriorityDropdown
+            value={priority}
+            onValueChange={setPriority}
+            triggerClassName="bg-transparent text-gray-100 border-gray-700"
+            contentClassName="bg-white"
+          />
         </div>
       </div>
 
@@ -1919,7 +1902,7 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
             <span className="text-xs text-gray-500 mt-1">PDF, DOCX, XLSX, PNG, JPG (Max 50MB each)</span>
           </label>
         </div>
-        
+
         {attachments.length > 0 && (
           <div className="mt-2 space-y-2">
             {attachments.map((file, index) => (
@@ -1947,6 +1930,14 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
         )}
       </div>
 
+      {/* Recurrence */}
+      <div className="mb-4">
+        <RecurrencePicker
+          value={recurrence}
+          onChange={setRecurrence}
+        />
+      </div>
+
       {/* Actions */}
       <div className="flex items-center gap-2">
         <Button
@@ -1959,6 +1950,7 @@ function ProjectTaskForm({ onSave, onCancel, projectMembers = [] }) {
               tags,
               assignees,
               attachments, // Pass attachments to parent
+              recurrence: recurrence ?? undefined,
             })
           }
           disabled={!canSave}
@@ -2001,6 +1993,9 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
   })
   const [assigneeQuery, setAssigneeQuery] = useState("")
   const [attachments, setAttachments] = useState([])
+  const [recurrence, setRecurrence] = useState(task.recurrence ?? null)
+  const [subtasks, setSubtasks] = useState([])
+  const [isSubtaskOpen, setIsSubtaskOpen] = useState(false)
   const MAX_ASSIGNEES = 5
   const taskCreatorId = Number(task.creator_id ?? task.created_by ?? task.owner_id ?? null)
   const currentUserId = user?.id ?? null
@@ -2162,6 +2157,22 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
       isMountedRef.current = false
     }
   }, [])
+
+  // Load subtasks
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await fetchWithCsrf(`${API}/tasks?archived=false&parent_id=${task.id}`)
+        if (!res.ok) throw new Error(`GET /tasks ${res.status}`)
+        const rows = await res.json()
+        if (mounted) setSubtasks(Array.isArray(rows) ? rows : [])
+      } catch (e) {
+        console.error('[load subtasks]', e)
+      }
+    })()
+    return () => { mounted = false }
+  }, [task.id])
 
   useEffect(() => {
     const projectId = Number(task.project_id)
@@ -2377,7 +2388,8 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
         status,
         deadline,
         tags,
-        assignees: assignees.map((assignee) => assignee.id)
+        assignees: assignees.map((assignee) => assignee.id),
+        recurrence: recurrence ?? null
       }
       if (canUpdateHours && hoursSpent !== "" && Number.isFinite(numericHours) && numericHours >= 0) {
         payload.hours = numericHours
@@ -2455,20 +2467,13 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
           {/* Priority */}
           <div>
             <label className="block text-xs text-gray-400 mb-1">Priority</label>
-            <Select value={priority.toString()} onValueChange={(v) => setPriority(Number(v))} disabled={!canEditTask}>
-              <SelectTrigger className="bg-transparent text-gray-100 border-gray-700">
-                <SelectValue placeholder="Select priority" />
-              </SelectTrigger>
-              <SelectContent className="bg-white">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((p) => (
-                  <SelectItem key={p} value={p.toString()}>
-                    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>
-                      {p}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <PriorityDropdown
+              value={priority}
+              onValueChange={setPriority}
+              disabled={!canEditTask}
+              triggerClassName="bg-transparent text-gray-100 border-gray-700"
+              contentClassName="bg-white"
+            />
           </div>
 
           {/* Status */}
@@ -2656,6 +2661,72 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
               </p>
             )}
           </div>
+
+          {/* Subtasks */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs text-gray-400">Subtasks</label>
+              <Button
+                type="button"
+                className="text-white h-8 px-3 bg-gray-700 hover:bg-gray-600"
+                onClick={() => setIsSubtaskOpen(true)}
+                disabled={!canEditTask}
+              >
+                + Add subtask
+              </Button>
+            </div>
+
+            {/* Table: Name + Status */}
+            {subtasks.length > 0 ? (
+              <div className="overflow-hidden rounded-md border border-gray-700">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-800 text-gray-300">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium">Name</th>
+                      <th className="text-left px-3 py-2 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700">
+                    {subtasks.map((st) => (
+                      <tr
+                        key={st.id}
+                        className="hover:bg-gray-800 text-gray-300"
+                      >
+                        <td className="px-3 py-2">
+                          {st.title}
+                        </td>
+                        <td className="px-3 py-2">
+                          {st.workflow || st.status || "pending"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-xs text-gray-500">No subtasks yet.</div>
+            )}
+
+            {/* Subtask Dialog */}
+            {isSubtaskOpen && (
+              <SubtaskDialog
+                parentId={task.id}
+                parentDeadline={deadline}
+                onClose={() => setIsSubtaskOpen(false)}
+                onCreated={(row) => {
+                  setSubtasks((prev) => [row, ...prev])
+                  setIsSubtaskOpen(false)
+                }}
+              />
+            )}
+          </div>
+
+          {/* Recurrence */}
+          <RecurrencePicker
+            value={recurrence}
+            onChange={setRecurrence}
+            disabled={!canEditTask}
+          />
 
           {/* Actions & Comments */}
           <div className="mt-8 space-y-6">

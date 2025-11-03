@@ -1,10 +1,9 @@
 "use client"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { TaskCard } from "./task-card"
 import { fetchWithCsrf } from "@/lib/csrf"
-import { Plus, HelpCircle } from "lucide-react"
+import { HelpCircle } from "lucide-react"
 import { useKanban } from "@/components/kanban-context"
 import { useAuth } from "@/hooks/useAuth"
 import { useSession } from "@/components/session-provider"
@@ -184,42 +183,36 @@ export function KanbanBoard({ projectId = null }) {
       active = false;
     };
   }, [currentUser?.id, currentRole, currentUser?.role, sessionRole]);
+
+  const [panelTask, setPanelTask] = useState(null)
+  const openPanel = (task) => setPanelTask(task)
+  const closePanel = () => setPanelTask(null)
+  const [rawTasks, setRawTasks] = useState([])
+  const [banner, setBanner] = useState("")
+  const [tagFilter, setTagFilter] = useState("")
+
+  const { isAdding, editorPosition, startAddTask, cancelAddTask, editorLane } = useKanban()
+
   async function handleSaveNewTask({ title, description, dueDate, priority, tags, assignees, recurrence, projectId: selectedProjectId, attachments }) {
     if (!currentUser?.id) {
       console.error('[KanbanBoard] Cannot create task without an authenticated user')
       return
     }
-    console.log('[KanbanBoard] handleSaveNewTask called', {
-      title,
-      description,
-      dueDate,
-      priority,
-      tags,
-      assignees,
-      recurrence,
-      selectedProjectId,
-      boardProjectId,
-      lane: editorLane,
-      attachments: attachments?.length || 0
-    });
     try {
-      const resolvedProjectIdRaw =
-        selectedProjectId != null
-          ? selectedProjectId
-          : boardProjectId;
-      const resolvedProjectId =
-        resolvedProjectIdRaw != null && Number.isFinite(Number(resolvedProjectIdRaw))
-          ? Number(resolvedProjectIdRaw)
-          : null;
-      console.log('[KanbanBoard] Resolved project id:', { resolvedProjectIdRaw, resolvedProjectId });
+      const resolvedProjectIdRaw = selectedProjectId != null ? selectedProjectId : boardProjectId;
+      const resolvedProjectId = resolvedProjectIdRaw != null && Number.isFinite(Number(resolvedProjectIdRaw))
+        ? Number(resolvedProjectIdRaw)
+        : null;
+
       if (resolvedProjectId == null) {
         toast.error('Please select an active project before creating a task.');
         return;
       }
+
       const payload = {
         title,
         description: description || null,
-        priority: Number(priority) || 5, // Default to medium priority
+        priority: Number(priority) || 5,
         status: editorLane,
         deadline: dueDate || null,
         project_id: resolvedProjectId,
@@ -227,57 +220,46 @@ export function KanbanBoard({ projectId = null }) {
         tags,
         recurrence: recurrence ?? null,
       };
-      console.log('[KanbanBoard] POST /tasks payload:', payload);
+
       const res = await fetchWithCsrf(`${API}/tasks`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
-      console.log('[KanbanBoard] POST /tasks status:', res.status);
+
       if (res.status === 401) {
         toast.error('Your session has expired. Please sign in again and retry.');
         return;
       }
+
       if (!res.ok) {
         const { error } = await res.json().catch(() => ({}))
         throw new Error(error || `POST /tasks ${res.status}`)
       }
+
       const row = await res.json()
-      console.log('[KanbanBoard] Created task response:', row);
-      
+
       // Upload attachments if any
       if (attachments && attachments.length > 0) {
         try {
           const formData = new FormData()
-          attachments.forEach(file => {
-            formData.append('files', file)
-          })
-          
+          attachments.forEach(file => formData.append('files', file))
+
           const uploadResponse = await fetchWithCsrf(`${API}/api/tasks/${row.id}/files`, {
             method: 'POST',
             body: formData
           })
-          
+
           if (!uploadResponse.ok) {
             console.warn('Failed to upload some attachments')
-          } else {
-            const uploadResult = await uploadResponse.json()
-            if (uploadResult.data?.errors && uploadResult.data.errors.length > 0) {
-              console.warn('Some files failed:', uploadResult.data.errors)
-            }
           }
         } catch (uploadError) {
           console.error('Error uploading attachments:', uploadError)
         }
       }
-      
-      const card = rowToCard(row)
 
-      setRawTasks(prev =>
-        editorPosition === "top" ? [card, ...prev] : [...prev, card]
-      )
+      const card = rowToCard(row)
+      setRawTasks(prev => editorPosition === "top" ? [card, ...prev] : [...prev, card])
       setBanner("Task Successfully Created")
       cancelAddTask()
     } catch (err) {
@@ -285,12 +267,6 @@ export function KanbanBoard({ projectId = null }) {
       toast.error(err.message || 'Failed to create task.');
     }
   }
-  const [panelTask, setPanelTask] = useState(null)
-  const openPanel = (task) => setPanelTask(task)
-  const closePanel = () => setPanelTask(null)
-  const [rawTasks, setRawTasks] = useState([])
-  const [banner, setBanner] = useState("")
-  const [tagFilter, setTagFilter] = useState("")
 
   useEffect(() => {
     if (!banner) return
@@ -440,8 +416,6 @@ export function KanbanBoard({ projectId = null }) {
     }
   }, [panelTask, visibleTasks]);
 
-  const { isAdding, editorPosition, startAddTask, cancelAddTask, editorLane } = useKanban()
-
   // Apply tag filtering to visible tasks
   const filteredTasks = useMemo(() => {
     if (!tagFilter.trim()) {
@@ -532,7 +506,7 @@ export function KanbanBoard({ projectId = null }) {
               <div className="flex items-center gap-2">
                 <h2 className="font-medium" style={{ color: 'rgb(var(--foreground))' }}>To do</h2>
                 <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--muted-foreground))' }}>
-                  {todo.length + (isAdding && editorLane === "pending" ? 1 : 0)}
+                  {todo.length}
                 </span>
 
               </div>
@@ -564,32 +538,6 @@ export function KanbanBoard({ projectId = null }) {
                   onClick={() => openPanel(t)}
                 />
               ))}
-
-              {isAdding && editorLane === "pending" && editorPosition === "bottom" && (
-                <EditableTaskCard
-                  onCancel={cancelAddTask}
-                  onSave={handleSaveNewTask}
-                  defaultProjectId={boardProjectId}
-                  projects={activeProjects}
-                  projectsLoading={projectsLoading}
-                  projectsError={projectsError}
-                />
-              )}
-
-              {!isAdding && (
-                <Button
-                  onClick={() => startAddTask("bottom", "pending")}
-                  variant="ghost"
-                  className="w-full border-2 border-dashed py-8"
-                  style={{
-                    color: 'rgb(var(--muted-foreground))',
-                    borderColor: 'rgb(var(--border))'
-                  }}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add task
-                </Button>
-              )}
             </div>
           </div>
 
@@ -598,22 +546,11 @@ export function KanbanBoard({ projectId = null }) {
             <div className="flex items-center gap-2 flex-shrink-0">
               <h2 className="font-medium" style={{ color: 'rgb(var(--foreground))' }}>Doing</h2>
               <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--muted-foreground))' }}>
-                {doing.length + (isAdding && editorLane === "in_progress" ? 1 : 0)}
+                {doing.length}
               </span>
 
             </div>
             <div className="space-y-3 overflow-y-auto flex-1">
-              {isAdding && editorLane === "in_progress" && editorPosition === "top" && (
-                <EditableTaskCard
-                  onCancel={cancelAddTask}
-                  onSave={handleSaveNewTask}
-                  defaultProjectId={boardProjectId}
-                  projects={activeProjects}
-                  projectsLoading={projectsLoading}
-                  projectsError={projectsError}
-                />
-              )}
-
               {doing.map((t) => (
                 <TaskCard
                   key={t.id ?? `${t.title}-${t.deadline}`}
@@ -628,33 +565,6 @@ export function KanbanBoard({ projectId = null }) {
                   onClick={() => openPanel(t)}
                 />
               ))}
-
-              {isAdding && editorLane === "in_progress" && editorPosition === "bottom" && (
-                <EditableTaskCard
-                  onCancel={cancelAddTask}
-                  onSave={handleSaveNewTask}
-                  defaultProjectId={boardProjectId}
-                  projects={activeProjects}
-                  projectsLoading={projectsLoading}
-                  projectsError={projectsError}
-                />
-              )}
-
-              {!isAdding && (
-                <Button
-                  onClick={() => startAddTask("bottom", "in_progress")}
-                  variant="ghost"
-                  className="w-full border-2 border-dashed py-8"
-                  style={{
-                    color: 'rgb(var(--muted-foreground))',
-                    borderColor: 'rgb(var(--border))'
-                  }}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add task
-                </Button>
-              )}
-
             </div>
           </div>
 
@@ -663,20 +573,10 @@ export function KanbanBoard({ projectId = null }) {
             <div className="flex items-center gap-2 flex-shrink-0">
               <h2 className="font-medium" style={{ color: 'rgb(var(--foreground))' }}>Done</h2>
               <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--muted-foreground))' }}>
-                {done.length + (isAdding && editorLane === "completed" ? 1 : 0)}
+                {done.length}
               </span>
             </div>
             <div className="space-y-3 overflow-y-auto flex-1">
-              {isAdding && editorLane === "completed" && editorPosition === "top" && (
-                <EditableTaskCard
-                  onCancel={cancelAddTask}
-                  onSave={handleSaveNewTask}
-                  defaultProjectId={boardProjectId}
-                  projects={activeProjects}
-                  projectsLoading={projectsLoading}
-                  projectsError={projectsError}
-                />
-              )}
               {done.map((t) => (
                 <TaskCard
                   key={t.id ?? `${t.title}-${t.deadline}`}
@@ -691,32 +591,6 @@ export function KanbanBoard({ projectId = null }) {
                   onClick={() => openPanel(t)}
                 />
               ))}
-              {isAdding && editorLane === "completed" && editorPosition === "bottom" && (
-                <EditableTaskCard
-                  onCancel={cancelAddTask}
-                  onSave={handleSaveNewTask}
-                  defaultProjectId={boardProjectId}
-                  projects={activeProjects}
-                  projectsLoading={projectsLoading}
-                  projectsError={projectsError}
-                />
-              )}
-
-              {!isAdding && (
-                <Button
-                  onClick={() => startAddTask("bottom", "completed")}
-                  variant="ghost"
-                  className="w-full border-2 border-dashed py-8"
-                  style={{
-                    color: 'rgb(var(--muted-foreground))',
-                    borderColor: 'rgb(var(--border))'
-                  }}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add task
-                </Button>
-              )}
-
             </div>
           </div>
           {/* Blocked Column */}
@@ -724,22 +598,11 @@ export function KanbanBoard({ projectId = null }) {
             <div className="flex items-center gap-2 flex-shrink-0">
               <h2 className="font-medium" style={{ color: 'rgb(var(--foreground))' }}>Blocked</h2>
               <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgb(var(--muted))', color: 'rgb(var(--muted-foreground))' }}>
-                {blocked.length + (isAdding && editorLane === "blocked" ? 1 : 0)}
+                {blocked.length}
               </span>
             </div>
 
             <div className="space-y-3 overflow-y-auto flex-1">
-              {isAdding && editorLane === "blocked" && editorPosition === "top" && (
-                <EditableTaskCard
-                  onCancel={cancelAddTask}
-                  onSave={handleSaveNewTask}
-                  defaultProjectId={boardProjectId}
-                  projects={activeProjects}
-                  projectsLoading={projectsLoading}
-                  projectsError={projectsError}
-                />
-              )}
-
               {blocked.map((t) => (
                 <TaskCard
                   key={t.id ?? `${t.title}-${t.deadline}`}
@@ -754,28 +617,6 @@ export function KanbanBoard({ projectId = null }) {
                   onClick={() => openPanel(t)}
                 />
               ))}
-
-              {isAdding && editorLane === "blocked" && editorPosition === "bottom" && (
-                <EditableTaskCard
-                  onCancel={cancelAddTask}
-                  onSave={handleSaveNewTask}
-                  defaultProjectId={boardProjectId}
-                  projects={activeProjects}
-                  projectsLoading={projectsLoading}
-                  projectsError={projectsError}
-                />
-              )}
-
-              {/* {!isAdding && (
-      <Button
-        onClick={() => startAddTask("bottom", "blocked")}
-        variant="ghost"
-        className="w-full text-gray-400 hover:text-white hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 py-8"
-      >
-        <Plus className="w-4 h-4 mr-2" />
-        Add task
-      </Button>
-    )} */}
             </div>
           </div>
 

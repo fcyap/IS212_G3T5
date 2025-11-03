@@ -13,15 +13,11 @@ import { fetchWithCsrf } from '@/lib/csrf';
 import { extractUserHours, normalizeTimeSummary } from '@/lib/time-tracking';
 import toast from 'react-hot-toast';
 import { Trash, Check, X } from 'lucide-react';
-import { RecurrencePicker } from './recurrence-picker';
+import { RecurrencePicker } from '../recurrence-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { SubtaskDialog } from './subtask-dialog';
+import { SubtaskDialog } from '../subtask-dialog';
+import { PriorityDropdown } from '../priority-dropdown';
 const API = process.env.NEXT_PUBLIC_API_URL;
-const priorityChipClasses = {
-  Low: 'bg-teal-200 text-teal-900',
-  Medium: 'bg-amber-300 text-amber-950',
-  High: 'bg-fuchsia-300 text-fuchsia-950',
-};
 const prettyStatus = (status) => {
     const map = {
       pending: 'To do',
@@ -691,18 +687,14 @@ export function TaskSidePanel({
             {/* Priority */}
             <div>
               <label className="block text-xs mb-1" style={{ color: 'rgb(var(--muted-foreground))' }}>Priority</label>
-              <Select value={priority} onValueChange={setPriority} disabled={!canEdit}>
-                <SelectTrigger className="bg-transparent" style={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}>
-                  <SelectValue placeholder="Select priority" />
-                </SelectTrigger>
-                <SelectContent className="bg-white">
-                  {["Low", "Medium", "High"].map((p) => (
-                    <SelectItem key={p} value={p}>
-                      <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${priorityChipClasses[p]}`}>{p}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <PriorityDropdown
+                value={priority}
+                onValueChange={setPriority}
+                disabled={!canEdit}
+                triggerClassName="bg-transparent"
+                triggerStyle={{ color: 'rgb(var(--foreground))', borderColor: 'rgb(var(--border))' }}
+                contentClassName="bg-white"
+              />
             </div>
             {/* Tags */}
             <div>
