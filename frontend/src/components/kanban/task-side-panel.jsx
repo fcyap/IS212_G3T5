@@ -852,75 +852,77 @@ export function TaskSidePanel({
                 <p className="text-xs text-amber-400 mt-2">At least one assignee is required. Add another member before removing the last one.</p>
               )}
             </div>
-            {/* Subtasks */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>Subtasks</label>
-                <Button
-                  type="button"
-                  className="text-white h-8 px-3"
-                  style={{ backgroundColor: 'rgb(var(--muted))' }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
-                  onClick={() => setIsSubtaskOpen(true)}
-                  disabled={!canEdit}
-                >
-                  + Add subtask
-                </Button>
-              </div>
-
-              {/* Table: Name + Status */}
-              {subtasks.length > 0 ? (
-                <div className="overflow-hidden rounded-md border" style={{ borderColor: 'rgb(var(--border))' }}>
-                  <table className="w-full text-sm">
-                    <thead style={{ backgroundColor: 'rgb(var(--card))', color: 'rgb(var(--foreground))' }}>
-                      <tr>
-                        <th className="text-left px-3 py-2 font-medium">Name</th>
-                        <th className="text-left px-3 py-2 font-medium">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y" style={{ borderColor: 'rgb(var(--border))' }}>
-                      {subtasks.map((st) => (
-                        <tr
-                          key={st.id}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                        >
-                          <td className="px-3 py-2">
-                            <button
-                              type="button"
-                              className="text-left hover:underline"
-                              style={{ color: 'rgb(var(--foreground))' }}
-                              onClick={() => setChildPanelTask(st)}
-                              title="Open subtask"
-                            >
-                              {st.title}
-                            </button>
-                          </td>                        <td className="px-3 py-2" style={{ color: 'rgb(var(--foreground))' }}>
-                            {prettyStatus(st.workflow || st.status || "pending")}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            {/* Subtasks - Only show for parent tasks (not for subtasks themselves) */}
+            {!task.parent_id && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>Subtasks</label>
+                  <Button
+                    type="button"
+                    className="text-white h-8 px-3"
+                    style={{ backgroundColor: 'rgb(var(--muted))' }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
+                    onClick={() => setIsSubtaskOpen(true)}
+                    disabled={!canEdit}
+                  >
+                    + Add subtask
+                  </Button>
                 </div>
-              ) : (
-                <div className="text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>No subtasks yet.</div>
-              )}
 
-              {/* Modal */}
-              {isSubtaskOpen && (
-                <SubtaskDialog
-                  parentId={task.id}
-                  parentDeadline={deadline}
-                  onClose={() => setIsSubtaskOpen(false)}
-                  onCreated={(row) => {
-                    setSubtasks((prev) => [toCard(row), ...prev]);
-                    setIsSubtaskOpen(false);
-                  }}
-                />
-              )}
-            </div>
+                {/* Table: Name + Status */}
+                {subtasks.length > 0 ? (
+                  <div className="overflow-hidden rounded-md border" style={{ borderColor: 'rgb(var(--border))' }}>
+                    <table className="w-full text-sm">
+                      <thead style={{ backgroundColor: 'rgb(var(--card))', color: 'rgb(var(--foreground))' }}>
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium">Name</th>
+                          <th className="text-left px-3 py-2 font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y" style={{ borderColor: 'rgb(var(--border))' }}>
+                        {subtasks.map((st) => (
+                          <tr
+                            key={st.id}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgb(var(--muted))'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                          >
+                            <td className="px-3 py-2">
+                              <button
+                                type="button"
+                                className="text-left hover:underline"
+                                style={{ color: 'rgb(var(--foreground))' }}
+                                onClick={() => setChildPanelTask(st)}
+                                title="Open subtask"
+                              >
+                                {st.title}
+                              </button>
+                            </td>                        <td className="px-3 py-2" style={{ color: 'rgb(var(--foreground))' }}>
+                              {prettyStatus(st.workflow || st.status || "pending")}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-xs" style={{ color: 'rgb(var(--muted-foreground))' }}>No subtasks yet.</div>
+                )}
+
+                {/* Modal */}
+                {isSubtaskOpen && (
+                  <SubtaskDialog
+                    parentId={task.id}
+                    parentDeadline={deadline}
+                    onClose={() => setIsSubtaskOpen(false)}
+                    onCreated={(row) => {
+                      setSubtasks((prev) => [toCard(row), ...prev]);
+                      setIsSubtaskOpen(false);
+                    }}
+                  />
+                )}
+              </div>
+            )}
 
             {/* Deadline */}
             <div>

@@ -2662,64 +2662,66 @@ function TaskEditingSidePanel({ task, onClose, onSave, onDelete, allUsers, proje
             )}
           </div>
 
-          {/* Subtasks */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs text-gray-400">Subtasks</label>
-              <Button
-                type="button"
-                className="text-white h-8 px-3 bg-gray-700 hover:bg-gray-600"
-                onClick={() => setIsSubtaskOpen(true)}
-                disabled={!canEditTask}
-              >
-                + Add subtask
-              </Button>
-            </div>
-
-            {/* Table: Name + Status */}
-            {subtasks.length > 0 ? (
-              <div className="overflow-hidden rounded-md border border-gray-700">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-800 text-gray-300">
-                    <tr>
-                      <th className="text-left px-3 py-2 font-medium">Name</th>
-                      <th className="text-left px-3 py-2 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-700">
-                    {subtasks.map((st) => (
-                      <tr
-                        key={st.id}
-                        className="hover:bg-gray-800 text-gray-300"
-                      >
-                        <td className="px-3 py-2">
-                          {st.title}
-                        </td>
-                        <td className="px-3 py-2">
-                          {st.workflow || st.status || "pending"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {/* Subtasks - Only show for parent tasks (not for subtasks themselves) */}
+          {!task.parent_id && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs text-gray-400">Subtasks</label>
+                <Button
+                  type="button"
+                  className="text-white h-8 px-3 bg-gray-700 hover:bg-gray-600"
+                  onClick={() => setIsSubtaskOpen(true)}
+                  disabled={!canEditTask}
+                >
+                  + Add subtask
+                </Button>
               </div>
-            ) : (
-              <div className="text-xs text-gray-500">No subtasks yet.</div>
-            )}
 
-            {/* Subtask Dialog */}
-            {isSubtaskOpen && (
-              <SubtaskDialog
-                parentId={task.id}
-                parentDeadline={deadline}
-                onClose={() => setIsSubtaskOpen(false)}
-                onCreated={(row) => {
-                  setSubtasks((prev) => [row, ...prev])
-                  setIsSubtaskOpen(false)
-                }}
-              />
-            )}
-          </div>
+              {/* Table: Name + Status */}
+              {subtasks.length > 0 ? (
+                <div className="overflow-hidden rounded-md border border-gray-700">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-800 text-gray-300">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium">Name</th>
+                        <th className="text-left px-3 py-2 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-700">
+                      {subtasks.map((st) => (
+                        <tr
+                          key={st.id}
+                          className="hover:bg-gray-800 text-gray-300"
+                        >
+                          <td className="px-3 py-2">
+                            {st.title}
+                          </td>
+                          <td className="px-3 py-2">
+                            {st.workflow || st.status || "pending"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500">No subtasks yet.</div>
+              )}
+
+              {/* Subtask Dialog */}
+              {isSubtaskOpen && (
+                <SubtaskDialog
+                  parentId={task.id}
+                  parentDeadline={deadline}
+                  onClose={() => setIsSubtaskOpen(false)}
+                  onCreated={(row) => {
+                    setSubtasks((prev) => [row, ...prev])
+                    setIsSubtaskOpen(false)
+                  }}
+                />
+              )}
+            </div>
+          )}
 
           {/* Recurrence */}
           <RecurrencePicker
