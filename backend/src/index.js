@@ -78,8 +78,13 @@ async function initializeApp() {
   const csrfMiddleware = (req, res, next) => {
     const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 
+    // Sanitize user-controlled values to prevent log injection
+    const sanitize = (str) => String(str || '').replace(/[\n\r]/g, '');
+
     // Get a unique identifier for this client (session ID, remote address, or generate one)
-    const clientId = req.sessionID || req.ip || `${req.socket.remoteAddress}-${Date.now()}`;
+    // Sanitize user-controlled parts before using in clientId
+    const remoteAddr = sanitize(req.socket.remoteAddress || '');
+    const clientId = req.sessionID || req.ip || (remoteAddr + '-' + Date.now());
 
     // Store a token generation function on req for generating new tokens
     req.csrfToken = () => {
@@ -90,15 +95,14 @@ async function initializeApp() {
       return csrfTokens.get(clientId);
     };
 
-    // Sanitize user-controlled values to prevent log injection
-    const sanitize = (str) => String(str || '').replace(/[\n\r]/g, '');
     const sanitizedClientId = sanitize(clientId);
     const sanitizedMethod = sanitize(req.method);
     const sanitizedPath = sanitize(req.path);
 
     // Ensure a CSRF token exists
     const token = req.csrfToken();
-    console.log('[CSRF] Client ID:', sanitizedClientId, 'Token:', token?.substring(0, 10) + '...', 'Method:', sanitizedMethod, 'Path:', sanitizedPath);
+    const sanitizedToken = sanitize(token?.substring(0, 10) || '');
+    console.log('[CSRF] Client ID:', sanitizedClientId, 'Token:', sanitizedToken + '...', 'Method:', sanitizedMethod, 'Path:', sanitizedPath);
 
     // Skip CSRF validation for safe methods
     if (SAFE_METHODS.includes(req.method)) {
@@ -112,7 +116,8 @@ async function initializeApp() {
                           req.body?._csrf ||
                           req.query?._csrf;
 
-    console.log('[CSRF] Submitted token:', (submittedToken?.substring(0, 10) || 'NONE') + '...');
+    const sanitizedSubmittedToken = sanitize(submittedToken?.substring(0, 10) || 'NONE');
+    console.log('[CSRF] Submitted token:', sanitizedSubmittedToken + '...');
 
     // Validate token
     if (!submittedToken) {
@@ -121,9 +126,11 @@ async function initializeApp() {
     }
 
     if (submittedToken !== token) {
+      const sanitizedExpected = sanitize(token?.substring(0, 20) || '');
+      const sanitizedGot = sanitize(submittedToken?.substring(0, 20) || '');
       console.warn('[CSRF] Token mismatch for', sanitizedMethod, sanitizedPath);
-      console.warn('[CSRF] Expected:', token?.substring(0, 20) + '...');
-      console.warn('[CSRF] Got:', submittedToken?.substring(0, 20) + '...');
+      console.warn('[CSRF] Expected:', sanitizedExpected + '...');
+      console.warn('[CSRF] Got:', sanitizedGot + '...');
       return res.status(403).json({ error: 'CSRF token invalid' });
     }
 

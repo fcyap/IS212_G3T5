@@ -66,8 +66,9 @@ class TaskFilesService {
           // Sanitize user-controlled values to prevent log injection and format string attacks
           const sanitize = (str) => String(str || '').replace(/[\n\r%]/g, '');
           const sanitizedFilename = sanitize(file.originalname);
-          console.error('Upload error for file:', sanitizedFilename, uploadError);
-          errors.push(sanitizedFilename + ': ' + uploadError.message);
+          const sanitizedErrorMsg = sanitize(uploadError.message || 'Unknown error');
+          console.error('Upload error for file:', sanitizedFilename, 'Error:', sanitizedErrorMsg);
+          errors.push(sanitizedFilename + ': ' + sanitizedErrorMsg);
           continue;
         }
 

@@ -43,7 +43,7 @@ const requireProjectEdit = (sql) => {
       const sanitize = (str) => String(str || '').replace(/[\n\r]/g, '');
       const sanitizedProjectId = sanitize(projectId);
 
-      console.log('[requireProjectEdit] User:', user?.id, 'ProjectId:', sanitizedProjectId, 'Params:', req.params);
+      console.log('[requireProjectEdit] User:', user?.id, 'ProjectId:', sanitizedProjectId);
 
       if (!user || !projectId) {
         console.log('[requireProjectEdit] Missing user or projectId, returning 401');

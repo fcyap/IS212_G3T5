@@ -179,7 +179,7 @@ const removeProjectMember = async (req, res) => {
     const sanitizedProjectId = sanitize(projectId);
     const sanitizedUserId = sanitize(userId);
 
-    console.log('[removeProjectMember] Called with:', { projectId: sanitizedProjectId, userId: sanitizedUserId, requestingUserId });
+    console.log('[removeProjectMember] Called with projectId:', sanitizedProjectId, 'userId:', sanitizedUserId, 'requestingUserId:', requestingUserId);
 
     if (!projectId || isNaN(projectId)) {
       console.log('[removeProjectMember] Invalid projectId:', sanitizedProjectId);

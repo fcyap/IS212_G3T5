@@ -398,8 +398,8 @@ const generateDepartmentalPerformanceReport = async (req, res, next) => {
     // Sanitize user-controlled values to prevent log injection
     const sanitize = (str) => String(str || '').replace(/[\n\r]/g, '');
 
-    console.log('[generateDepartmentalPerformanceReport] User:', user);
-    console.log('[generateDepartmentalPerformanceReport] Body:', JSON.stringify(req.body));
+    console.log('[generateDepartmentalPerformanceReport] User ID:', user?.id);
+    console.log('[generateDepartmentalPerformanceReport] Request received');
 
     if (!user) {
       console.log('[generateDepartmentalPerformanceReport] No user found - returning 401');

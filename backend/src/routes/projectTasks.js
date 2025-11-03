@@ -364,7 +364,7 @@ router.post('/:projectId/tasks', authMiddleware(), requireTaskCreation(), async 
 
     console.log('=== CREATE TASK DEBUG ===');
     console.log('Raw projectId from params:', sanitizedProjectId, 'Type:', typeof projectId);
-    console.log('Task data:', JSON.stringify(taskData, null, 2));
+    console.log('Task data received');
     console.log('Creator ID:', sanitizedCreatorId);
 
     // Validate project exists
