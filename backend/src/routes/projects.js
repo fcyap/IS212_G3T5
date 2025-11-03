@@ -3,7 +3,9 @@ const router = express.Router();
 
 // Debug middleware to log all requests
 router.use((req, res, next) => {
-  console.log(`[ProjectRouter] ${req.method} ${req.path}`);
+  // Sanitize user-controlled values to prevent log injection
+  const sanitize = (str) => String(str || '').replace(/[\n\r]/g, '');
+  console.log(`[ProjectRouter] ${sanitize(req.method)} ${sanitize(req.path)}`);
   next();
 });
 

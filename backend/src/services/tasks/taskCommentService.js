@@ -202,7 +202,9 @@ class TaskCommentService {
         commenterName: commenterName
       });
       
-      console.log(`Comment notification triggered for task ${taskId}, comment ${created.id}`);
+      // Sanitize user-controlled values to prevent log injection
+      const sanitize = (str) => String(str || '').replace(/[\n\r]/g, '');
+      console.log(`Comment notification triggered for task ${sanitize(taskId)}, comment ${created.id}`);
     } catch (notificationError) {
       // Log but don't fail the comment creation if notification fails
       console.error('Failed to send comment notification:', notificationError);

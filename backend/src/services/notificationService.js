@@ -200,7 +200,9 @@ class NotificationService {
         }
       }
 
-      console.log(`Created ${notifications.length} comment notifications for task ${taskId}`);
+      // Sanitize user-controlled values to prevent log injection
+      const sanitize = (str) => String(str || '').replace(/[\n\r]/g, '');
+      console.log(`Created ${notifications.length} comment notifications for task ${sanitize(taskId)}`);
       return {
         notificationsSent: notifications.length,
         notifications: notifications

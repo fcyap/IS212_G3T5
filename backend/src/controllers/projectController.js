@@ -174,15 +174,18 @@ const removeProjectMember = async (req, res) => {
     const { projectId, userId } = req.params;
     const requestingUserId = req.user?.id || 1;
 
+    // Sanitize user-controlled values to prevent log injection
+    const sanitize = (str) => String(str || '').replace(/[\n\r]/g, '');
+
     console.log('[removeProjectMember] Called with:', { projectId, userId, requestingUserId });
 
     if (!projectId || isNaN(projectId)) {
-      console.log('[removeProjectMember] Invalid projectId:', projectId);
+      console.log('[removeProjectMember] Invalid projectId:', sanitize(projectId));
       return res.status(400).json({ success: false, message: 'Valid project ID is required' });
     }
 
     if (!userId || isNaN(userId)) {
-      console.log('[removeProjectMember] Invalid userId:', userId);
+      console.log('[removeProjectMember] Invalid userId:', sanitize(userId));
       return res.status(400).json({ success: false, message: 'Valid user ID is required' });
     }
 

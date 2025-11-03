@@ -63,8 +63,10 @@ class TaskFilesService {
           });
 
         if (uploadError) {
-          console.error(`Upload error for ${file.originalname}:`, uploadError);
-          errors.push(`${file.originalname}: ${uploadError.message}`);
+          // Sanitize user-controlled values to prevent log injection and format string attacks
+          const sanitize = (str) => String(str || '').replace(/[\n\r%]/g, '');
+          console.error(`Upload error for ${sanitize(file.originalname)}:`, uploadError);
+          errors.push(`${sanitize(file.originalname)}: ${uploadError.message}`);
           continue;
         }
 
