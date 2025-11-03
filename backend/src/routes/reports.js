@@ -8,7 +8,9 @@ const { authMiddleware } = require('../middleware/auth');
 router.use((req, res, next) => {
   // Sanitize user-controlled values to prevent log injection
   const sanitize = (str) => String(str || '').replace(/[\n\r]/g, '');
-  console.log(`[reports.js] Route hit:`, sanitize(req.method), sanitize(req.originalUrl));
+  const sanitizedMethod = sanitize(req.method);
+  const sanitizedUrl = sanitize(req.originalUrl);
+  console.log('[reports.js] Route hit:', sanitizedMethod, sanitizedUrl);
   next();
 });
 

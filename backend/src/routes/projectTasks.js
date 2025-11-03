@@ -359,11 +359,13 @@ router.post('/:projectId/tasks', authMiddleware(), requireTaskCreation(), async 
 
     // Sanitize user-controlled values to prevent log injection
     const sanitize = (str) => String(str || '').replace(/[\n\r]/g, '');
+    const sanitizedProjectId = sanitize(projectId);
+    const sanitizedCreatorId = sanitize(creatorId);
 
     console.log('=== CREATE TASK DEBUG ===');
-    console.log('Raw projectId from params:', sanitize(projectId), 'Type:', typeof projectId);
+    console.log('Raw projectId from params:', sanitizedProjectId, 'Type:', typeof projectId);
     console.log('Task data:', JSON.stringify(taskData, null, 2));
-    console.log('Creator ID:', sanitize(creatorId));
+    console.log('Creator ID:', sanitizedCreatorId);
 
     // Validate project exists
     const validatedProjectId = validatePositiveInteger(projectId, 'projectId');

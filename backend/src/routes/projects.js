@@ -5,7 +5,9 @@ const router = express.Router();
 router.use((req, res, next) => {
   // Sanitize user-controlled values to prevent log injection
   const sanitize = (str) => String(str || '').replace(/[\n\r]/g, '');
-  console.log(`[ProjectRouter] ${sanitize(req.method)} ${sanitize(req.path)}`);
+  const sanitizedMethod = sanitize(req.method);
+  const sanitizedPath = sanitize(req.path);
+  console.log('[ProjectRouter]', sanitizedMethod, sanitizedPath);
   next();
 });
 

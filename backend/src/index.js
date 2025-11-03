@@ -92,14 +92,17 @@ async function initializeApp() {
 
     // Sanitize user-controlled values to prevent log injection
     const sanitize = (str) => String(str || '').replace(/[\n\r]/g, '');
+    const sanitizedClientId = sanitize(clientId);
+    const sanitizedMethod = sanitize(req.method);
+    const sanitizedPath = sanitize(req.path);
 
     // Ensure a CSRF token exists
     const token = req.csrfToken();
-    console.log(`[CSRF] Client ID: ${sanitize(clientId)}, Token: ${token?.substring(0, 10)}..., Method: ${sanitize(req.method)}, Path: ${sanitize(req.path)}`);
+    console.log('[CSRF] Client ID:', sanitizedClientId, 'Token:', token?.substring(0, 10) + '...', 'Method:', sanitizedMethod, 'Path:', sanitizedPath);
 
     // Skip CSRF validation for safe methods
     if (SAFE_METHODS.includes(req.method)) {
-      console.log(`[CSRF] Skipping validation for safe method: ${sanitize(req.method)}`);
+      console.log('[CSRF] Skipping validation for safe method:', sanitizedMethod);
       return next();
     }
 
@@ -109,22 +112,22 @@ async function initializeApp() {
                           req.body?._csrf ||
                           req.query?._csrf;
 
-    console.log(`[CSRF] Submitted token: ${submittedToken?.substring(0, 10) || 'NONE'}...`);
+    console.log('[CSRF] Submitted token:', (submittedToken?.substring(0, 10) || 'NONE') + '...');
 
     // Validate token
     if (!submittedToken) {
-      console.warn(`[CSRF] No token submitted for ${sanitize(req.method)} ${sanitize(req.path)}`);
+      console.warn('[CSRF] No token submitted for', sanitizedMethod, sanitizedPath);
       return res.status(403).json({ error: 'CSRF token missing' });
     }
 
     if (submittedToken !== token) {
-      console.warn(`[CSRF] Token mismatch for ${sanitize(req.method)} ${sanitize(req.path)}`);
-      console.warn(`[CSRF] Expected: ${token?.substring(0, 20)}...`);
-      console.warn(`[CSRF] Got: ${submittedToken?.substring(0, 20)}...`);
+      console.warn('[CSRF] Token mismatch for', sanitizedMethod, sanitizedPath);
+      console.warn('[CSRF] Expected:', token?.substring(0, 20) + '...');
+      console.warn('[CSRF] Got:', submittedToken?.substring(0, 20) + '...');
       return res.status(403).json({ error: 'CSRF token invalid' });
     }
 
-    console.log(`[CSRF] Token validated successfully for ${sanitize(req.method)} ${sanitize(req.path)}`);
+    console.log('[CSRF] Token validated successfully for', sanitizedMethod, sanitizedPath);
     next();
   };
   
