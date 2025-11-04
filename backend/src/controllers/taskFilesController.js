@@ -32,7 +32,10 @@ class TaskFilesController {
         data: result,
       });
     } catch (error) {
-      console.error('Error uploading files:', error);
+      // Sanitize error message to prevent log injection
+      const sanitize = (str) => String(str || '').replace(/[\n\r]/g, '');
+      const sanitizedErrorMessage = sanitize(error.message);
+      console.error('Error uploading files:', sanitizedErrorMessage);
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to upload files',

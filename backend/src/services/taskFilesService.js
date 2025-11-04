@@ -63,8 +63,12 @@ class TaskFilesService {
           });
 
         if (uploadError) {
-          console.error(`Upload error for ${file.originalname}:`, uploadError);
-          errors.push(`${file.originalname}: ${uploadError.message}`);
+          // Sanitize user-controlled values to prevent log injection and format string attacks
+          const sanitize = (str) => String(str || '').replace(/[\n\r%]/g, '');
+          const sanitizedFilename = sanitize(file.originalname);
+          const sanitizedErrorMsg = sanitize(uploadError.message || 'Unknown error');
+          console.error('Upload error for file:', sanitizedFilename, 'Error:', sanitizedErrorMsg);
+          errors.push(sanitizedFilename + ': ' + sanitizedErrorMsg);
           continue;
         }
 

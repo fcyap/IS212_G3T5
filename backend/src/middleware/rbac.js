@@ -39,7 +39,11 @@ const requireProjectEdit = (sql) => {
       const user = req.user; // Use req.user which has full user data from DB
       const projectId = req.params.projectId || req.params.id;
 
-      console.log('[requireProjectEdit] User:', user?.id, 'ProjectId:', projectId, 'Params:', req.params);
+      // Sanitize user-controlled values to prevent log injection
+      const sanitize = (str) => String(str || '').replace(/[\n\r]/g, '');
+      const sanitizedProjectId = sanitize(projectId);
+
+      console.log('[requireProjectEdit] User:', user?.id, 'ProjectId:', sanitizedProjectId);
 
       if (!user || !projectId) {
         console.log('[requireProjectEdit] Missing user or projectId, returning 401');
@@ -47,7 +51,7 @@ const requireProjectEdit = (sql) => {
       }
 
       // Get project and creator info using Supabase - simplified query without foreign key
-      console.log('[requireProjectEdit] Querying project with ID:', projectId);
+      console.log('[requireProjectEdit] Querying project with ID:', sanitizedProjectId);
       const { data: projects, error: projectError } = await supabase
         .from('projects')
         .select('id, creator_id, name, status')
