@@ -10,6 +10,12 @@ if (!supabaseUrl || !supabaseKey) {
   supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 }
 
+// In test environment, use dummy values if real ones aren't available
+if ((!supabaseUrl || !supabaseKey) && process.env.NODE_ENV === 'test') {
+  supabaseUrl = supabaseUrl || 'https://dummy-project.supabase.co';
+  supabaseKey = supabaseKey || 'dummy-service-role-key-for-testing';
+}
+
 if (!supabaseUrl || !supabaseKey) {
   throw new Error('Missing Supabase environment variables');
 }
