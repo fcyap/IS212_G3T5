@@ -24,6 +24,7 @@ router.get('/', authMiddleware(), taskController.list);
 router.get('/:id', authMiddleware(), taskController.getTaskById);
 router.post('/', authMiddleware(), requireTaskCreation(), taskController.create);
 router.put('/:id', authMiddleware(), requireTaskModification(), taskController.update);
+router.delete('/:id', authMiddleware(), requireTaskModification(), taskController.deleteTask);
 
 // Subtasks route - must come before /:id to avoid conflicts
 router.get('/:taskId/subtasks', authMiddleware(), taskController.getSubtasks);

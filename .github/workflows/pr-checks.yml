@@ -42,9 +42,8 @@ jobs:
             node --check "$file"
           done
 
-      - name: Run tests (informational only)
-        run: npm test || echo "⚠️ Some tests failed, but not blocking PR"
-        continue-on-error: true
+      - name: Run tests
+        run: npm test
         env:
           NODE_ENV: test
 
