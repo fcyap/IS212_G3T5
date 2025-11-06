@@ -402,14 +402,14 @@ const updateTask = async (req, res) => {
 
 const deleteTask = async (req, res) => {
   try {
-    const { taskId } = req.params;
+    const { id } = req.params;
     const requestingUserId = req.user?.id || 1;
 
-    if (!taskId || isNaN(taskId)) {
+    if (!id || isNaN(id)) {
       return res.status(400).json({ success: false, message: 'Valid task ID is required' });
     }
 
-    await taskService.deleteTask(parseInt(taskId), requestingUserId);
+    await taskService.deleteTask(parseInt(id), requestingUserId);
     res.json({ success: true, message: 'Task deleted successfully' });
   } catch (err) {
     console.error('Error in deleteTask:', err);

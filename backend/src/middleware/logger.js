@@ -28,18 +28,24 @@ async function initChalk() {
     } catch (err) {
       console.error('Failed to load chalk:', err);
       // Fallback to no colors
+      const noColor = (str) => str;
+      const makeChainable = (fn) => {
+        fn.bold = fn;
+        fn.dim = fn;
+        fn.hex = () => fn;
+        return fn;
+      };
+      const chainableFunc = makeChainable(noColor);
+
       chalk = {
-        hex: () => (str) => str,
-        bold: (str) => str,
-        cyan: (str) => str,
-        yellow: (str) => str,
-        dim: (str) => str,
-        gray: (str) => str,
-        blue: (str) => str,
-        red: {
-          bold: (str) => str
-        },
-        red: (str) => str
+        hex: () => chainableFunc,
+        bold: noColor,
+        cyan: noColor,
+        yellow: makeChainable(noColor),
+        dim: noColor,
+        gray: noColor,
+        blue: noColor,
+        red: makeChainable(noColor)
       };
       setupTokens();
       isInitialized = true;

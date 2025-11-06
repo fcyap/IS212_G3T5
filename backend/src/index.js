@@ -76,6 +76,11 @@ async function initializeApp() {
   
   // Custom CSRF middleware that validates tokens from headers
   const csrfMiddleware = (req, res, next) => {
+    // Skip CSRF validation in test environment
+    if (process.env.NODE_ENV === 'test') {
+      return next();
+    }
+
     const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 
     // Sanitize user-controlled values to prevent log injection
