@@ -850,6 +850,30 @@ class ProjectTasksService {
         hasProject: !!task.project_id
       });
 
+      // Hydrate task with project information
+      let hydratedTask = { ...task };
+      if (task.project_id && !task.project) {
+        try {
+          const projectRepository = require('../repository/projectRepository');
+          const project = await projectRepository.getProjectById(task.project_id);
+          hydratedTask.project = project;
+        } catch (error) {
+          console.warn(`Could not fetch project ${task.project_id} for notification:`, error.message);
+          hydratedTask.project = null;
+        }
+      }
+
+      // Hydrate task with assignees if not already present
+      if (!task.assignees && task.assigned_to && Array.isArray(task.assigned_to) && task.assigned_to.length > 0) {
+        try {
+          const assignees = await notificationService.getTaskAssignees(task.assigned_to);
+          hydratedTask.assignees = assignees;
+        } catch (error) {
+          console.warn('Could not fetch assignees for notification:', error.message);
+          hydratedTask.assignees = [];
+        }
+      }
+
       const recipients = [];
 
       // Get project managers if task has a project
@@ -884,15 +908,15 @@ class ProjectTasksService {
 
       console.log(`Sending ${deadlineType} deadline notifications to ${uniqueRecipients.length} recipients:`, uniqueRecipients.map(u => u.id));
 
-      // Send notifications based on type
+      // Send notifications based on type (use hydratedTask instead of task)
       if (deadlineType === 'overdue') {
         // For overdue notifications, create once for all recipients
-        await notificationService.createOverdueNotifications(task);
+        await notificationService.createOverdueNotifications(hydratedTask);
         
         // Then send individual emails
         for (const recipient of uniqueRecipients) {
           try {
-            await notificationService.sendOverdueEmailNotification(task, recipient);
+            await notificationService.sendOverdueEmailNotification(hydratedTask, recipient);
           } catch (error) {
             console.error(`Failed to send ${deadlineType} email notification to user ${recipient.id}:`, error);
           }
@@ -901,8 +925,8 @@ class ProjectTasksService {
         // For impending deadline notifications, create and send for each recipient
         for (const recipient of uniqueRecipients) {
           try {
-            await notificationService.createDeadlineNotification(task, recipient);
-            await notificationService.sendDeadlineEmailNotification(task, recipient);
+            await notificationService.createDeadlineNotification(hydratedTask, recipient);
+            await notificationService.sendDeadlineEmailNotification(hydratedTask, recipient);
           } catch (error) {
             console.error(`Failed to send ${deadlineType} notification to user ${recipient.id}:`, error);
           }
