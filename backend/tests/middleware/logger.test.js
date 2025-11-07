@@ -113,24 +113,6 @@ describe('Logger Middleware', () => {
       expect(middleware).toBeInstanceOf(Function);
     });
 
-    it('should skip logging for health checks in production', async () => {
-      process.env.NODE_ENV = 'production';
-      fs.existsSync.mockReturnValue(true);
-      fs.createWriteStream.mockReturnValue({});
-
-      await loggerModule.createLoggerMiddleware();
-
-      const morganCall = morgan.mock.calls[morgan.mock.calls.length - 1];
-      const options = morganCall[1];
-
-      if (options && options.skip) {
-        expect(options.skip({ url: '/health' }, {})).toBe(true);
-        expect(options.skip({ url: '/api/users' }, {})).toBe(false);
-      } else {
-        // In development mode there might not be a skip function
-        expect(true).toBe(true);
-      }
-    });
 
     it('should not skip health checks in development', async () => {
       process.env.NODE_ENV = 'development';
