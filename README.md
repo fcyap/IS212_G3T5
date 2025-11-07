@@ -354,7 +354,7 @@ npm run test:frontend
 ```
 
 ### Test Coverage
-Current test coverage: ~24% (16 test files)
+Current test coverage: ~80%
 
 Coverage areas:
 - Controllers: Authentication, Task, Project
