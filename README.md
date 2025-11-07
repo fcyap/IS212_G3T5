@@ -409,9 +409,6 @@ GitHub Actions workflows are configured in `.github/workflows/`:
 - Environment-based configuration
 - GitHub Actions security scanning
 
-### Reporting Security Issues
-Please report security vulnerabilities to: security@yourdomain.com
-
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
