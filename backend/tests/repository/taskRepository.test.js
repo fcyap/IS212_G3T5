@@ -417,4 +417,421 @@ describe('TaskRepository', () => {
       expect(selectSpy).toHaveBeenCalledWith('id, name, role');
     });
   });
+
+  describe('deleteTask', () => {
+    test('should delete task successfully', async () => {
+      supabase.from.mockReturnValue({
+        delete: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockResolvedValue({ error: null })
+      });
+
+      const result = await taskRepository.deleteTask(1);
+
+      expect(result).toBe(true);
+      expect(supabase.from).toHaveBeenCalledWith('tasks');
+    });
+
+    test('should throw error on deletion failure', async () => {
+      supabase.from.mockReturnValue({
+        delete: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockResolvedValue({
+          error: { message: 'Deletion failed' }
+        })
+      });
+
+      await expect(taskRepository.deleteTask(1)).rejects.toThrow('Deletion failed');
+    });
+  });
+
+  describe('getTasksWithFilters', () => {
+    test('should get tasks with no filters', async () => {
+      const mockTasks = [{ id: 1, title: 'Task' }];
+
+      const mockQueryPromise = Promise.resolve({ data: mockTasks, error: null });
+      const mockQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnValue(mockQueryPromise),
+        then: mockQueryPromise.then.bind(mockQueryPromise),
+        catch: mockQueryPromise.catch.bind(mockQueryPromise)
+      };
+
+      supabase.from.mockReturnValue(mockQuery);
+
+      const result = await taskRepository.getTasksWithFilters({});
+
+      expect(result).toEqual(mockTasks);
+    });
+
+    test('should filter by projectId', async () => {
+      const mockQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        range: jest.fn().mockResolvedValue({ data: [], error: null })
+      };
+
+      supabase.from.mockReturnValue(mockQuery);
+
+      await taskRepository.getTasksWithFilters({ projectId: 5 });
+
+      expect(mockQuery.eq).toHaveBeenCalledWith('project_id', 5);
+      expect(mockQuery.eq).toHaveBeenCalledWith('archived', false);
+    });
+
+    test('should filter by status', async () => {
+      const mockQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        range: jest.fn().mockResolvedValue({ data: [], error: null })
+      };
+
+      supabase.from.mockReturnValue(mockQuery);
+
+      await taskRepository.getTasksWithFilters({ status: 'completed' });
+
+      expect(mockQuery.eq).toHaveBeenCalledWith('status', 'completed');
+    });
+
+    test('should filter by assignedTo', async () => {
+      const mockQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        contains: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        range: jest.fn().mockResolvedValue({ data: [], error: null })
+      };
+
+      supabase.from.mockReturnValue(mockQuery);
+
+      await taskRepository.getTasksWithFilters({ assignedTo: 3 });
+
+      expect(mockQuery.contains).toHaveBeenCalledWith('assigned_to', [3]);
+    });
+
+    test('should filter by priority', async () => {
+      const mockQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        range: jest.fn().mockResolvedValue({ data: [], error: null })
+      };
+
+      supabase.from.mockReturnValue(mockQuery);
+
+      await taskRepository.getTasksWithFilters({ priority: 'high' });
+
+      expect(mockQuery.eq).toHaveBeenCalledWith('priority', 'high');
+    });
+
+    test('should filter by archived', async () => {
+      const mockQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        range: jest.fn().mockResolvedValue({ data: [], error: null })
+      };
+
+      supabase.from.mockReturnValue(mockQuery);
+
+      await taskRepository.getTasksWithFilters({ archived: true });
+
+      expect(mockQuery.eq).toHaveBeenCalledWith('archived', true);
+    });
+
+    test('should apply sorting', async () => {
+      const mockQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        range: jest.fn().mockResolvedValue({ data: [], error: null })
+      };
+
+      supabase.from.mockReturnValue(mockQuery);
+
+      await taskRepository.getTasksWithFilters({ sortBy: 'title', sortOrder: 'asc' });
+
+      expect(mockQuery.order).toHaveBeenCalledWith('title', { ascending: true });
+    });
+
+    test('should apply pagination', async () => {
+      const mockQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        range: jest.fn().mockResolvedValue({ data: [], error: null })
+      };
+
+      supabase.from.mockReturnValue(mockQuery);
+
+      await taskRepository.getTasksWithFilters({ offset: 10, limit: 5 });
+
+      expect(mockQuery.range).toHaveBeenCalledWith(10, 14);
+    });
+
+    test('should return empty array when data is null', async () => {
+      supabase.from.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockReturnThis(),
+        range: jest.fn().mockResolvedValue({ data: null, error: null })
+      });
+
+      const result = await taskRepository.getTasksWithFilters({});
+
+      expect(result).toEqual([]);
+    });
+
+    test('should throw error on database error', async () => {
+      const mockQueryPromise = Promise.resolve({
+        data: null,
+        error: { message: 'Database error' }
+      });
+      const mockQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnValue(mockQueryPromise),
+        then: mockQueryPromise.then.bind(mockQueryPromise),
+        catch: mockQueryPromise.catch.bind(mockQueryPromise)
+      };
+
+      supabase.from.mockReturnValue(mockQuery);
+
+      await expect(taskRepository.getTasksWithFilters({})).rejects.toThrow('Database error');
+    });
+  });
+
+  describe('getTaskCount', () => {
+    test('should get count with no filters', async () => {
+      supabase.from.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockResolvedValue({ count: 42, error: null })
+      });
+
+      const result = await taskRepository.getTaskCount({});
+
+      expect(result).toBe(42);
+    });
+
+    test('should filter by projectId', async () => {
+      const mockQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis()
+      };
+      // Last call to eq returns the count
+      mockQuery.eq.mockReturnValueOnce(mockQuery).mockResolvedValueOnce({ count: 10, error: null });
+
+      supabase.from.mockReturnValue(mockQuery);
+
+      await taskRepository.getTaskCount({ projectId: 5 });
+
+      expect(mockQuery.eq).toHaveBeenCalledWith('project_id', 5);
+    });
+
+    test('should filter by status', async () => {
+      const mockQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis()
+      };
+      mockQuery.eq.mockReturnValueOnce(mockQuery).mockResolvedValueOnce({ count: 5, error: null });
+
+      supabase.from.mockReturnValue(mockQuery);
+
+      await taskRepository.getTaskCount({ status: 'completed' });
+
+      expect(mockQuery.eq).toHaveBeenCalledWith('status', 'completed');
+    });
+
+    test('should filter by assignedTo', async () => {
+      const mockQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        contains: jest.fn().mockReturnThis()
+      };
+      mockQuery.eq.mockResolvedValueOnce({ count: 3, error: null });
+
+      supabase.from.mockReturnValue(mockQuery);
+
+      await taskRepository.getTaskCount({ assignedTo: 3 });
+
+      expect(mockQuery.contains).toHaveBeenCalledWith('assigned_to', [3]);
+    });
+
+    test('should filter by priority', async () => {
+      const mockQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis()
+      };
+      mockQuery.eq.mockReturnValueOnce(mockQuery).mockResolvedValueOnce({ count: 7, error: null });
+
+      supabase.from.mockReturnValue(mockQuery);
+
+      await taskRepository.getTaskCount({ priority: 'high' });
+
+      expect(mockQuery.eq).toHaveBeenCalledWith('priority', 'high');
+    });
+
+    test('should filter by archived', async () => {
+      const mockQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis()
+      };
+      // archived is the only filter, so just one eq call
+      mockQuery.eq.mockResolvedValueOnce({ count: 2, error: null });
+
+      supabase.from.mockReturnValue(mockQuery);
+
+      await taskRepository.getTaskCount({ archived: true });
+
+      expect(mockQuery.eq).toHaveBeenCalledWith('archived', true);
+    });
+
+    test('should return 0 when count is null', async () => {
+      supabase.from.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockResolvedValue({ count: null, error: null })
+      });
+
+      const result = await taskRepository.getTaskCount({});
+
+      expect(result).toBe(0);
+    });
+
+    test('should throw error on database error', async () => {
+      supabase.from.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockResolvedValue({
+          count: null,
+          error: { message: 'Database error' }
+        })
+      });
+
+      await expect(taskRepository.getTaskCount({})).rejects.toThrow('Database error');
+    });
+  });
+
+  describe('getSubtasks', () => {
+    test('should get subtasks for a parent task', async () => {
+      const mockSubtasks = [
+        { id: 2, parent_id: 1, title: 'Subtask 1' },
+        { id: 3, parent_id: 1, title: 'Subtask 2' }
+      ];
+
+      supabase.from.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockResolvedValue({ data: mockSubtasks, error: null })
+      });
+
+      const result = await taskRepository.getSubtasks(1);
+
+      expect(result).toEqual(mockSubtasks);
+    });
+
+    test('should filter out archived subtasks', async () => {
+      const mockQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockResolvedValue({ data: [], error: null })
+      };
+
+      supabase.from.mockReturnValue(mockQuery);
+
+      await taskRepository.getSubtasks(1);
+
+      expect(mockQuery.eq).toHaveBeenCalledWith('parent_id', 1);
+      expect(mockQuery.eq).toHaveBeenCalledWith('archived', false);
+    });
+
+    test('should order by created_at ascending', async () => {
+      const orderSpy = jest.fn().mockResolvedValue({ data: [], error: null });
+
+      supabase.from.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        order: orderSpy
+      });
+
+      await taskRepository.getSubtasks(1);
+
+      expect(orderSpy).toHaveBeenCalledWith('created_at', { ascending: true });
+    });
+
+    test('should return empty array when data is null', async () => {
+      supabase.from.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockResolvedValue({ data: null, error: null })
+      });
+
+      const result = await taskRepository.getSubtasks(1);
+
+      expect(result).toEqual([]);
+    });
+
+    test('should throw error on database error', async () => {
+      supabase.from.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        order: jest.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'Database error' }
+        })
+      });
+
+      await expect(taskRepository.getSubtasks(1)).rejects.toThrow('Database error');
+    });
+  });
+
+  describe('insertMany', () => {
+    test('should insert multiple tasks', async () => {
+      const mockPayloads = [
+        { title: 'Task 1', status: 'pending' },
+        { title: 'Task 2', status: 'in_progress' }
+      ];
+
+      const mockInserted = [
+        { id: 1, title: 'Task 1', status: 'pending' },
+        { id: 2, title: 'Task 2', status: 'in_progress' }
+      ];
+
+      supabase.from.mockReturnValue({
+        insert: jest.fn().mockReturnThis(),
+        select: jest.fn().mockResolvedValue({ data: mockInserted, error: null })
+      });
+
+      const result = await taskRepository.insertMany(mockPayloads);
+
+      expect(result).toEqual(mockInserted);
+    });
+
+    test('should return empty array for empty input', async () => {
+      const result = await taskRepository.insertMany([]);
+
+      expect(result).toEqual([]);
+    });
+
+    test('should return empty array for null input', async () => {
+      const result = await taskRepository.insertMany(null);
+
+      expect(result).toEqual([]);
+    });
+
+    test('should return empty array for non-array input', async () => {
+      const result = await taskRepository.insertMany('not an array');
+
+      expect(result).toEqual([]);
+    });
+
+    test('should throw error on insertion failure', async () => {
+      supabase.from.mockReturnValue({
+        insert: jest.fn().mockReturnThis(),
+        select: jest.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'Insertion failed' }
+        })
+      });
+
+      await expect(taskRepository.insertMany([{ title: 'Task' }]))
+        .rejects.toThrow('Insertion failed');
+    });
+  });
 });
