@@ -17,11 +17,9 @@ A comprehensive full-stack web application for project and task management with 
   - [Environment Setup](#environment-setup)
   - [Running the Application](#running-the-application)
 - [Project Structure](#project-structure)
-- [Architecture Diagrams](#architecture-diagrams)
 - [API Documentation](#api-documentation)
 - [Testing](#testing)
 - [Deployment](#deployment)
-- [Contributing](#contributing)
 - [License](#license)
 
 ## Overview
@@ -277,58 +275,11 @@ IS212_G3T5/
 ├── database/                     # Database migrations
 │   └── migrations/
 │
-├── diagrams/                     # Architecture diagrams
-│   ├── C3-COMPONENT-DIAGRAM.md
-│   ├── C4-DIAGRAMS-MERMAID.md
-│   └── C4-DIAGRAMS-PLANTUML.md
-│
 ├── .github/                      # GitHub Actions CI/CD
 │   └── workflows/
 │
 ├── package.json                  # Root package.json (monorepo)
 └── README.md                     # This file
-```
-
-## Architecture Diagrams
-
-Comprehensive architecture documentation is available in the `/diagrams` directory:
-
-- **[C3 Component Diagram (Mermaid)](./C3-COMPONENT-DIAGRAM.md)**: Full system component breakdown
-- **[C4 Diagrams (Mermaid)](./C4-DIAGRAMS-MERMAID.md)**: Context, Container, and Component diagrams
-- **[C4 Diagrams (PlantUML)](./C4-DIAGRAMS-PLANTUML.md)**: Same diagrams in PlantUML format
-- **[C3 Component Diagram (PlantUML)](./C3-COMPONENT-DIAGRAM-PLANTUML.md)**: Detailed component views
-
-### Quick Architecture Overview
-
-```
-┌─────────────┐
-│   Browser   │
-└──────┬──────┘
-       │ HTTPS
-┌──────▼──────────────────┐
-│  Next.js Frontend       │
-│  - React 18             │
-│  - Tailwind CSS         │
-│  - Context API          │
-│  Port: 3000             │
-└──────┬──────────────────┘
-       │ REST API
-┌──────▼──────────────────┐
-│  Express.js Backend     │
-│  - Routes               │
-│  - Middleware (RBAC)    │
-│  - Controllers          │
-│  - Services             │
-│  - Repositories         │
-│  Port: 3001             │
-└──────┬──────────────────┘
-       │ PostgreSQL
-┌──────▼──────────────────┐
-│  Supabase Database      │
-│  - PostgreSQL           │
-│  - Row-Level Security   │
-│  - Object Storage       │
-└─────────────────────────┘
 ```
 
 ## API Documentation
@@ -441,37 +392,6 @@ GitHub Actions workflows are configured in `.github/workflows/`:
 - Automated testing on pull requests
 - Code quality checks (ESLint)
 - Security scanning (CodeQL, TruffleHog)
-
-## Contributing
-
-### Development Workflow
-
-1. Create a feature branch:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-2. Make changes and test thoroughly
-
-3. Commit with descriptive messages:
-   ```bash
-   git commit -m "Add: Brief description of changes"
-   ```
-
-4. Push to remote:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-
-5. Create a pull request on GitHub
-
-### Code Standards
-
-- Follow ESLint configuration
-- Write unit tests for new features
-- Document public APIs with JSDoc comments
-- Use meaningful variable and function names
-- Keep functions small and focused
 
 ## Security
 
