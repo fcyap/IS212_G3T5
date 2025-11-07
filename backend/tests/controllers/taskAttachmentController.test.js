@@ -372,5 +372,108 @@ describe('TaskAttachmentController', () => {
         error: 'File not found in storage'
       });
     });
+
+    test('should return 400 for invalid task ID', async () => {
+      req.params.taskId = 'invalid';
+      req.params.attachmentId = '1';
+
+      await taskAttachmentController.downloadAttachment(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Invalid task ID'
+      });
+      expect(taskAttachmentService.downloadAttachment).not.toHaveBeenCalled();
+    });
+
+    test('should return 400 for invalid attachment ID', async () => {
+      req.params.taskId = '123';
+      req.params.attachmentId = 'invalid';
+
+      await taskAttachmentController.downloadAttachment(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Invalid attachment ID'
+      });
+      expect(taskAttachmentService.downloadAttachment).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('uploadAttachments - Additional Coverage', () => {
+    test('should return 401 when user is not authenticated', async () => {
+      req.params.taskId = '123';
+      req.files = [{ originalname: 'doc.pdf', buffer: Buffer.from('test') }];
+      req.user = null;
+      res.locals.session = null;
+
+      await taskAttachmentController.uploadAttachments(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'User authentication required'
+      });
+      expect(taskAttachmentService.uploadAttachments).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getAttachments - Additional Coverage', () => {
+    test('should handle service errors', async () => {
+      req.params.taskId = '123';
+
+      const error = new Error('Database error');
+      error.status = 500;
+      taskAttachmentService.getAttachments.mockRejectedValue(error);
+
+      await taskAttachmentController.getAttachments(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Database error'
+      });
+    });
+  });
+
+  describe('deleteAttachment - Additional Coverage', () => {
+    test('should return 400 for invalid task ID', async () => {
+      req.params.taskId = 'invalid';
+      req.params.attachmentId = '1';
+
+      await taskAttachmentController.deleteAttachment(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Invalid task ID'
+      });
+      expect(taskAttachmentService.deleteAttachment).not.toHaveBeenCalled();
+    });
+
+    test('should return 400 for invalid attachment ID', async () => {
+      req.params.taskId = '123';
+      req.params.attachmentId = 'invalid';
+
+      await taskAttachmentController.deleteAttachment(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Invalid attachment ID'
+      });
+      expect(taskAttachmentService.deleteAttachment).not.toHaveBeenCalled();
+    });
+
+    test('should return 401 when user is not authenticated', async () => {
+      req.params.taskId = '123';
+      req.params.attachmentId = '1';
+      req.user = null;
+      res.locals.session = null;
+
+      await taskAttachmentController.deleteAttachment(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'User authentication required'
+      });
+      expect(taskAttachmentService.deleteAttachment).not.toHaveBeenCalled();
+    });
   });
 });
