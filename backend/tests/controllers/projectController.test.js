@@ -194,6 +194,28 @@ describe('ProjectController', () => {
       });
     });
 
+    test('should return 404 when user not found in database', async () => {
+      const supabase = require('../../src/utils/supabase');
+      supabase.from = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue({
+              data: [], // Empty array - user not found
+              error: null
+            })
+          })
+        })
+      });
+
+      await getAllProjects(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'User not found'
+      });
+    });
+
     test('should handle service error', async () => {
       projectService.getProjectsWithRBAC.mockRejectedValue(new Error('Database error'));
 

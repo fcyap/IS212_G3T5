@@ -60,6 +60,35 @@ describe('taskAssigneeHoursService', () => {
       ).rejects.toThrow('Hours spent cannot exceed 10000');
       expect(taskAssigneeHoursRepository.upsert).not.toHaveBeenCalled();
     });
+
+    test('should treat undefined/null/empty hours as 0', async () => {
+      const upsertResult = { task_id: 1, user_id: 1, hours: 0 };
+      taskAssigneeHoursRepository.upsert.mockResolvedValue(upsertResult);
+
+      // Test undefined
+      await taskAssigneeHoursService.recordHours({ taskId: 1, userId: 1, hours: undefined });
+      expect(taskAssigneeHoursRepository.upsert).toHaveBeenCalledWith({
+        taskId: 1,
+        userId: 1,
+        hours: 0
+      });
+
+      // Test null
+      await taskAssigneeHoursService.recordHours({ taskId: 1, userId: 1, hours: null });
+      expect(taskAssigneeHoursRepository.upsert).toHaveBeenCalledWith({
+        taskId: 1,
+        userId: 1,
+        hours: 0
+      });
+
+      // Test empty string
+      await taskAssigneeHoursService.recordHours({ taskId: 1, userId: 1, hours: '' });
+      expect(taskAssigneeHoursRepository.upsert).toHaveBeenCalledWith({
+        taskId: 1,
+        userId: 1,
+        hours: 0
+      });
+    });
   });
 
   describe('getTaskHoursSummary', () => {

@@ -206,6 +206,19 @@ describe('UserService', () => {
       await expect(userService.createUser(userData))
         .rejects.toThrow('Email, name, and password are required');
     });
+
+    test('should handle invalid email format', async () => {
+      const userData = {
+        name: 'John Doe',
+        email: 'invalid-email-format',
+        password: 'password123'
+      };
+
+      userRepository.emailExists.mockResolvedValue(false);
+
+      await expect(userService.createUser(userData))
+        .rejects.toThrow('Invalid email format');
+    });
   });
 
   describe('updateUser', () => {
@@ -286,6 +299,83 @@ describe('UserService', () => {
       await expect(userService.updateUser(userId, updateData, requestingUserId))
         .rejects.toThrow('You do not have permission to update this user');
     });
+
+    test('should handle duplicate email when updating', async () => {
+      const userId = 1;
+      const updateData = { email: 'existing@example.com' };
+      const requestingUserId = 1;
+
+      const mockCurrentUser = {
+        id: userId,
+        name: 'John Doe',
+        email: 'john@example.com',
+        role: 'admin'
+      };
+
+      const mockRequestingUser = {
+        id: requestingUserId,
+        name: 'John Doe',
+        role: 'admin'
+      };
+
+      userRepository.getUserById.mockResolvedValueOnce(mockCurrentUser);
+      userRepository.getUserById.mockResolvedValueOnce(mockRequestingUser);
+      userRepository.emailExists.mockResolvedValue(true);
+
+      await expect(userService.updateUser(userId, updateData, requestingUserId))
+        .rejects.toThrow('User with this email already exists');
+    });
+
+    test('should handle invalid email format when updating', async () => {
+      const userId = 1;
+      const updateData = { email: 'invalid-email-format' };
+      const requestingUserId = 1;
+
+      const mockCurrentUser = {
+        id: userId,
+        name: 'John Doe',
+        email: 'john@example.com',
+        role: 'admin'
+      };
+
+      const mockRequestingUser = {
+        id: requestingUserId,
+        name: 'John Doe',
+        role: 'admin'
+      };
+
+      userRepository.getUserById.mockResolvedValueOnce(mockCurrentUser);
+      userRepository.getUserById.mockResolvedValueOnce(mockRequestingUser);
+      userRepository.emailExists.mockResolvedValue(false);
+
+      await expect(userService.updateUser(userId, updateData, requestingUserId))
+        .rejects.toThrow('Invalid email format');
+    });
+
+    test('should prevent non-manager from updating role', async () => {
+      const userId = 1;
+      const updateData = { role: 'manager' };
+      const requestingUserId = 1;
+
+      const mockCurrentUser = {
+        id: userId,
+        name: 'John Doe',
+        email: 'john@example.com',
+        role: 'staff'
+      };
+
+      const mockRequestingUser = {
+        id: requestingUserId,
+        name: 'John Doe',
+        role: 'staff'
+      };
+
+      userRepository.getUserById.mockResolvedValueOnce(mockCurrentUser);
+      userRepository.getUserById.mockResolvedValueOnce(mockRequestingUser);
+
+      await expect(userService.updateUser(userId, updateData, requestingUserId))
+        .rejects.toThrow('Only managers can update user roles');
+    });
   });
 
   describe('deleteUser', () => {
@@ -337,6 +427,107 @@ describe('UserService', () => {
 
       await expect(userService.deleteUser(userId, requestingUserId))
         .rejects.toThrow('Only managers can delete users');
+    });
+
+    test('should prevent user from deleting themselves', async () => {
+      const userId = 1;
+      const requestingUserId = 1;
+
+      const mockRequestingUser = {
+        id: requestingUserId,
+        name: 'Manager',
+        role: 'manager'
+      };
+
+      userRepository.getUserById.mockResolvedValue(mockRequestingUser);
+
+      await expect(userService.deleteUser(userId, requestingUserId))
+        .rejects.toThrow('You cannot delete your own account');
+    });
+  });
+
+  describe('getUsersByIds', () => {
+    test('should get multiple users by IDs', async () => {
+      const userIds = [1, 2, 3];
+      const mockUsers = [
+        { id: 1, name: 'User 1', email: 'user1@example.com' },
+        { id: 2, name: 'User 2', email: 'user2@example.com' },
+        { id: 3, name: 'User 3', email: 'user3@example.com' }
+      ];
+
+      userRepository.getUsersByIds.mockResolvedValue(mockUsers);
+
+      const result = await userService.getUsersByIds(userIds);
+
+      expect(userRepository.getUsersByIds).toHaveBeenCalledWith(userIds);
+      expect(result).toEqual(mockUsers);
+    });
+
+    test('should return empty array for empty input', async () => {
+      const result = await userService.getUsersByIds([]);
+
+      expect(result).toEqual([]);
+      expect(userRepository.getUsersByIds).not.toHaveBeenCalled();
+    });
+
+    test('should return empty array for null input', async () => {
+      const result = await userService.getUsersByIds(null);
+
+      expect(result).toEqual([]);
+      expect(userRepository.getUsersByIds).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('validateCredentials', () => {
+    test('should validate credentials successfully', async () => {
+      const email = 'john@example.com';
+      const password = 'password123';
+      const mockUser = {
+        id: 1,
+        name: 'John Doe',
+        email: email,
+        password: password,
+        role: 'admin'
+      };
+
+      userRepository.getUserByEmail.mockResolvedValue(mockUser);
+
+      const result = await userService.validateCredentials(email, password);
+
+      expect(result).toEqual({
+        id: 1,
+        name: 'John Doe',
+        email: email,
+        role: 'admin'
+      });
+      expect(result.password).toBeUndefined();
+    });
+
+    test('should reject invalid password', async () => {
+      const email = 'john@example.com';
+      const password = 'wrongpassword';
+      const mockUser = {
+        id: 1,
+        name: 'John Doe',
+        email: email,
+        password: 'correctpassword',
+        role: 'admin'
+      };
+
+      userRepository.getUserByEmail.mockResolvedValue(mockUser);
+
+      await expect(userService.validateCredentials(email, password))
+        .rejects.toThrow('Invalid credentials');
+    });
+
+    test('should reject non-existent user', async () => {
+      const email = 'nonexistent@example.com';
+      const password = 'password123';
+
+      userRepository.getUserByEmail.mockRejectedValue(new Error('User not found'));
+
+      await expect(userService.validateCredentials(email, password))
+        .rejects.toThrow('Invalid credentials');
     });
   });
 
