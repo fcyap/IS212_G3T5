@@ -322,6 +322,17 @@ describe('ProjectRepository', () => {
       expect(result).toEqual([]);
     });
 
+    test('should return empty array when data is null', async () => {
+      mockEq.mockResolvedValue({
+        data: null,
+        error: null
+      });
+
+      const result = await projectRepository.getProjectsForUser(1);
+
+      expect(result).toEqual([]);
+    });
+
     test('should handle database error', async () => {
       mockEq.mockResolvedValue({
         data: null,
@@ -633,6 +644,65 @@ describe('ProjectRepository', () => {
         projectRepository.addUsersToProject(1, [2, 3], 1, 'collaborator')
       ).rejects.toThrow('Users already in project');
     });
+
+    test('should handle user validation error', async () => {
+      jest.spyOn(projectRepository, 'canUserManageMembers').mockResolvedValue(true);
+
+      // Mock user validation - error
+      const inMock = jest.fn().mockResolvedValue({
+        data: null,
+        error: { message: 'User validation error' }
+      });
+
+      mockSelect.mockReturnValue({
+        in: inMock
+      });
+
+      await expect(
+        projectRepository.addUsersToProject(1, [2, 3], 1, 'collaborator')
+      ).rejects.toThrow('Invalid users');
+    });
+
+    test('should handle insert error', async () => {
+      jest.clearAllMocks();
+      jest.spyOn(projectRepository, 'canUserManageMembers').mockResolvedValue(true);
+
+      // Mock user validation - first .from().select().in() chain
+      supabase.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          in: jest.fn().mockResolvedValue({
+            data: [{ id: 2 }, { id: 3 }],
+            error: null
+          })
+        })
+      });
+
+      // Mock existing members check - second .from().select().eq().in() chain
+      supabase.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            in: jest.fn().mockResolvedValue({
+              data: [],
+              error: null
+            })
+          })
+        })
+      });
+
+      // Mock insert - fails - third .from().insert().select() chain
+      supabase.from.mockReturnValueOnce({
+        insert: jest.fn().mockReturnValue({
+          select: jest.fn().mockResolvedValue({
+            data: null,
+            error: { message: 'Insert failed' }
+          })
+        })
+      });
+
+      await expect(
+        projectRepository.addUsersToProject(1, [2, 3], 1, 'collaborator')
+      ).rejects.toThrow('Insert failed');
+    });
   });
 
   describe('removeUserFromProject', () => {
@@ -713,6 +783,115 @@ describe('ProjectRepository', () => {
       await expect(
         projectRepository.removeUserFromProject(1, 1, 1)
       ).rejects.toThrow('Cannot remove the project creator');
+    });
+
+    test('should handle user not member error', async () => {
+      const mockProject = {
+        id: 1,
+        name: 'Test Project'
+      };
+
+      jest.spyOn(projectRepository, 'canUserManageMembers').mockResolvedValue(true);
+      jest.spyOn(projectRepository, 'getProjectById').mockResolvedValueOnce(mockProject);
+
+      // Mock user not found in project
+      const singleMock = jest.fn().mockResolvedValue({
+        data: null,
+        error: { message: 'Not found' }
+      });
+
+      const eqMock2 = jest.fn().mockReturnValue({
+        single: singleMock
+      });
+
+      const eqMock1 = jest.fn().mockReturnValue({
+        eq: eqMock2
+      });
+
+      mockSelect.mockReturnValue({
+        eq: eqMock1
+      });
+
+      await expect(
+        projectRepository.removeUserFromProject(1, 999, 1)
+      ).rejects.toThrow('User is not a member of this project');
+    });
+
+    test('should prevent non-manager from removing themselves', async () => {
+      const mockProject = {
+        id: 1,
+        name: 'Test Project'
+      };
+
+      jest.spyOn(projectRepository, 'canUserManageMembers').mockResolvedValue(true);
+      jest.spyOn(projectRepository, 'getProjectById').mockResolvedValueOnce(mockProject);
+
+      // Mock user is a collaborator trying to remove themselves
+      const singleMock = jest.fn().mockResolvedValue({
+        data: { member_role: 'collaborator' },
+        error: null
+      });
+
+      const eqMock2 = jest.fn().mockReturnValue({
+        single: singleMock
+      });
+
+      const eqMock1 = jest.fn().mockReturnValue({
+        eq: eqMock2
+      });
+
+      mockSelect.mockReturnValue({
+        eq: eqMock1
+      });
+
+      await expect(
+        projectRepository.removeUserFromProject(1, 2, 2)
+      ).rejects.toThrow('You cannot remove yourself from the project');
+    });
+
+    test('should handle deletion error', async () => {
+      const mockProject = {
+        id: 1,
+        name: 'Test Project'
+      };
+
+      jest.spyOn(projectRepository, 'canUserManageMembers').mockResolvedValue(true);
+      jest.spyOn(projectRepository, 'getProjectById').mockResolvedValueOnce(mockProject);
+
+      // Mock user check - is collaborator
+      const singleMock = jest.fn().mockResolvedValue({
+        data: { member_role: 'collaborator' },
+        error: null
+      });
+
+      const eqMock2 = jest.fn().mockReturnValue({
+        single: singleMock
+      });
+
+      const eqMock1 = jest.fn().mockReturnValue({
+        eq: eqMock2
+      });
+
+      mockSelect.mockReturnValue({
+        eq: eqMock1
+      });
+
+      // Mock deletion error
+      const deleteEqMock2 = jest.fn().mockResolvedValue({
+        error: { message: 'Delete failed' }
+      });
+
+      const deleteEqMock1 = jest.fn().mockReturnValue({
+        eq: deleteEqMock2
+      });
+
+      mockDelete.mockReturnValue({
+        eq: deleteEqMock1
+      });
+
+      await expect(
+        projectRepository.removeUserFromProject(1, 2, 1)
+      ).rejects.toThrow('Delete failed');
     });
   });
 
@@ -858,6 +1037,28 @@ describe('ProjectRepository', () => {
 
       expect(result).toBe(false);
     });
+
+    test('should return false when project not found', async () => {
+      jest.clearAllMocks();
+      mockSingle.mockReset();
+      mockSelect.mockReset();
+
+      // Mock project data - project not found
+      const projectEqMock = jest.fn().mockReturnValue({
+        single: jest.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'Project not found' }
+        })
+      });
+
+      mockSelect.mockReturnValue({
+        eq: projectEqMock
+      });
+
+      const result = await projectRepository.canUserManageMembers(999, 1);
+
+      expect(result).toBe(false);
+    });
   });
 
   describe('archiveProject', () => {
@@ -962,6 +1163,810 @@ describe('ProjectRepository', () => {
     });
   });
 
+  // Test missing methods for better coverage
+  describe('getProjectIdsForUser', () => {
+    test('should return project IDs for user', async () => {
+      const mockData = [
+        { project_id: 1 },
+        { project_id: 2 },
+        { project_id: 3 }
+      ];
+
+      mockEq.mockResolvedValue({
+        data: mockData,
+        error: null
+      });
+
+      const result = await projectRepository.getProjectIdsForUser(1);
+
+      expect(supabase.from).toHaveBeenCalledWith('project_members');
+      expect(mockSelect).toHaveBeenCalledWith('project_id');
+      expect(mockEq).toHaveBeenCalledWith('user_id', 1);
+      expect(result).toEqual([1, 2, 3]);
+    });
+
+    test('should return empty array when no projects found', async () => {
+      mockEq.mockResolvedValue({
+        data: null,
+        error: null
+      });
+
+      const result = await projectRepository.getProjectIdsForUser(1);
+
+      expect(result).toEqual([]);
+    });
+
+    test('should handle database error', async () => {
+      mockEq.mockResolvedValue({
+        data: null,
+        error: { message: 'Database error' }
+      });
+
+      await expect(projectRepository.getProjectIdsForUser(1)).rejects.toThrow('Database error');
+    });
+  });
+
+  describe('getProjectIdsByCreator', () => {
+    test('should return project IDs created by user', async () => {
+      const mockData = [
+        { project_id: 1 },
+        { project_id: 2 }
+      ];
+
+      // Mock the chain: .select().eq().eq()
+      const eqMock2 = jest.fn().mockResolvedValue({
+        data: mockData,
+        error: null
+      });
+
+      const eqMock1 = jest.fn().mockReturnValue({
+        eq: eqMock2
+      });
+
+      mockSelect.mockReturnValue({
+        eq: eqMock1
+      });
+
+      const result = await projectRepository.getProjectIdsByCreator(1);
+
+      expect(supabase.from).toHaveBeenCalledWith('project_members');
+      expect(result).toEqual([1, 2]);
+    });
+
+    test('should return empty array when user has no creator projects', async () => {
+      const eqMock2 = jest.fn().mockResolvedValue({
+        data: [],
+        error: null
+      });
+
+      const eqMock1 = jest.fn().mockReturnValue({
+        eq: eqMock2
+      });
+
+      mockSelect.mockReturnValue({
+        eq: eqMock1
+      });
+
+      const result = await projectRepository.getProjectIdsByCreator(1);
+
+      expect(result).toEqual([]);
+    });
+
+    test('should handle database error', async () => {
+      const eqMock2 = jest.fn().mockResolvedValue({
+        data: null,
+        error: { message: 'Database error' }
+      });
+
+      const eqMock1 = jest.fn().mockReturnValue({
+        eq: eqMock2
+      });
+
+      mockSelect.mockReturnValue({
+        eq: eqMock1
+      });
+
+      await expect(projectRepository.getProjectIdsByCreator(1)).rejects.toThrow('Database error');
+    });
+  });
+
+  describe('getProjectsByIds', () => {
+    test('should return projects by IDs', async () => {
+      const mockProjects = [
+        { id: 1, name: 'Project 1' },
+        { id: 2, name: 'Project 2' }
+      ];
+
+      mockIn.mockResolvedValue({
+        data: mockProjects,
+        error: null
+      });
+
+      const result = await projectRepository.getProjectsByIds([1, 2]);
+
+      expect(supabase.from).toHaveBeenCalledWith('projects');
+      expect(mockSelect).toHaveBeenCalledWith('*');
+      expect(mockIn).toHaveBeenCalledWith('id', [1, 2]);
+      expect(result).toEqual(mockProjects);
+    });
+
+    test('should return empty array when no IDs provided', async () => {
+      const result = await projectRepository.getProjectsByIds([]);
+
+      expect(result).toEqual([]);
+    });
+
+    test('should return empty array when IDs is null', async () => {
+      const result = await projectRepository.getProjectsByIds(null);
+
+      expect(result).toEqual([]);
+    });
+
+    test('should handle database error', async () => {
+      mockIn.mockResolvedValue({
+        data: null,
+        error: { message: 'Database error' }
+      });
+
+      await expect(projectRepository.getProjectsByIds([1, 2])).rejects.toThrow('Database error');
+    });
+
+    test('should return empty array when no projects found', async () => {
+      mockIn.mockResolvedValue({
+        data: null,
+        error: null
+      });
+
+      const result = await projectRepository.getProjectsByIds([999, 998]);
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('getUsersByIds', () => {
+    test('should return users by IDs', async () => {
+      const mockUsers = [
+        { id: 1, email: 'user1@test.com', name: 'User 1', role: 'staff' },
+        { id: 2, email: 'user2@test.com', name: 'User 2', role: 'manager' }
+      ];
+
+      mockIn.mockResolvedValue({
+        data: mockUsers,
+        error: null
+      });
+
+      const result = await projectRepository.getUsersByIds([1, 2]);
+
+      expect(supabase.from).toHaveBeenCalledWith('users');
+      expect(mockSelect).toHaveBeenCalledWith('id, email, name, role');
+      expect(mockIn).toHaveBeenCalledWith('id', [1, 2]);
+      expect(result).toEqual(mockUsers);
+    });
+
+    test('should return empty array when no IDs provided', async () => {
+      const result = await projectRepository.getUsersByIds([]);
+
+      expect(result).toEqual([]);
+    });
+
+    test('should return empty array when IDs is null', async () => {
+      const result = await projectRepository.getUsersByIds(null);
+
+      expect(result).toEqual([]);
+    });
+
+    test('should handle database error', async () => {
+      mockIn.mockResolvedValue({
+        data: null,
+        error: { message: 'Database error' }
+      });
+
+      await expect(projectRepository.getUsersByIds([1, 2])).rejects.toThrow('Database error');
+    });
+
+    test('should return empty array when no users found', async () => {
+      mockIn.mockResolvedValue({
+        data: null,
+        error: null
+      });
+
+      const result = await projectRepository.getUsersByIds([999, 998]);
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('getTaskCountByProject', () => {
+    test('should return task count for project', async () => {
+      // Mock the count query response structure
+      mockEq.mockResolvedValue({
+        count: 5,
+        error: null
+      });
+
+      const result = await projectRepository.getTaskCountByProject(1);
+
+      expect(supabase.from).toHaveBeenCalledWith('tasks');
+      expect(mockSelect).toHaveBeenCalledWith('id', { count: 'exact', head: true });
+      expect(mockEq).toHaveBeenCalledWith('project_id', 1);
+      expect(result).toBe(5);
+    });
+
+    test('should return 0 when no tasks found', async () => {
+      mockEq.mockResolvedValue({
+        count: null,
+        error: null
+      });
+
+      const result = await projectRepository.getTaskCountByProject(1);
+
+      expect(result).toBe(0);
+    });
+
+    test('should return 0 on database error', async () => {
+      mockEq.mockResolvedValue({
+        count: null,
+        error: { message: 'Database error' }
+      });
+
+      const result = await projectRepository.getTaskCountByProject(1);
+
+      expect(result).toBe(0);
+    });
+  });
+
+  describe('getProjectMembersWithDetails', () => {
+    test('should return project members with user details', async () => {
+      const mockData = [
+        {
+          user_id: 1,
+          member_role: 'creator',
+          added_at: '2024-01-01',
+          users: { id: 1, email: 'user1@test.com', name: 'User 1' }
+        },
+        {
+          user_id: 2,
+          member_role: 'collaborator',
+          added_at: '2024-01-02',
+          users: { id: 2, email: 'user2@test.com', name: 'User 2' }
+        }
+      ];
+
+      mockNot.mockResolvedValue({
+        data: mockData,
+        error: null
+      });
+
+      const result = await projectRepository.getProjectMembersWithDetails(1);
+
+      expect(supabase.from).toHaveBeenCalledWith('project_members');
+      expect(mockEq).toHaveBeenCalledWith('project_id', 1);
+      expect(mockNot).toHaveBeenCalledWith('users', 'is', null);
+      expect(result).toEqual(mockData);
+    });
+
+    test('should filter out members with null users', async () => {
+      const mockData = [
+        {
+          user_id: 1,
+          member_role: 'creator',
+          added_at: '2024-01-01',
+          users: { id: 1, email: 'user1@test.com', name: 'User 1' }
+        },
+        {
+          user_id: 2,
+          member_role: 'collaborator',
+          added_at: '2024-01-02',
+          users: null
+        },
+        {
+          user_id: 3,
+          member_role: 'collaborator',
+          added_at: '2024-01-03',
+          users: { id: null }
+        }
+      ];
+
+      mockNot.mockResolvedValue({
+        data: mockData,
+        error: null
+      });
+
+      const result = await projectRepository.getProjectMembersWithDetails(1);
+
+      // Should filter out records where users is null or users.id is null
+      expect(result).toHaveLength(1);
+      expect(result[0].user_id).toBe(1);
+    });
+
+    test('should handle database error', async () => {
+      mockNot.mockResolvedValue({
+        data: null,
+        error: { message: 'Database error' }
+      });
+
+      await expect(projectRepository.getProjectMembersWithDetails(1)).rejects.toThrow('Database error');
+    });
+
+    test('should return empty array when no members found', async () => {
+      mockNot.mockResolvedValue({
+        data: null,
+        error: null
+      });
+
+      const result = await projectRepository.getProjectMembersWithDetails(1);
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('cleanupOrphanedMembers', () => {
+    test('should cleanup orphaned member records', async () => {
+      jest.clearAllMocks();
+
+      // Mock the first Supabase call to get project members
+      const membersData = [{ user_id: 1 }, { user_id: 2 }, { user_id: 999 }];
+
+      // Create a properly chained mock for the first query
+      supabase.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockResolvedValue({
+            data: membersData,
+            error: null
+          })
+        })
+      });
+
+      // Mock the second Supabase call to get valid users
+      const validUsers = [{ id: 1 }, { id: 2 }];
+
+      supabase.from.mockReturnValueOnce({
+        select: jest.fn().mockResolvedValue({
+          data: validUsers,
+          error: null
+        })
+      });
+
+      // Mock the delete call
+      supabase.from.mockReturnValueOnce({
+        delete: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            in: jest.fn().mockResolvedValue({
+              error: null
+            })
+          })
+        })
+      });
+
+      const result = await projectRepository.cleanupOrphanedMembers(1);
+
+      expect(result).toBe(1); // One orphaned member (user_id: 999)
+    });
+
+    test('should return 0 when no orphaned members', async () => {
+      jest.clearAllMocks();
+
+      // Mock getting all members
+      supabase.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockResolvedValue({
+            data: [{ user_id: 1 }, { user_id: 2 }],
+            error: null
+          })
+        })
+      });
+
+      // Mock getting valid users - all members are valid
+      supabase.from.mockReturnValueOnce({
+        select: jest.fn().mockResolvedValue({
+          data: [{ id: 1 }, { id: 2 }],
+          error: null
+        })
+      });
+
+      const result = await projectRepository.cleanupOrphanedMembers(1);
+
+      expect(result).toBe(0);
+    });
+
+    test('should handle error fetching members', async () => {
+      jest.clearAllMocks();
+
+      supabase.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockResolvedValue({
+            data: null,
+            error: { message: 'Database error' }
+          })
+        })
+      });
+
+      await expect(projectRepository.cleanupOrphanedMembers(1)).rejects.toThrow('Database error');
+    });
+
+    test('should handle error fetching users', async () => {
+      jest.clearAllMocks();
+
+      // Mock getting members - succeeds
+      supabase.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockResolvedValue({
+            data: [{ user_id: 1 }],
+            error: null
+          })
+        })
+      });
+
+      // Mock getting users - fails
+      supabase.from.mockReturnValueOnce({
+        select: jest.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'User fetch error' }
+        })
+      });
+
+      await expect(projectRepository.cleanupOrphanedMembers(1)).rejects.toThrow('User fetch error');
+    });
+
+    test('should handle error during deletion', async () => {
+      jest.clearAllMocks();
+
+      // Mock getting members
+      supabase.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockResolvedValue({
+            data: [{ user_id: 1 }, { user_id: 999 }],
+            error: null
+          })
+        })
+      });
+
+      // Mock getting users
+      supabase.from.mockReturnValueOnce({
+        select: jest.fn().mockResolvedValue({
+          data: [{ id: 1 }],
+          error: null
+        })
+      });
+
+      // Mock delete - fails
+      supabase.from.mockReturnValueOnce({
+        delete: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            in: jest.fn().mockResolvedValue({
+              error: { message: 'Delete error' }
+            })
+          })
+        })
+      });
+
+      await expect(projectRepository.cleanupOrphanedMembers(1)).rejects.toThrow('Delete error');
+    });
+  });
+
+  describe('exists', () => {
+    test('should return true when project exists', async () => {
+      jest.spyOn(projectRepository, 'getProjectById').mockResolvedValue({
+        id: 1,
+        name: 'Test Project'
+      });
+
+      const result = await projectRepository.exists(1);
+
+      expect(result).toBe(true);
+    });
+
+    test('should return false when project not found', async () => {
+      jest.spyOn(projectRepository, 'getProjectById').mockRejectedValue(
+        new Error('Project not found')
+      );
+
+      const result = await projectRepository.exists(999);
+
+      expect(result).toBe(false);
+    });
+
+    test('should throw error for other errors', async () => {
+      jest.spyOn(projectRepository, 'getProjectById').mockRejectedValue(
+        new Error('Database connection error')
+      );
+
+      await expect(projectRepository.exists(1)).rejects.toThrow('Database connection error');
+    });
+  });
+
+  describe('getProjectsByDivisionAndHierarchy', () => {
+    test('should return projects by division and hierarchy', async () => {
+      const mockUsers = [{ id: 2 }, { id: 3 }];
+      const mockProjects = [
+        { id: 1, name: 'Project 1', creator_id: 2 },
+        { id: 2, name: 'Project 2', creator_id: 3 }
+      ];
+
+      // Mock getting users - .select().eq().lt()
+      const ltMock = jest.fn().mockResolvedValue({
+        data: mockUsers,
+        error: null
+      });
+
+      const eqMock = jest.fn().mockReturnValue({
+        lt: ltMock
+      });
+
+      // Mock getting projects - .select().in().order()
+      const orderMock = jest.fn().mockResolvedValue({
+        data: mockProjects,
+        error: null
+      });
+
+      const inMock = jest.fn().mockReturnValue({
+        order: orderMock
+      });
+
+      let selectCallCount = 0;
+      mockSelect.mockImplementation(() => {
+        selectCallCount++;
+        if (selectCallCount === 1) {
+          // First call: get users
+          return { eq: eqMock };
+        } else {
+          // Second call: get projects
+          return { in: inMock };
+        }
+      });
+
+      const result = await projectRepository.getProjectsByDivisionAndHierarchy('Engineering', 3);
+
+      expect(result).toEqual(mockProjects);
+    });
+
+    test('should return empty array when no subordinate users found', async () => {
+      const ltMock = jest.fn().mockResolvedValue({
+        data: null,
+        error: null
+      });
+
+      const eqMock = jest.fn().mockReturnValue({
+        lt: ltMock
+      });
+
+      mockSelect.mockReturnValue({
+        eq: eqMock
+      });
+
+      const result = await projectRepository.getProjectsByDivisionAndHierarchy('Engineering', 1);
+
+      expect(result).toEqual([]);
+    });
+
+    test('should return empty array when users array is empty', async () => {
+      const ltMock = jest.fn().mockResolvedValue({
+        data: [],
+        error: null
+      });
+
+      const eqMock = jest.fn().mockReturnValue({
+        lt: ltMock
+      });
+
+      mockSelect.mockReturnValue({
+        eq: eqMock
+      });
+
+      const result = await projectRepository.getProjectsByDivisionAndHierarchy('Engineering', 1);
+
+      expect(result).toEqual([]);
+    });
+
+    test('should handle error fetching users', async () => {
+      const ltMock = jest.fn().mockResolvedValue({
+        data: null,
+        error: { message: 'User fetch error' }
+      });
+
+      const eqMock = jest.fn().mockReturnValue({
+        lt: ltMock
+      });
+
+      mockSelect.mockReturnValue({
+        eq: eqMock
+      });
+
+      await expect(
+        projectRepository.getProjectsByDivisionAndHierarchy('Engineering', 3)
+      ).rejects.toThrow('User fetch error');
+    });
+
+    test('should handle error fetching projects', async () => {
+      const mockUsers = [{ id: 2 }, { id: 3 }];
+
+      const ltMock = jest.fn().mockResolvedValue({
+        data: mockUsers,
+        error: null
+      });
+
+      const eqMock = jest.fn().mockReturnValue({
+        lt: ltMock
+      });
+
+      const orderMock = jest.fn().mockResolvedValue({
+        data: null,
+        error: { message: 'Project fetch error' }
+      });
+
+      const inMock = jest.fn().mockReturnValue({
+        order: orderMock
+      });
+
+      let selectCallCount = 0;
+      mockSelect.mockImplementation(() => {
+        selectCallCount++;
+        if (selectCallCount === 1) {
+          return { eq: eqMock };
+        } else {
+          return { in: inMock };
+        }
+      });
+
+      await expect(
+        projectRepository.getProjectsByDivisionAndHierarchy('Engineering', 3)
+      ).rejects.toThrow('Project fetch error');
+    });
+
+    test('should return empty array when no projects found', async () => {
+      const mockUsers = [{ id: 2 }, { id: 3 }];
+
+      const ltMock = jest.fn().mockResolvedValue({
+        data: mockUsers,
+        error: null
+      });
+
+      const eqMock = jest.fn().mockReturnValue({
+        lt: ltMock
+      });
+
+      const orderMock = jest.fn().mockResolvedValue({
+        data: null,
+        error: null
+      });
+
+      const inMock = jest.fn().mockReturnValue({
+        order: orderMock
+      });
+
+      let selectCallCount = 0;
+      mockSelect.mockImplementation(() => {
+        selectCallCount++;
+        if (selectCallCount === 1) {
+          return { eq: eqMock };
+        } else {
+          return { in: inMock };
+        }
+      });
+
+      const result = await projectRepository.getProjectsByDivisionAndHierarchy('Engineering', 3);
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('getAllProjectsEnhanced', () => {
+    test('should return all projects with creator details', async () => {
+      const mockProjects = [
+        { id: 1, name: 'Project 1', creator_id: 1 },
+        { id: 2, name: 'Project 2', creator_id: 2 }
+      ];
+
+      const mockCreators = [
+        { id: 1, name: 'User 1', email: 'user1@test.com', role: 'manager', hierarchy: 2, division: 'Engineering' },
+        { id: 2, name: 'User 2', email: 'user2@test.com', role: 'staff', hierarchy: 1, division: 'Marketing' }
+      ];
+
+      // Mock getting projects - .select().order()
+      const orderMock = jest.fn().mockResolvedValue({
+        data: mockProjects,
+        error: null
+      });
+
+      // Mock getting creators - .select().in()
+      const inMock = jest.fn().mockResolvedValue({
+        data: mockCreators,
+        error: null
+      });
+
+      let selectCallCount = 0;
+      mockSelect.mockImplementation(() => {
+        selectCallCount++;
+        if (selectCallCount === 1) {
+          // First call: get projects
+          return { order: orderMock };
+        } else {
+          // Second call: get creators
+          return { in: inMock };
+        }
+      });
+
+      const result = await projectRepository.getAllProjectsEnhanced();
+
+      expect(result).toHaveLength(2);
+      expect(result[0].users).toEqual(mockCreators[0]);
+      expect(result[1].users).toEqual(mockCreators[1]);
+    });
+
+    test('should handle null creator data', async () => {
+      const mockProjects = [
+        { id: 1, name: 'Project 1', creator_id: 999 }
+      ];
+
+      const orderMock = jest.fn().mockResolvedValue({
+        data: mockProjects,
+        error: null
+      });
+
+      const inMock = jest.fn().mockResolvedValue({
+        data: [],
+        error: null
+      });
+
+      let selectCallCount = 0;
+      mockSelect.mockImplementation(() => {
+        selectCallCount++;
+        if (selectCallCount === 1) {
+          return { order: orderMock };
+        } else {
+          return { in: inMock };
+        }
+      });
+
+      const result = await projectRepository.getAllProjectsEnhanced();
+
+      expect(result[0].users).toBeNull();
+    });
+
+    test('should return empty array when no projects found', async () => {
+      const orderMock = jest.fn().mockResolvedValue({
+        data: null,
+        error: null
+      });
+
+      mockSelect.mockReturnValue({
+        order: orderMock
+      });
+
+      const result = await projectRepository.getAllProjectsEnhanced();
+
+      expect(result).toEqual([]);
+    });
+
+    test('should handle database error', async () => {
+      const orderMock = jest.fn().mockResolvedValue({
+        data: null,
+        error: { message: 'Database error' }
+      });
+
+      mockSelect.mockReturnValue({
+        order: orderMock
+      });
+
+      await expect(projectRepository.getAllProjectsEnhanced()).rejects.toThrow('Database error');
+    });
+
+    test('should handle empty projects array', async () => {
+      const orderMock = jest.fn().mockResolvedValue({
+        data: [],
+        error: null
+      });
+
+      mockSelect.mockReturnValue({
+        order: orderMock
+      });
+
+      const result = await projectRepository.getAllProjectsEnhanced();
+
+      expect(result).toEqual([]);
+    });
+  });
+
   // Legacy method tests for backward compatibility
   describe('Legacy Methods', () => {
     describe('findAll', () => {
@@ -995,6 +2000,16 @@ describe('ProjectRepository', () => {
         const result = await projectRepository.findById(999);
 
         expect(result).toBeNull();
+
+        spy.mockRestore();
+      });
+
+      test('should throw error for other types of errors', async () => {
+        const spy = jest.spyOn(projectRepository, 'getProjectById').mockRejectedValue(
+          new Error('Database connection error')
+        );
+
+        await expect(projectRepository.findById(1)).rejects.toThrow('Database connection error');
 
         spy.mockRestore();
       });
