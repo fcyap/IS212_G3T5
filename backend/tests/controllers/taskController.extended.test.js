@@ -678,4 +678,170 @@ describe('TaskController - Extended Coverage', () => {
       expect(res.json).toHaveBeenCalledWith({ message: 'Invalid input' });
     });
   });
+
+  describe('getTasksByProject - Additional Coverage', () => {
+    test('should return 400 for invalid page (less than 1)', async () => {
+      req.params.projectId = '1';
+      req.query = { page: '0' };
+
+      await taskController.getTasksByProject(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Page must be a positive integer'
+      });
+    });
+
+    test('should return 400 for invalid limit (less than 1)', async () => {
+      req.params.projectId = '1';
+      req.query = { limit: '0' };
+
+      await taskController.getTasksByProject(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Limit must be between 1 and 100'
+      });
+    });
+
+    test('should return 400 for invalid limit (greater than 100)', async () => {
+      req.params.projectId = '1';
+      req.query = { limit: '101' };
+
+      await taskController.getTasksByProject(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Limit must be between 1 and 100'
+      });
+    });
+  });
+
+  describe('create - Deadline Notifications', () => {
+    test('should send notification for task with today deadline', async () => {
+      const projectTasksService = require('../../src/services/projectTasksService');
+
+      req.body = {
+        title: 'Test Task',
+        deadline: '2025-10-15', // Fixed date for testing
+        project_id: 1
+      };
+
+      const mockTask = {
+        id: 1,
+        title: 'Test Task',
+        deadline: '2025-10-15',
+        project_id: 1
+      };
+
+      taskService.createTask.mockResolvedValue(mockTask);
+
+      // Mock Date to make 2025-10-15 be "today"
+      const RealDate = Date;
+      global.Date = class extends RealDate {
+        constructor(...args) {
+          if (args.length === 0) {
+            super('2025-10-15T12:00:00Z');
+          } else {
+            super(...args);
+          }
+        }
+        static now() {
+          return new RealDate('2025-10-15T12:00:00Z').getTime();
+        }
+      };
+
+      await taskController.create(req, res);
+
+      expect(projectTasksService.sendDeadlineNotifications).toHaveBeenCalledWith(mockTask, 'today');
+      expect(res.status).toHaveBeenCalledWith(201);
+
+      global.Date = RealDate; // Restore
+    });
+
+    test('should send notification for task with tomorrow deadline', async () => {
+      const projectTasksService = require('../../src/services/projectTasksService');
+
+      req.body = {
+        title: 'Test Task',
+        deadline: '2025-10-16', // Tomorrow relative to mocked today
+        project_id: 1
+      };
+
+      const mockTask = {
+        id: 1,
+        title: 'Test Task',
+        deadline: '2025-10-16',
+        project_id: 1
+      };
+
+      taskService.createTask.mockResolvedValue(mockTask);
+
+      // Mock Date to make 2025-10-15 be "today" (so 2025-10-16 is tomorrow)
+      const RealDate = Date;
+      global.Date = class extends RealDate {
+        constructor(...args) {
+          if (args.length === 0) {
+            super('2025-10-15T12:00:00Z');
+          } else {
+            super(...args);
+          }
+        }
+        static now() {
+          return new RealDate('2025-10-15T12:00:00Z').getTime();
+        }
+      };
+
+      await taskController.create(req, res);
+
+      expect(projectTasksService.sendDeadlineNotifications).toHaveBeenCalledWith(mockTask, 'tomorrow');
+      expect(res.status).toHaveBeenCalledWith(201);
+
+      global.Date = RealDate; // Restore
+    });
+
+    test('should not send notification for task with future deadline', async () => {
+      const projectTasksService = require('../../src/services/projectTasksService');
+
+      req.body = {
+        title: 'Test Task',
+        deadline: '2025-10-20', // 5 days in future
+        project_id: 1
+      };
+
+      const mockTask = {
+        id: 1,
+        title: 'Test Task',
+        deadline: '2025-10-20',
+        project_id: 1
+      };
+
+      taskService.createTask.mockResolvedValue(mockTask);
+
+      // Mock Date to make 2025-10-15 be "today"
+      const RealDate = Date;
+      global.Date = class extends RealDate {
+        constructor(...args) {
+          if (args.length === 0) {
+            super('2025-10-15T12:00:00Z');
+          } else {
+            super(...args);
+          }
+        }
+        static now() {
+          return new RealDate('2025-10-15T12:00:00Z').getTime();
+        }
+      };
+
+      await taskController.create(req, res);
+
+      expect(projectTasksService.sendDeadlineNotifications).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(201);
+
+      global.Date = RealDate; // Restore
+    });
+  });
 });
