@@ -194,6 +194,51 @@ describe('ReportController', () => {
       );
       expect(reportService.generateTaskReport).not.toHaveBeenCalled();
     });
+
+    test('should return 401 when user is not authenticated', async () => {
+      req.user = null;
+
+      await reportController.generateTaskReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Authentication required'
+      });
+      expect(reportService.generateTaskReport).not.toHaveBeenCalled();
+    });
+
+    test('should return 400 for invalid startDate format', async () => {
+      req.body = {
+        startDate: '10-01-2025',
+        endDate: '2025-10-31'
+      };
+
+      await reportController.generateTaskReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Invalid startDate format. Use YYYY-MM-DD'
+      });
+      expect(reportService.generateTaskReport).not.toHaveBeenCalled();
+    });
+
+    test('should return 400 for invalid endDate format', async () => {
+      req.body = {
+        startDate: '2025-10-01',
+        endDate: '31/10/2025'
+      };
+
+      await reportController.generateTaskReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Invalid endDate format. Use YYYY-MM-DD'
+      });
+      expect(reportService.generateTaskReport).not.toHaveBeenCalled();
+    });
   });
 
   describe('POST /api/reports/users/productivity', () => {
@@ -277,6 +322,64 @@ describe('ReportController', () => {
 
       expect(next).toHaveBeenCalled();
     });
+
+    test('should return 401 when user is not authenticated', async () => {
+      req.user = null;
+
+      await reportController.generateUserProductivityReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Authentication required'
+      });
+      expect(reportService.generateUserProductivityReport).not.toHaveBeenCalled();
+    });
+
+    test('should return 400 for invalid startDate format', async () => {
+      req.body = {
+        startDate: 'invalid-date',
+        endDate: '2025-10-31'
+      };
+
+      await reportController.generateUserProductivityReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Invalid startDate format. Use YYYY-MM-DD'
+      });
+    });
+
+    test('should return 400 for invalid endDate format', async () => {
+      req.body = {
+        startDate: '2025-10-01',
+        endDate: 'invalid-date'
+      };
+
+      await reportController.generateUserProductivityReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Invalid endDate format. Use YYYY-MM-DD'
+      });
+    });
+
+    test('should return 400 when endDate is before startDate', async () => {
+      req.body = {
+        startDate: '2025-10-31',
+        endDate: '2025-10-01'
+      };
+
+      await reportController.generateUserProductivityReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'endDate must be after or equal to startDate'
+      });
+    });
   });
 
   describe('POST /api/reports/projects', () => {
@@ -317,6 +420,75 @@ describe('ReportController', () => {
         success: true,
         data: mockReport
       });
+    });
+
+    test('should return 401 when user is not authenticated', async () => {
+      req.user = null;
+
+      await reportController.generateProjectReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Authentication required'
+      });
+      expect(reportService.generateProjectReport).not.toHaveBeenCalled();
+    });
+
+    test('should return 400 for invalid startDate format', async () => {
+      req.body = {
+        startDate: '2025/10/01',
+        endDate: '2025-10-31'
+      };
+
+      await reportController.generateProjectReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Invalid startDate format. Use YYYY-MM-DD'
+      });
+    });
+
+    test('should return 400 for invalid endDate format', async () => {
+      req.body = {
+        startDate: '2025-10-01',
+        endDate: '2025/10/31'
+      };
+
+      await reportController.generateProjectReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Invalid endDate format. Use YYYY-MM-DD'
+      });
+    });
+
+    test('should return 400 when endDate is before startDate', async () => {
+      req.body = {
+        startDate: '2025-10-31',
+        endDate: '2025-10-01'
+      };
+
+      await reportController.generateProjectReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'endDate must be after or equal to startDate'
+      });
+    });
+
+    test('should handle service errors', async () => {
+      const error = new Error('Database error');
+      reportService.generateProjectReport.mockRejectedValue(error);
+
+      req.body = { projectIds: [1] };
+
+      await reportController.generateProjectReport(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(error);
     });
   });
 
@@ -457,6 +629,19 @@ describe('ReportController', () => {
 
       expect(next).toHaveBeenCalledWith(error);
     });
+
+    test('should validate reportData exists', async () => {
+      req.body = { format: 'xlsx' }; // No reportData
+
+      await reportController.exportReportToSpreadsheet(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'reportData is required'
+      });
+      expect(reportService.exportReportToSpreadsheet).not.toHaveBeenCalled();
+    });
   });
 
   describe('GET /api/reports/filters/projects', () => {
@@ -476,6 +661,28 @@ describe('ReportController', () => {
         success: true,
         data: mockProjects
       });
+    });
+
+    test('should return 401 when user is not authenticated', async () => {
+      req.user = null;
+
+      await reportController.getAvailableProjects(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Authentication required'
+      });
+      expect(reportService.getAvailableProjects).not.toHaveBeenCalled();
+    });
+
+    test('should handle service errors', async () => {
+      const error = new Error('Database error');
+      reportService.getAvailableProjects.mockRejectedValue(error);
+
+      await reportController.getAvailableProjects(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(error);
     });
   });
 
@@ -497,6 +704,28 @@ describe('ReportController', () => {
         data: mockUsers
       });
     });
+
+    test('should return 401 when user is not authenticated', async () => {
+      req.user = null;
+
+      await reportController.getAvailableUsers(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Authentication required'
+      });
+      expect(reportService.getAvailableUsers).not.toHaveBeenCalled();
+    });
+
+    test('should handle service errors', async () => {
+      const error = new Error('Database error');
+      reportService.getAvailableUsers.mockRejectedValue(error);
+
+      await reportController.getAvailableUsers(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(error);
+    });
   });
 
   describe('GET /api/reports/filters/departments', () => {
@@ -517,6 +746,149 @@ describe('ReportController', () => {
         success: true,
         data: mockDepartments
       });
+    });
+
+    test('should return 401 when user is not authenticated', async () => {
+      req.user = null;
+
+      await reportController.getAvailableDepartments(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Authentication required'
+      });
+      expect(reportService.getAvailableDepartments).not.toHaveBeenCalled();
+    });
+
+    test('should handle service errors', async () => {
+      const error = new Error('Database error');
+      reportService.getAvailableDepartments.mockRejectedValue(error);
+
+      await reportController.getAvailableDepartments(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(error);
+    });
+  });
+
+  describe('POST /api/reports/time/manual', () => {
+    test('should generate manual time report with filters', async () => {
+      const mockReport = {
+        summary: {
+          totalHours: 120,
+          totalProjects: 3,
+          totalDepartments: 2
+        },
+        timeEntries: [
+          {
+            projectId: 1,
+            projectName: 'Project Alpha',
+            department: 'Engineering',
+            totalHours: 80
+          }
+        ],
+        filters: {
+          startDate: '2025-10-01',
+          endDate: '2025-10-31'
+        }
+      };
+
+      reportService.generateManualTimeReport.mockResolvedValue(mockReport);
+
+      req.body = {
+        startDate: '2025-10-01',
+        endDate: '2025-10-31',
+        projectIds: [1],
+        departments: ['Engineering'],
+        view: 'summary'
+      };
+
+      await reportController.generateManualTimeReport(req, res, next);
+
+      expect(reportService.generateManualTimeReport).toHaveBeenCalledWith(req.user, {
+        projectIds: [1],
+        departments: ['Engineering'],
+        startDate: '2025-10-01',
+        endDate: '2025-10-31',
+        view: 'summary'
+      });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        data: mockReport
+      });
+    });
+
+    test('should return 401 when user is not authenticated', async () => {
+      req.user = null;
+
+      await reportController.generateManualTimeReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Authentication required'
+      });
+      expect(reportService.generateManualTimeReport).not.toHaveBeenCalled();
+    });
+
+    test('should return 400 for invalid startDate format', async () => {
+      req.body = {
+        startDate: '01-10-2025',
+        endDate: '2025-10-31'
+      };
+
+      await reportController.generateManualTimeReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Invalid startDate format. Use YYYY-MM-DD'
+      });
+    });
+
+    test('should return 400 for invalid endDate format', async () => {
+      req.body = {
+        startDate: '2025-10-01',
+        endDate: '31-10-2025'
+      };
+
+      await reportController.generateManualTimeReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Invalid endDate format. Use YYYY-MM-DD'
+      });
+    });
+
+    test('should return 400 when endDate is before startDate', async () => {
+      req.body = {
+        startDate: '2025-10-31',
+        endDate: '2025-10-01'
+      };
+
+      await reportController.generateManualTimeReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'endDate must be after or equal to startDate'
+      });
+    });
+
+    test('should handle service errors', async () => {
+      const error = new Error('Database error');
+      reportService.generateManualTimeReport.mockRejectedValue(error);
+
+      req.body = {
+        startDate: '2025-10-01',
+        endDate: '2025-10-31'
+      };
+
+      await reportController.generateManualTimeReport(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(error);
     });
   });
 
@@ -672,7 +1044,7 @@ describe('ReportController', () => {
       });
     });
 
-    test('should return 400 for invalid date format', async () => {
+    test('should return 400 for invalid startDate format', async () => {
       req.body = {
         startDate: '10-01-2025',
         endDate: '2025-10-31'
@@ -684,6 +1056,21 @@ describe('ReportController', () => {
       expect(res.json).toHaveBeenCalledWith({
         success: false,
         error: 'Invalid startDate format. Use YYYY-MM-DD'
+      });
+    });
+
+    test('should return 400 for invalid endDate format', async () => {
+      req.body = {
+        startDate: '2025-10-01',
+        endDate: '10-31-2025'
+      };
+
+      await reportController.generateDepartmentalPerformanceReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Invalid endDate format. Use YYYY-MM-DD'
       });
     });
 
